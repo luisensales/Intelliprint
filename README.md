@@ -62,7 +62,7 @@ intelliprint/
 ---
 
 <a name="euskara"></a>
-## 📐 EUSKARA
+## Eu EUSKARA
 
 <a name="deskribapena-eu"></a>
 ### Proiektuaren Deskribapena
