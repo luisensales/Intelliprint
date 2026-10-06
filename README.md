@@ -1,7 +1,7 @@
  INTELLIPRINT: Sistema Avanzado de Preflight mediante Redes Neuronales
 
 > **Proyecto de Innovación en Formación Profesional (2026-2027)**  
-> Desarrollado en colaboración entre **CPIFP Salesianos Urnieta LHIPI** (Líder - Gipuzkoa) y **CIFP Mendizabala LHII** (Araba).
+> Desarrollado en colaboración entre **CPIFP Salesianos Urnieta LHIPI** (Gipuzkoa) y **CIFP Mendizabala LHII** (Araba).
 
 ---
 
