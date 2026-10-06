@@ -45,6 +45,8 @@ pip install -r requirements.txt
 
 # Ejecutar verificación básica
 python src/pdf_checker.py --input samples/test_file.pdf
+
+<a name="-euskara"></a>
 📐 Euskara
 📝 Proiektuaren Deskribapena
 INTELLIPRINT arte grafikoen sektorerako PDF artxiboen aldez aurreko egiaztapen (preflight) eta zuzenketa automatikoko sistema bat da. Adimen Artifizialean eta sare neuronaletan oinarrituta, sistemak inprimategiko akatsen historikotik ikasten du inprimatze-aurreko prozesua optimizatzeko, paper zein tinta hondakinak minimizatzeko eta ekoizpen-jario etenbabea bermatzeko.
