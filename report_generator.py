@@ -74,14 +74,22 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     page.insert_text(pymupdf.Point(220, y + 38), f"Perfil Objetivo: {meta.get('profile_id', 'OFFSET_300')}", fontsize=8.5, fontname="helv", color=c_slate)
     page.insert_text(pymupdf.Point(400, y + 38), f"Páginas: {summary.get('pages', 1)}", fontsize=8.5, fontname="helv", color=c_slate)
     
+    orig_icc = summary.get("original_icc_detected", {})
+    orig_name = orig_icc.get("friendly_description") or orig_icc.get("identifier") or "No declarado"
+    if len(orig_name) > 34: orig_name = orig_name[:31] + "..."
+
     icc_info = summary.get("icc_detected", {})
-    icc_name = icc_info.get("identifier") or meta.get("selected_icc") or "No declarado"
-    page.insert_text(pymupdf.Point(45, y + 54), f"Perfil ICC Salida: {icc_name}", fontsize=8.5, fontname="helv", color=c_slate)
+    icc_name = icc_info.get("friendly_description") or icc_info.get("identifier") or meta.get("selected_icc") or "No declarado"
+    if len(icc_name) > 30: icc_name = icc_name[:27] + "..."
+
+    page.insert_text(pymupdf.Point(45, y + 54), f"ICC Origen: {orig_name}", fontsize=8, fontname="helv", color=c_slate)
+    page.insert_text(pymupdf.Point(220, y + 54), f"ICC Salida: {icc_name}", fontsize=8, fontname="helv", color=c_slate)
     page.insert_text(pymupdf.Point(400, y + 54), f"Sangre: {str(summary.get('bleed_note', 'N/A'))[:25]}", fontsize=8.5, fontname="helv", color=c_slate)
 
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     page.insert_text(pymupdf.Point(45, y + 70), f"Fecha/Hora: {now_str}", fontsize=8, fontname="helv", color=c_slate)
     page.insert_text(pymupdf.Point(220, y + 70), f"SHA-256: {meta.get('sha256', '')[:28]}...", fontsize=8, fontname="helv", color=c_slate)
+    page.insert_text(pymupdf.Point(400, y + 70), f"Imágenes: {summary.get('total_images', 0)} ({summary.get('low_res_images', 0)} bajas, {summary.get('non_cmyk_images', 0)} RGB)", fontsize=8, fontname="helv", color=c_slate)
 
     y += 95
     # 3. Triple Result Boxes

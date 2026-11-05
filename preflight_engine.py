@@ -289,6 +289,9 @@ class IntelliPrintEngine:
             req_family = "RGB"
             requires_bleed = False
 
+        # Inspect original OutputIntent of uploaded PDF before applying any custom choices
+        original_icc_info = detect_pdf_output_intent(pdf_path)
+
         # Apply ICC profile to PDF if user chose a custom profile from catalog/folder
         applied_icc_info = None
         if icc_choice == "custom_selection" and selected_icc:
@@ -358,6 +361,7 @@ class IntelliPrintEngine:
                 rules_evaluated["BLEED_GEOMETRY_3MM"] = "PASS"
 
         # Images & Resolution inspection
+        images_inventory = []
         for p_idx in range(page_count):
             page = doc[p_idx]
             img_list = page.get_images(full=True)
@@ -375,43 +379,70 @@ class IntelliPrintEngine:
 
                 rects = page.get_image_rects(xref)
                 dpi_x, dpi_y = 0, 0
+                effective_dpi = 0
+                placed_w_mm, placed_h_mm = 0.0, 0.0
                 if rects and rects[0].width > 0 and rects[0].height > 0:
                     r = rects[0]
                     dpi_x = round(width_px / (r.width / 72.0))
                     dpi_y = round(height_px / (r.height / 72.0))
                     effective_dpi = round((dpi_x + dpi_y) / 2)
-
-                    if effective_dpi < target_dpi:
-                        low_res_images += 1
-                        findings.append({
-                            "page": p_idx + 1,
-                            "rule_id": "PRINT_IMAGE_EFFECTIVE_PPI",
-                            "severity": "ERROR" if requires_bleed else "WARNING",
-                            "category": "Imágenes",
-                            "title": f"Resolución insuficiente ({effective_dpi} ppp)",
-                            "message": f"Imagen {i_idx+1} en pág {p_idx+1} colocada a {effective_dpi} ppp efectivos (mínimo {target_dpi} ppp en {profile_id})."
-                        })
+                    placed_w_mm = round(r.width * 25.4 / 72.0, 1)
+                    placed_h_mm = round(r.height * 25.4 / 72.0, 1)
 
                 # Color check for images
                 is_cmyk = (cs == 4 or "CMYK" in str(cs).upper())
-                is_gray = (cs == 1 or "GRAY" in str(cs).upper())
+                is_gray = (cs == 1 or "GRAY" in str(cs).upper() or "GRIS" in str(cs).upper())
                 is_rgb = (cs == 3 or "RGB" in str(cs).upper())
 
-                # Map numeric colorspace code to readable name
                 CS_NAMES = {1: "Escala de grises", 2: "Calcomp", 3: "RGB", 4: "CMYK"}
                 cs_label = CS_NAMES.get(cs, str(cs)) if isinstance(cs, int) else str(cs)
+                if is_cmyk:
+                    cs_label = "CMYK"
+                elif is_rgb:
+                    cs_label = "RGB"
+                elif is_gray:
+                    cs_label = "Escala de grises"
 
+                dpi_desc = f"{effective_dpi} ppp" if effective_dpi > 0 else "Resolución N/D"
+
+                # Check Resolution
+                if effective_dpi > 0 and effective_dpi < target_dpi:
+                    low_res_images += 1
+                    findings.append({
+                        "page": p_idx + 1,
+                        "rule_id": "PRINT_IMAGE_EFFECTIVE_PPI",
+                        "severity": "ERROR" if (requires_bleed and effective_dpi < 150) else "WARNING",
+                        "category": "Imágenes",
+                        "title": f"Resolución insuficiente ({effective_dpi} ppp · {cs_label})",
+                        "message": f"Imagen {i_idx+1} en pág {p_idx+1}: espacio {cs_label}, resolución efectiva de {effective_dpi} ppp ({width_px} × {height_px} px, tamaño colocado: {placed_w_mm} × {placed_h_mm} mm). El perfil {profile_id} exige un mínimo de {target_dpi} ppp."
+                    })
+
+                # Color mode warning for images (e.g. RGB in Offset/Digital)
                 if req_family == "CMYK" and not is_cmyk and not is_gray:
                     non_cmyk_images += 1
-                    cs_advice = "RGB" if is_rgb else cs_label
                     findings.append({
                         "page": p_idx + 1,
                         "rule_id": "SOURCE_COLOR_DIAGNOSTIC",
                         "severity": "WARNING",
                         "category": "Color",
-                        "title": f"Imagen en modo {cs_advice} (requiere CMYK)",
-                        "message": f"Imagen {i_idx+1} en pág {p_idx+1} está en espacio {cs_advice}. El perfil {profile_id} exige imágenes CMYK. Se admite conversión gestionada pero debe verificarse su apariencia en destino."
+                        "title": f"Imagen en modo {cs_label} · {dpi_desc} (requiere CMYK)",
+                        "message": f"Imagen {i_idx+1} en pág {p_idx+1}: espacio de color {cs_label}, resolución efectiva {dpi_desc} ({width_px} × {height_px} px, tamaño colocado: {placed_w_mm} × {placed_h_mm} mm). El perfil {profile_id} exige imágenes CMYK. Se admite conversión gestionada pero debe verificarse su apariencia en destino."
                     })
+
+                # Register full image inventory entry
+                images_inventory.append({
+                    "page": p_idx + 1,
+                    "index": i_idx + 1,
+                    "xref": xref,
+                    "colorspace": cs_label,
+                    "effective_dpi": effective_dpi,
+                    "width_px": width_px,
+                    "height_px": height_px,
+                    "placed_mm": f"{placed_w_mm} × {placed_h_mm} mm" if placed_w_mm > 0 else "N/D",
+                    "is_cmyk": is_cmyk,
+                    "is_rgb": is_rgb,
+                    "is_gray": is_gray
+                })
 
         # Font Embedding Inspection
         fonts_found = []
@@ -528,12 +559,15 @@ class IntelliPrintEngine:
                 "pages": page_count,
                 "total_images": total_images,
                 "low_res_images": low_res_images,
+                "non_cmyk_images": non_cmyk_images,
+                "images_inventory": images_inventory,
                 "fonts_count": len(fonts_found),
                 "bleed_detected_mm": max_detected_bleed,
                 "pages_requiring_bleed": pages_requiring_bleed,
                 "pages_failing_bleed": pages_failing_bleed,
                 "bleed_status": bleed_status,
                 "bleed_note": bleed_note,
+                "original_icc_detected": original_icc_info,
                 "icc_detected": output_intent_info,
                 "icc_choice_applied": icc_choice,
                 "selected_icc": selected_icc,

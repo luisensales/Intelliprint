@@ -11,9 +11,10 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+import pymupdf
 
 from preflight_engine import IntelliPrintEngine
-from icc_manager import get_available_icc_profiles
+from icc_manager import get_available_icc_profiles, detect_pdf_output_intent
 from spellcheck_engine import save_word_to_glossary
 from report_generator import generate_preflight_certificate_pdf
 
@@ -109,6 +110,52 @@ async def get_icc_catalog():
     return {
         "profiles": get_available_icc_profiles()
     }
+
+@app.post("/api/inspect-pdf")
+async def inspect_pdf(file: UploadFile = File(...)):
+    """
+    Lightweight instant inspection of uploaded PDF:
+    Returns page count, file size, dimensions, and embedded OutputIntent / ICC profile.
+    """
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="El archivo subido debe ser un documento PDF.")
+
+    temp_id = uuid.uuid4().hex[:8]
+    temp_path = UPLOAD_DIR / f"inspect_{temp_id}_{file.filename}"
+    try:
+        content = await file.read()
+        temp_path.write_bytes(content)
+
+        # 1. Detect OutputIntent & ICC
+        icc_info = detect_pdf_output_intent(temp_path)
+
+        # 2. Page count, dimensions & basic images count
+        doc = pymupdf.open(temp_path)
+        page_count = len(doc)
+        p0 = doc[0] if page_count > 0 else None
+        w_mm = round(p0.rect.width * 25.4 / 72.0, 1) if p0 else 0
+        h_mm = round(p0.rect.height * 25.4 / 72.0, 1) if p0 else 0
+        total_images = sum(len(p.get_images()) for p in doc)
+        doc.close()
+
+        file_size_mb = round(len(content) / (1024 * 1024), 2)
+
+        return {
+            "filename": file.filename,
+            "file_size_mb": file_size_mb,
+            "pages": page_count,
+            "page_size_mm": f"{w_mm} × {h_mm} mm",
+            "total_images": total_images,
+            "output_intent": icc_info
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al inspeccionar PDF: {e}")
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
 
 @app.post("/api/check")
 async def check_pdf(

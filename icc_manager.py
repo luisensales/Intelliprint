@@ -1,5 +1,6 @@
 import os
 import json
+import struct
 from pathlib import Path
 import pikepdf
 
@@ -67,37 +68,118 @@ def get_available_icc_profiles():
 
     return profiles
 
+def parse_icc_description(icc_bytes):
+    """
+    Parses the internal friendly profile description from raw ICC binary bytes.
+    Supports 'desc' (ASCII/Latin1) and 'mluc' (Unicode UTF-16BE) records.
+    """
+    if not icc_bytes or len(icc_bytes) < 132:
+        return None
+    try:
+        tag_count = struct.unpack('>I', icc_bytes[128:132])[0]
+        for i in range(tag_count):
+            offset = 132 + i * 12
+            if offset + 12 > len(icc_bytes):
+                break
+            tag_sig = icc_bytes[offset:offset+4]
+            tag_offset = struct.unpack('>I', icc_bytes[offset+4:offset+8])[0]
+            tag_size = struct.unpack('>I', icc_bytes[offset+8:offset+12])[0]
+            if tag_sig == b'desc':
+                if tag_offset + 12 > len(icc_bytes):
+                    break
+                desc_type = icc_bytes[tag_offset:tag_offset+4]
+                if desc_type == b'desc':
+                    ascii_len = struct.unpack('>I', icc_bytes[tag_offset+8:tag_offset+12])[0]
+                    return icc_bytes[tag_offset+12:tag_offset+12+max(0, ascii_len-1)].decode('latin1', errors='ignore').strip()
+                elif desc_type == b'mluc':
+                    rec_count = struct.unpack('>I', icc_bytes[tag_offset+8:tag_offset+12])[0]
+                    str_len = struct.unpack('>I', icc_bytes[tag_offset+20:tag_offset+24])[0]
+                    str_off = struct.unpack('>I', icc_bytes[tag_offset+24:tag_offset+28])[0]
+                    start = tag_offset + str_off
+                    return icc_bytes[start:start+str_len].decode('utf-16-be', errors='ignore').strip()
+    except Exception:
+        pass
+    return None
+
 def detect_pdf_output_intent(doc_or_pike):
     """
     Detects if the PDF contains an OutputIntent with embedded ICC.
+    Accepts a pikepdf.Pdf object, file path (str or Path), or bytes.
     """
-    # Using pikepdf
+    close_when_done = False
+    pike_doc = None
+    if isinstance(doc_or_pike, (str, Path)):
+        try:
+            pike_doc = pikepdf.open(str(doc_or_pike))
+            close_when_done = True
+        except Exception:
+            return {
+                "has_output_intent": False,
+                "subtype": None,
+                "identifier": "No declarado",
+                "profile_name": "Sin perfil incrustado",
+                "friendly_description": "Sin perfil incrustado (DeviceCMYK genérico)",
+                "has_icc_stream": False,
+                "detected_family": "Desconocido"
+            }
+    else:
+        pike_doc = doc_or_pike
+
     try:
-        if hasattr(doc_or_pike, 'Root') and '/OutputIntents' in doc_or_pike.Root:
-            intents = doc_or_pike.Root['/OutputIntents']
+        if hasattr(pike_doc, 'Root') and '/OutputIntents' in pike_doc.Root:
+            intents = pike_doc.Root['/OutputIntents']
             if len(intents) > 0:
                 intent = intents[0]
                 subtype = str(intent.get('/S', 'Desconocido')).lstrip('/')
                 info = str(intent.get('/OutputConditionIdentifier', intent.get('/Info', 'ICC Incrustado')))
                 dest_output = intent.get('/DestOutputProfile', None)
                 has_icc_stream = dest_output is not None
-                
-                family = "CMYK" if any(k in info.lower() for k in ["cmyk", "coated", "fogra", "offset"]) else "RGB"
-                
+
+                profile_desc = None
+                if has_icc_stream:
+                    try:
+                        stream_bytes = dest_output.read_bytes()
+                        profile_desc = parse_icc_description(stream_bytes)
+                    except Exception:
+                        pass
+
+                # Build descriptive friendly name
+                parts = []
+                if profile_desc:
+                    parts.append(profile_desc)
+                if info and info not in ['ICC Incrustado', 'None', 'Desconocido']:
+                    if not profile_desc or info.lower() not in profile_desc.lower():
+                        parts.append(f"({info})")
+                elif not profile_desc and info:
+                    parts.append(info)
+
+                friendly_desc = " ".join(parts).strip() if parts else "OutputIntent documental incrustado"
+                family = "CMYK" if any(k in (friendly_desc + " " + info).lower() for k in ["cmyk", "coated", "fogra", "offset", "uncoated", "iso", "pso"]) else "RGB"
+
                 return {
                     "has_output_intent": True,
                     "subtype": subtype,
                     "identifier": info,
+                    "profile_name": profile_desc or info,
+                    "friendly_description": friendly_desc,
                     "has_icc_stream": has_icc_stream,
                     "detected_family": family
                 }
     except Exception:
         pass
-        
+    finally:
+        if close_when_done and pike_doc:
+            try:
+                pike_doc.close()
+            except Exception:
+                pass
+
     return {
         "has_output_intent": False,
         "subtype": None,
         "identifier": "No declarado",
+        "profile_name": "Sin perfil incrustado",
+        "friendly_description": "Sin perfil incrustado (DeviceCMYK genérico)",
         "has_icc_stream": False,
         "detected_family": "Desconocido"
     }

@@ -68,13 +68,18 @@
             <p id="filePrompt" class="text-xs text-slate-600 font-medium">Arrastra tu PDF aquí o <span class="text-blue-600 underline">examina</span></p>
             <p class="text-[11px] text-slate-400 mt-1">Soporta PDF 1.3 hasta 2.0</p>
             
-            <div id="fileInfo" class="hidden mt-2 p-2 bg-blue-50 text-blue-900 rounded-lg text-xs w-full text-left flex items-center justify-between">
-              <div class="truncate mr-2">
-                <i class="fa-solid fa-file-pdf text-red-500 mr-1.5"></i>
-                <span id="fileName" class="font-semibold"></span>
-                <span id="fileSize" class="text-slate-500 block text-[10px]"></span>
+            <div id="fileInfo" class="hidden mt-3 p-3 bg-blue-50/70 border border-blue-200 text-blue-900 rounded-xl text-xs w-full text-left space-y-2">
+              <div class="flex items-center justify-between">
+                <div class="truncate mr-2 font-semibold flex items-center gap-1.5 text-slate-800">
+                  <i class="fa-solid fa-file-pdf text-red-500 text-sm"></i>
+                  <span id="fileName"></span>
+                  <span id="fileMetaSpan" class="text-slate-500 font-normal text-[11px]"></span>
+                </div>
+                <button id="removeFileBtn" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark"></i></button>
               </div>
-              <button id="removeFileBtn" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark"></i></button>
+              <div id="fileDetectedIcc" class="pt-1.5 border-t border-blue-100 flex items-center text-[11px] text-slate-600">
+                <!-- Filled dynamically by /api/inspect-pdf -->
+              </div>
             </div>
           </div>
         </div>
@@ -117,7 +122,7 @@
               <input type="radio" name="icc_option" value="preserve" checked class="mt-1 text-blue-600 focus:ring-blue-500">
               <div class="text-xs">
                 <span class="font-bold text-slate-800">Conservar perfil del documento</span>
-                <span class="block text-[11px] text-emerald-600 font-medium mt-0.5"><i class="fa-solid fa-shield-check mr-1"></i>Recomendado: mantiene el OutputIntent incrustado</span>
+                <span id="preserveIccHint" class="block text-[11px] text-emerald-600 font-medium mt-0.5"><i class="fa-solid fa-shield-check mr-1"></i>Recomendado: mantiene el OutputIntent incrustado</span>
               </div>
             </label>
 
@@ -166,7 +171,11 @@
               <h2 id="resFileName" class="text-lg font-bold text-slate-900">Documento.pdf</h2>
               <span id="resProfileBadge" class="text-xs px-2.5 py-0.5 rounded font-semibold bg-slate-100 text-slate-700"></span>
             </div>
-            <p class="text-xs text-slate-400 font-mono mt-0.5">SHA-256: <span id="resFileHash"></span></p>
+            <div class="flex flex-wrap items-center gap-2.5 mt-1 text-xs">
+              <span class="text-slate-500 font-mono">SHA-256: <span id="resFileHash"></span></span>
+              <span class="text-slate-300">·</span>
+              <span id="resDetectedIccBadge"></span>
+            </div>
           </div>
 
           <div class="flex flex-wrap items-center gap-2">
@@ -309,6 +318,34 @@
                   <span id="metricPantoneOverprint" class="font-bold text-slate-800"></span>
                 </li>
               </ul>
+            </div>
+
+            <!-- Metrics Card 3: Auditoría de Imágenes (Full Width) -->
+            <div class="col-span-1 md:col-span-2 border border-slate-200 rounded-xl p-5 bg-white space-y-3 shadow-sm">
+              <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-100 pb-2.5">
+                <h4 class="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <i class="fa-solid fa-images text-blue-600"></i> Auditoría Detallada de Imágenes (Espacio de Color & Resolución Efectiva)
+                </h4>
+                <span id="metricImagesSummary" class="text-xs text-slate-500 font-medium"></span>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr class="border-b border-slate-200 text-slate-400 font-semibold text-[11px]">
+                      <th class="py-2 px-3">Pág</th>
+                      <th class="py-2 px-3">Imagen</th>
+                      <th class="py-2 px-3">Modo de Color</th>
+                      <th class="py-2 px-3">Resolución Efectiva</th>
+                      <th class="py-2 px-3">Dimensiones (px)</th>
+                      <th class="py-2 px-3">Tamaño Impreso</th>
+                      <th class="py-2 px-3">Diagnóstico</th>
+                    </tr>
+                  </thead>
+                  <tbody id="imagesTableBody" class="divide-y divide-slate-100">
+                    <!-- Dynamic rows populated in renderResults -->
+                  </tbody>
+                </table>
+              </div>
             </div>
 
           </div>
@@ -467,13 +504,59 @@
       }
     });
 
-    function handleFileSelect(file) {
+    async function handleFileSelect(file) {
       selectedFile = file;
       fileName.textContent = file.name;
-      fileSize.textContent = `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
+      const mbStr = (file.size / (1024 * 1024)).toFixed(2);
+      if (fileSize) fileSize.textContent = `${mbStr} MB`;
+      const metaSpan = document.getElementById('fileMetaSpan');
+      if (metaSpan) metaSpan.textContent = `(${mbStr} MB)`;
+
+      const detectedIccEl = document.getElementById('fileDetectedIcc');
+      if (detectedIccEl) {
+        detectedIccEl.innerHTML = '<span class="text-slate-500"><i class="fa-solid fa-spinner fa-spin mr-1 text-blue-500"></i>Inspeccionando OutputIntent y perfil ICC del documento...</span>';
+      }
+
       filePrompt.classList.add('hidden');
       fileInfo.classList.remove('hidden');
       startCheckBtn.disabled = false;
+
+      // Instant lightweight inspection
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/inspect-pdf', { method: 'POST', body: fd });
+        if (res.ok) {
+          const info = await res.json();
+          const icc = info.output_intent || {};
+          const hasIcc = icc.has_output_intent;
+          const desc = hasIcc ? (icc.friendly_description || icc.identifier) : 'Sin perfil incrustado (DeviceCMYK genérico / no declarado)';
+
+          if (metaSpan) {
+            metaSpan.textContent = `· ${mbStr} MB · ${info.pages} pág(s) (${info.page_size_mm}) · ${info.total_images} imág(s)`;
+          }
+
+          if (detectedIccEl) {
+            detectedIccEl.innerHTML = `
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${hasIcc ? 'bg-emerald-100 text-emerald-800 font-semibold border border-emerald-300' : 'bg-amber-100 text-amber-800 font-medium border border-amber-300'}">
+                  <i class="fa-solid fa-palette ${hasIcc ? 'text-emerald-600' : 'text-amber-600'}"></i>
+                  <span><strong>Perfil detectado en el PDF:</strong> ${desc}</span>
+                </span>
+              </div>
+            `;
+          }
+
+          const preserveHint = document.getElementById('preserveIccHint');
+          if (preserveHint) {
+            preserveHint.innerHTML = hasIcc
+              ? `<i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>Recomendado: se conservará <strong>${desc}</strong> para producción`
+              : `<i class="fa-solid fa-triangle-exclamation text-amber-600 mr-1"></i>El PDF no declara perfil incrustado. Puedes elegir uno de <strong>icc_profiles/</strong> a continuación.`;
+          }
+        }
+      } catch (e) {
+        console.error('Error al inspeccionar PDF:', e);
+      }
     }
 
     removeFileBtn.addEventListener('click', (e) => {
@@ -650,6 +733,88 @@
       document.getElementById('metricVarnishOverprint').textContent = over.varnish_overprint;
       document.getElementById('metricVarnishKnockout').textContent = over.varnish_knockout;
       document.getElementById('metricPantoneOverprint').textContent = over.pantone_overprint;
+
+      // Res Detected ICC Badge
+      const origIcc = summ.original_icc_detected || {};
+      const hasOrigIcc = origIcc.has_output_intent;
+      const origDesc = hasOrigIcc ? (origIcc.friendly_description || origIcc.identifier) : 'Sin perfil incrustado (DeviceCMYK genérico)';
+      const badgeEl = document.getElementById('resDetectedIccBadge');
+      if (badgeEl) {
+        badgeEl.innerHTML = `
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold ${hasOrigIcc ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}">
+            <i class="fa-solid fa-palette text-blue-500"></i> Perfil origen PDF: <strong>${origDesc}</strong>
+          </span>
+        `;
+      }
+
+      // Render Images Inventory Table
+      const imagesTbody = document.getElementById('imagesTableBody');
+      const imagesSummaryEl = document.getElementById('metricImagesSummary');
+      if (imagesTbody) {
+        imagesTbody.innerHTML = '';
+        const inv = summ.images_inventory || [];
+        const lowResCount = summ.low_res_images || 0;
+        const nonCmykCount = summ.non_cmyk_images || 0;
+
+        if (imagesSummaryEl) {
+          imagesSummaryEl.innerHTML = `<strong>${inv.length}</strong> imágenes analizadas · <span class="${nonCmykCount > 0 ? 'text-amber-600 font-bold' : 'text-slate-500'}">${nonCmykCount} en RGB</span> · <span class="${lowResCount > 0 ? 'text-red-600 font-bold' : 'text-slate-500'}">${lowResCount} baja resolución</span>`;
+        }
+
+        if (inv.length === 0) {
+          imagesTbody.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-400">No se detectaron imágenes ráster en el PDF (documento vectorial o solo texto).</td></tr>';
+        } else {
+          inv.forEach(img => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-slate-50/80 transition-colors';
+
+            // Colorspace badge
+            let csBadge = '';
+            if (img.is_cmyk) {
+              csBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">CMYK</span>';
+            } else if (img.is_rgb) {
+              csBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">RGB (Alerta)</span>';
+            } else {
+              csBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">${img.colorspace}</span>`;
+            }
+
+            // DPI badge
+            const targetDpi = (data.job_meta.profile_id === 'DIGITAL_200') ? 200 : ((data.job_meta.profile_id === 'PANTALLA_RGB') ? 96 : 300);
+            let dpiBadge = '';
+            if (img.effective_dpi <= 0) {
+              dpiBadge = '<span class="text-slate-400">N/D</span>';
+            } else if (img.effective_dpi >= targetDpi) {
+              dpiBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">${img.effective_dpi} ppp</span>`;
+            } else if (img.effective_dpi >= 150) {
+              dpiBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-amber-50 text-amber-700 border border-amber-200">${img.effective_dpi} ppp (Baja)</span>`;
+            } else {
+              dpiBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-red-50 text-red-700 border border-red-200">${img.effective_dpi} ppp (Crítica)</span>`;
+            }
+
+            // Status message
+            let statusDesc = '';
+            if (img.is_rgb && img.effective_dpi < targetDpi && img.effective_dpi > 0) {
+              statusDesc = '<span class="text-amber-700 font-semibold"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Requiere CMYK y mayor resolución</span>';
+            } else if (img.is_rgb) {
+              statusDesc = '<span class="text-amber-600 font-medium"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Requiere conversión gestionada a CMYK</span>';
+            } else if (img.effective_dpi < targetDpi && img.effective_dpi > 0) {
+              statusDesc = `<span class="text-red-600 font-semibold"><i class="fa-solid fa-circle-xmark mr-1"></i>Resolución insuficiente (<${targetDpi} ppp)</span>`;
+            } else {
+              statusDesc = '<span class="text-emerald-600 font-medium"><i class="fa-solid fa-circle-check mr-1"></i>Óptima para tirada</span>';
+            }
+
+            tr.innerHTML = `
+              <td class="py-2.5 px-3 font-semibold text-slate-700">Pág ${img.page}</td>
+              <td class="py-2.5 px-3 text-slate-500 font-mono">#${img.index}</td>
+              <td class="py-2.5 px-3">${csBadge}</td>
+              <td class="py-2.5 px-3">${dpiBadge}</td>
+              <td class="py-2.5 px-3 font-mono text-slate-600">${img.width_px} × ${img.height_px} px</td>
+              <td class="py-2.5 px-3 text-slate-600">${img.placed_mm}</td>
+              <td class="py-2.5 px-3">${statusDesc}</td>
+            `;
+            imagesTbody.appendChild(tr);
+          });
+        }
+      }
     }
 
     // Tabs logic
