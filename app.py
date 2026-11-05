@@ -5,6 +5,7 @@ import json
 import uuid
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
@@ -14,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from preflight_engine import IntelliPrintEngine
 from icc_manager import get_available_icc_profiles
 from spellcheck_engine import save_word_to_glossary
+from report_generator import generate_preflight_certificate_pdf
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -210,21 +212,55 @@ async def release_production(
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
 
+    now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     job_data["triple_result"]["release"] = {
         "status": "AUTHORIZED" if "approved" in decision else "REJECTED",
         "label": f"Autorizado por {operator_name}" if "approved" in decision else f"Rechazado por {operator_name}",
         "decision": decision,
         "operator": operator_name,
-        "notes": notes
+        "notes": notes,
+        "signed_at": now_str
     }
+
+    # Generate Official Preflight Certificate PDF
+    cert_path = JOBS_DIR / f"{job_id}_ficha_tecnica.pdf"
+    try:
+        generate_preflight_certificate_pdf(job_data, cert_path)
+        job_data["job_meta"]["certificate_pdf_path"] = str(cert_path)
+    except Exception as e:
+        print(f"Error generando certificado PDF: {e}")
 
     with open(job_json_path, "w", encoding="utf-8") as f:
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
     return {
         "status": "success",
-        "release_result": job_data["triple_result"]["release"]
+        "release_result": job_data["triple_result"]["release"],
+        "certificate_url": f"/api/download-certificate/{job_id}",
+        "production_pdf_url": f"/api/download-pdf/{job_id}",
+        "json_report_url": f"/api/report/{job_id}",
+        "saved_location": f"jobs/{job_id}.json"
     }
+
+@app.get("/api/download-certificate/{job_id}")
+async def download_certificate_pdf(job_id: str):
+    job_json_path = JOBS_DIR / f"{job_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+    
+    cert_path = JOBS_DIR / f"{job_id}_ficha_tecnica.pdf"
+    if not cert_path.exists():
+        generate_preflight_certificate_pdf(job_data, cert_path)
+
+    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    clean_name = filename.replace(".pdf", "")
+    return FileResponse(
+        path=str(cert_path),
+        media_type="application/pdf",
+        filename=f"Ficha_Tecnica_IntelliPrint_{clean_name}_{job_id}.pdf"
+    )
 
 @app.get("/api/report/{job_id}")
 async def download_json_report(job_id: str):
