@@ -21,10 +21,12 @@ BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 JOBS_DIR = BASE_DIR / "jobs"
 STATIC_DIR = BASE_DIR / "static"
+ASSETS_DIR = BASE_DIR / "assets"
 
 UPLOAD_DIR.mkdir(exist_ok=True)
 JOBS_DIR.mkdir(exist_ok=True)
 STATIC_DIR.mkdir(exist_ok=True)
+ASSETS_DIR.mkdir(exist_ok=True)
 
 app = FastAPI(
     title="IntelliPrint Preflight Web",
@@ -42,8 +44,11 @@ app.add_middleware(
 
 engine = IntelliPrintEngine()
 
-# Mount static folder
+# Mount static and assets folders
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+if ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
+    app.mount("/asset", StaticFiles(directory=str(ASSETS_DIR)), name="asset")
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():

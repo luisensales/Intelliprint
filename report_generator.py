@@ -22,6 +22,13 @@ def generate_preflight_certificate_pdf(job_data, output_path):
 
     # 1. Header Banner
     page.draw_rect(pymupdf.Rect(0, 0, 595.3, 75), fill=c_navy)
+
+    # Insert official logo if available
+    logo_path = Path(__file__).parent / "assets" / "Logo-intelliprint.jpg"
+    if logo_path.exists():
+        page.draw_rect(pymupdf.Rect(438, 11, 562, 64), fill=(1, 1, 1), radius=0.08)
+        page.insert_image(pymupdf.Rect(441, 13, 559, 62), filename=str(logo_path), keep_proportion=True)
+
     page.insert_text(pymupdf.Point(35, 33), "INTELLIPRINT · DICTAMEN OFICIAL DE PRODUCCIÓN", fontsize=14, color=(1, 1, 1), fontname="helv")
     page.insert_text(pymupdf.Point(35, 52), "Certificado de Preflight, Control de Calidad y Autorización de Salida a Taller", fontsize=9, color=(0.8, 0.85, 0.95), fontname="helv")
 
@@ -120,9 +127,10 @@ def generate_preflight_certificate_pdf(job_data, output_path):
 
     # Footer
     page.draw_line(pymupdf.Point(35, 805), pymupdf.Point(560, 805), color=c_border, width=0.5)
-    page.insert_text(pymupdf.Point(35, 818), "IntelliPrint Preflight Web v1.2.0 · CPIFP Salesianos Urnieta LHIPI · Formación Profesional", fontsize=7.5, fontname="helv", color=c_slate)
+    page.insert_text(pymupdf.Point(35, 818), "IntelliPrint Preflight Web v1.2.0 · Sistema Profesional de Calidad en Preimpresión", fontsize=7.5, fontname="helv", color=c_slate)
     page.insert_text(pymupdf.Point(450, 818), f"Certificado ID: {meta.get('job_id', 'N/A')}", fontsize=7.5, fontname="helv", color=c_slate)
 
     doc.save(str(output_path))
     doc.close()
     return output_path
+
