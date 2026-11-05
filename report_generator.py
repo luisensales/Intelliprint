@@ -11,7 +11,7 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     page = doc.new_page(width=595.3, height=841.9) # A4 format
 
     # Prepress palette
-    c_navy = (0.08, 0.16, 0.32)
+    c_navy = (31/255, 38/255, 44/255) # Hex #1f262c matching Logo-intelliprint.jpg
     c_blue = (0.13, 0.40, 0.85)
     c_slate = (0.35, 0.40, 0.48)
     c_light = (0.95, 0.96, 0.98)
@@ -23,14 +23,17 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     # 1. Header Banner
     page.draw_rect(pymupdf.Rect(0, 0, 595.3, 75), fill=c_navy)
 
-    # Insert official logo if available
+    # Logo first (left), seamless without white background or border
     logo_path = Path(__file__).parent / "assets" / "Logo-intelliprint.jpg"
     if logo_path.exists():
-        page.draw_rect(pymupdf.Rect(438, 11, 562, 64), fill=(1, 1, 1), radius=0.08)
-        page.insert_image(pymupdf.Rect(441, 13, 559, 62), filename=str(logo_path), keep_proportion=True)
+        page.insert_image(pymupdf.Rect(30, 13, 214, 65), filename=str(logo_path), keep_proportion=True)
+        text_x = 226
+    else:
+        text_x = 35
 
-    page.insert_text(pymupdf.Point(35, 33), "INTELLIPRINT · DICTAMEN OFICIAL DE PRODUCCIÓN", fontsize=14, color=(1, 1, 1), fontname="helv")
-    page.insert_text(pymupdf.Point(35, 52), "Certificado de Preflight, Control de Calidad y Autorización de Salida a Taller", fontsize=9, color=(0.8, 0.85, 0.95), fontname="helv")
+    # Then title and subtitle text
+    page.insert_text(pymupdf.Point(text_x, 35), "INTELLIPRINT · DICTAMEN OFICIAL DE PRODUCCIÓN", fontsize=12.5, color=(1, 1, 1), fontname="helv")
+    page.insert_text(pymupdf.Point(text_x, 53), "Certificado de Preflight, Control de Calidad y Autorización de Salida a Taller", fontsize=8.5, color=(0.75, 0.82, 0.90), fontname="helv")
 
     meta = job_data.get("job_meta", {})
     triple = job_data.get("triple_result", {})

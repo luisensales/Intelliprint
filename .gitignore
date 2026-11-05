@@ -18,4 +18,5 @@ jobs/*
 Thumbs.db
 .tmp.driveupload/
 *.log
+~$*
 

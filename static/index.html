@@ -17,19 +17,29 @@
 
   <!-- Header -->
   <header class="bg-slate-900 text-white shadow-md border-b border-slate-800">
-    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-3">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
       <div class="flex items-center gap-3">
-        <img src="/asset/Logo-intelliprint.jpg" alt="Logo IntelliPrint" class="h-11 w-auto rounded-lg object-contain bg-white p-1 shadow">
+        <img src="/asset/Logo-intelliprint.jpg" alt="Logo IntelliPrint" class="h-10 w-auto object-contain">
         <div>
-          <h1 class="text-xl font-bold tracking-tight">IntelliPrint <span class="text-blue-400 text-xs font-normal border border-blue-500/30 px-2 py-0.5 rounded-full ml-1">v1.2.0</span></h1>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl font-bold tracking-tight">IntelliPrint</h1>
+            <span class="text-blue-400 text-xs font-normal border border-blue-500/30 px-2 py-0.5 rounded-full">v1.2.0</span>
+            <span class="inline-flex items-center gap-1.5 text-xs text-emerald-400 bg-slate-800/80 border border-slate-700/60 px-2.5 py-0.5 rounded-full ml-1">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              Motor Activo
+            </span>
+          </div>
           <p class="text-xs text-slate-400">Sistema Avanzado de Preflight mediante Redes Neuronales & Análisis PDF</p>
         </div>
       </div>
-      <div class="flex items-center gap-2 text-xs text-slate-300">
-        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 border border-slate-700">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          Motor Activo (Local & Web Ready)
-        </span>
+
+      <!-- Institutional Logos: Salesianos, Mendizabala, Dept. Educación -->
+      <div class="flex items-center gap-4 bg-white/95 px-4 py-2 rounded-xl shadow-sm border border-slate-200">
+        <img src="/asset/logo-salesianos.svg" alt="Salesianos Urnieta" class="h-7 w-auto object-contain" title="Salesianos Urnieta">
+        <div class="h-6 w-px bg-slate-200"></div>
+        <img src="/asset/logo-mendizabala.png" alt="CIFP Mendizabala LHII" class="h-7 w-auto object-contain" title="CIFP Mendizabala LHII">
+        <div class="h-6 w-px bg-slate-200"></div>
+        <img src="/asset/logo-dept-educacion-1.svg" alt="Departamento de Educación · Eusko Jaurlaritza" class="h-7 w-auto object-contain" title="Departamento de Educación · Eusko Jaurlaritza">
       </div>
     </div>
   </header>
@@ -366,10 +376,19 @@
   </main>
 
   <!-- Footer -->
-  <footer class="bg-white border-t border-slate-200 py-4 mt-auto">
-    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center text-xs text-slate-400 gap-2">
-      <p>© 2026-2027 IntelliPrint · Sistema de Preflight Profesional</p>
-      <p>Proyecto de Innovación Aplicada de Formación Profesional</p>
+  <footer class="bg-white border-t border-slate-200 py-6 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
+      <div>
+        <p class="font-semibold text-slate-700">© 2026-2027 IntelliPrint · Sistema de Preflight Profesional</p>
+        <p class="text-slate-400 text-[11px]">Proyecto de Innovación Aplicada y Transferencia del Conocimiento en Formación Profesional</p>
+      </div>
+      <div class="flex items-center gap-4 bg-slate-50 px-3.5 py-1.5 rounded-lg border border-slate-200">
+        <img src="/asset/logo-salesianos.svg" alt="Salesianos Urnieta" class="h-7 w-auto object-contain opacity-90 hover:opacity-100 transition" title="Salesianos Urnieta">
+        <div class="h-5 w-px bg-slate-300"></div>
+        <img src="/asset/logo-mendizabala.png" alt="CIFP Mendizabala LHII" class="h-7 w-auto object-contain opacity-90 hover:opacity-100 transition" title="CIFP Mendizabala LHII">
+        <div class="h-5 w-px bg-slate-300"></div>
+        <img src="/asset/logo-dept-educacion-1.svg" alt="Departamento de Educación · Eusko Jaurlaritza" class="h-7 w-auto object-contain opacity-90 hover:opacity-100 transition" title="Departamento de Educación · Eusko Jaurlaritza">
+      </div>
     </div>
   </footer>
 
