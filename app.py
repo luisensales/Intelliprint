@@ -3,6 +3,8 @@ import shutil
 import hashlib
 import json
 import uuid
+import time
+import threading
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -45,6 +47,61 @@ app.add_middleware(
 )
 
 engine = IntelliPrintEngine()
+
+# ---------------------------------------------------------------------------
+# Limpieza automática de jobs antiguos
+# ---------------------------------------------------------------------------
+JOB_TTL_HOURS = 4          # Eliminar jobs con más de N horas de antigüedad
+CLEANUP_INTERVAL_SEC = 3600  # Ejecutar limpieza cada hora
+
+def _cleanup_old_jobs():
+    """Elimina uploads y jobs con más de JOB_TTL_HOURS horas de antigüedad."""
+    cutoff = time.time() - JOB_TTL_HOURS * 3600
+    deleted_jobs = 0
+    freed_bytes = 0
+
+    # Recorrer todos los JSON de jobs
+    for json_file in JOBS_DIR.glob("*.json"):
+        try:
+            if json_file.stat().st_mtime < cutoff:
+                # Leer para obtener la carpeta de uploads asociada
+                try:
+                    with open(json_file, "r", encoding="utf-8") as f:
+                        job_data = json.load(f)
+                    job_id = job_data.get("job_meta", {}).get("job_id", json_file.stem.split("_")[0])
+                except Exception:
+                    job_id = json_file.stem.split("_")[0]
+
+                # Eliminar carpeta de uploads (PDF original)
+                upload_folder = UPLOAD_DIR / job_id
+                if upload_folder.exists():
+                    freed_bytes += sum(f.stat().st_size for f in upload_folder.rglob("*") if f.is_file())
+                    shutil.rmtree(upload_folder, ignore_errors=True)
+
+                # Eliminar todos los archivos del job en jobs/
+                for job_file in JOBS_DIR.glob(f"{job_id}*"):
+                    freed_bytes += job_file.stat().st_size if job_file.exists() else 0
+                    job_file.unlink(missing_ok=True)
+
+                deleted_jobs += 1
+        except Exception as e:
+            print(f"[cleanup] Error procesando {json_file.name}: {e}")
+
+    if deleted_jobs:
+        print(f"[cleanup] {deleted_jobs} jobs eliminados · {freed_bytes // 1024} KB liberados")
+
+def _cleanup_loop():
+    """Hilo de limpieza periódica."""
+    while True:
+        time.sleep(CLEANUP_INTERVAL_SEC)
+        try:
+            _cleanup_old_jobs()
+        except Exception as e:
+            print(f"[cleanup] Error en limpieza periódica: {e}")
+
+# Arrancar hilo de limpieza en background al iniciar la app
+_cleanup_thread = threading.Thread(target=_cleanup_loop, daemon=True)
+_cleanup_thread.start()
 
 # Mount static and assets folders
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -325,6 +382,57 @@ async def download_json_report(job_id: str):
         media_type="application/json",
         filename=f"Informe_IntelliPrint_{job_id}.json"
     )
+
+
+@app.get("/api/storage-status")
+async def storage_status():
+    """Estado del almacenamiento: número de jobs y espacio usado."""
+    def _dir_size(path: Path) -> int:
+        return sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) if path.exists() else 0
+
+    uploads_bytes = _dir_size(UPLOAD_DIR)
+    jobs_bytes    = _dir_size(JOBS_DIR)
+    total_bytes   = uploads_bytes + jobs_bytes
+
+    job_count = len(list(JOBS_DIR.glob("*.json")))
+
+    # Antigüedad del job más viejo
+    json_files = sorted(JOBS_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime)
+    oldest_age_h = None
+    if json_files:
+        oldest_age_h = round((time.time() - json_files[0].stat().st_mtime) / 3600, 1)
+
+    return {
+        "jobs_count": job_count,
+        "uploads_mb": round(uploads_bytes / 1024 / 1024, 2),
+        "jobs_mb":    round(jobs_bytes    / 1024 / 1024, 2),
+        "total_mb":   round(total_bytes   / 1024 / 1024, 2),
+        "oldest_job_hours": oldest_age_h,
+        "ttl_hours": JOB_TTL_HOURS,
+        "note": f"Los jobs se eliminan automáticamente después de {JOB_TTL_HOURS} horas."
+    }
+
+
+@app.post("/api/cleanup-now")
+async def cleanup_now():
+    """Fuerza la limpieza inmediata de jobs antiguos."""
+    before_bytes = sum(
+        f.stat().st_size for d in [UPLOAD_DIR, JOBS_DIR]
+        for f in d.rglob("*") if f.is_file()
+    ) if UPLOAD_DIR.exists() and JOBS_DIR.exists() else 0
+
+    _cleanup_old_jobs()
+
+    after_bytes = sum(
+        f.stat().st_size for d in [UPLOAD_DIR, JOBS_DIR]
+        for f in d.rglob("*") if f.is_file()
+    ) if UPLOAD_DIR.exists() and JOBS_DIR.exists() else 0
+
+    return {
+        "status": "ok",
+        "freed_mb": round((before_bytes - after_bytes) / 1024 / 1024, 2),
+        "remaining_jobs": len(list(JOBS_DIR.glob("*.json")))
+    }
 
 @app.get("/api/download-pdf/{job_id}")
 async def download_pdf_file(job_id: str):
