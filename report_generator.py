@@ -95,16 +95,40 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     # 3. Triple Result Boxes
     box_w = 166.5
     gap = 10
-    
-    # Technical
+
+    # Recalcular contadores técnicos si se filtraron avisos RGB
     tech = triple.get("technical", {})
-    t_status = tech.get("status", "FAIL")
+    all_findings = job_data.get("findings", [])
+    cmyk_converted = meta.get("cmyk_converted_pdf_path")
+
+    if cmyk_converted:
+        # Contar cuántos findings RGB se han eliminado
+        rgb_findings = [f for f in all_findings if "rgb" in f.get("title", "").lower() or "rgb" in f.get("message", "").lower()]
+        rgb_warnings = sum(1 for f in rgb_findings if f.get("severity") != "ERROR")
+        rgb_errors   = sum(1 for f in rgb_findings if f.get("severity") == "ERROR")
+        adj_warnings = max(0, tech.get("warnings_count", 0) - rgb_warnings)
+        adj_errors   = max(0, tech.get("errors_count",   0) - rgb_errors)
+    else:
+        adj_warnings = tech.get("warnings_count", 0)
+        adj_errors   = tech.get("errors_count",   0)
+
+    # Recalcular estado
+    if adj_errors > 0:
+        t_status = "FAIL"
+        t_label  = tech.get("label", "NO CUMPLE")
+    elif adj_warnings > 0:
+        t_status = "PASS_WITH_WARNINGS"
+        t_label  = "CUMPLE CON AVISOS"
+    else:
+        t_status = "PASS"
+        t_label  = "CUMPLE"
+
     t_color = c_green if t_status == "PASS" else (c_amber if t_status == "PASS_WITH_WARNINGS" else c_red)
     page.draw_rect(pymupdf.Rect(35, y, 35 + box_w, y + 60), color=t_color, width=1.2, fill=(1, 1, 1))
     page.draw_rect(pymupdf.Rect(35, y, 35 + box_w, y + 18), fill=t_color)
     page.insert_text(pymupdf.Point(42, y + 13), "1. RESULTADO TÉCNICO", fontsize=8, fontname="helv", color=(1, 1, 1))
-    page.insert_text(pymupdf.Point(42, y + 36), tech.get("label", "NO CUMPLE"), fontsize=10, fontname="helv", color=t_color)
-    page.insert_text(pymupdf.Point(42, y + 50), f"{tech.get('errors_count', 0)} errores, {tech.get('warnings_count', 0)} avisos", fontsize=7.5, fontname="helv", color=c_slate)
+    page.insert_text(pymupdf.Point(42, y + 36), t_label, fontsize=10, fontname="helv", color=t_color)
+    page.insert_text(pymupdf.Point(42, y + 50), f"{adj_errors} errores, {adj_warnings} avisos", fontsize=7.5, fontname="helv", color=c_slate)
 
     # Content
     content = triple.get("content", {})
