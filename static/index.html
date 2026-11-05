@@ -326,7 +326,12 @@
                 <h4 class="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                   <i class="fa-solid fa-images text-blue-600"></i> Auditoría Detallada de Imágenes (Espacio de Color & Resolución Efectiva)
                 </h4>
-                <span id="metricImagesSummary" class="text-xs text-slate-500 font-medium"></span>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span id="metricImagesSummary" class="text-xs text-slate-500 font-medium"></span>
+                  <button id="btnShowCmykPanel" onclick="toggleCmykPanel()" class="hidden items-center gap-1 text-[11px] font-semibold text-orange-700 bg-orange-100 hover:bg-orange-200 border border-orange-300 px-3 py-1.5 rounded-full transition-all">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Convertir a CMYK
+                  </button>
+                </div>
               </div>
               <div class="overflow-x-auto">
                 <table class="w-full text-left text-xs border-collapse">
@@ -345,6 +350,36 @@
                     <!-- Dynamic rows populated in renderResults -->
                   </tbody>
                 </table>
+              </div>
+
+              <!-- Panel: Conversión RGB → CMYK -->
+              <div id="cmykConversionPanel" class="hidden mt-4 pt-4 border-t border-orange-200 bg-orange-50 rounded-xl p-4 space-y-3">
+                <h5 class="text-xs font-bold text-orange-800 flex items-center gap-1.5">
+                  <i class="fa-solid fa-wand-magic-sparkles text-orange-500"></i>
+                  Conversión Gestionada RGB → CMYK
+                </h5>
+                <p class="text-[11px] text-orange-700">
+                  Convierte todas las imágenes RGB del PDF al espacio CMYK mediante perfiles ICC con intención RELATIVE_COLORIMETRIC.
+                  El PDF original no se modifica; se genera un nuevo archivo convertido para descargar.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                  <div class="flex items-center gap-2">
+                    <label class="text-[11px] font-semibold text-orange-800">Perfil destino:</label>
+                    <select id="cmykProfileChoice" class="text-[11px] border border-orange-300 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-orange-400 outline-none">
+                      <option value="embedded">Perfil embebido en el PDF</option>
+                      <option value="ISOcoated_v2_300_bas.icc">ISO Coated v2 300% (FOGRA39)</option>
+                      <option value="ISOcoated_v2_eci.icc">ISO Coated v2 ECI</option>
+                      <option value="PSOcoated_v3.icc">PSO Coated v3 (FOGRA51)</option>
+                      <option value="PSOuncoated_v3_FOGRA52.icc">PSO Uncoated v3 (FOGRA52)</option>
+                    </select>
+                  </div>
+                  <button id="btnConvertCmyk" onclick="convertImagesToCmyk()"
+                    class="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-sm">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Convertir imágenes RGB → CMYK
+                  </button>
+                </div>
+                <!-- Estado de la conversión -->
+                <div id="cmykConversionStatus" class="hidden"></div>
               </div>
             </div>
 
@@ -760,6 +795,20 @@
           imagesSummaryEl.innerHTML = `<strong>${inv.length}</strong> imágenes analizadas · <span class="${nonCmykCount > 0 ? 'text-amber-600 font-bold' : 'text-slate-500'}">${nonCmykCount} en RGB</span> · <span class="${lowResCount > 0 ? 'text-red-600 font-bold' : 'text-slate-500'}">${lowResCount} baja resolución</span>`;
         }
 
+        // Mostrar botón "Convertir a CMYK" si hay imágenes RGB
+        const btnCmyk = document.getElementById('btnShowCmykPanel');
+        if (btnCmyk) {
+          if (nonCmykCount > 0) {
+            btnCmyk.classList.remove('hidden');
+            btnCmyk.classList.add('flex');
+          } else {
+            btnCmyk.classList.add('hidden');
+            btnCmyk.classList.remove('flex');
+            const panel = document.getElementById('cmykConversionPanel');
+            if (panel) panel.classList.add('hidden');
+          }
+        }
+
         if (inv.length === 0) {
           imagesTbody.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-400">No se detectaron imágenes ráster en el PDF (documento vectorial o solo texto).</td></tr>';
         } else {
@@ -910,6 +959,94 @@
         window.location.href = `/api/report/${currentJobId}`;
       }
     });
+
+    // -----------------------------------------------------------------------
+    // Conversión RGB → CMYK
+    // -----------------------------------------------------------------------
+    function toggleCmykPanel() {
+      const panel = document.getElementById('cmykConversionPanel');
+      if (!panel) return;
+      panel.classList.toggle('hidden');
+    }
+
+    async function convertImagesToCmyk() {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo. Sube un PDF primero.');
+        return;
+      }
+
+      const profileChoice = document.getElementById('cmykProfileChoice').value;
+      const btn = document.getElementById('btnConvertCmyk');
+      const statusEl = document.getElementById('cmykConversionStatus');
+
+      // Estado: procesando
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Convirtiendo...';
+      statusEl.classList.remove('hidden');
+      statusEl.innerHTML = `
+        <div class="flex items-center gap-2 text-orange-700 text-xs">
+          <i class="fa-solid fa-spinner fa-spin"></i>
+          <span>Aplicando transform ICC a las imágenes RGB… esto puede tardar unos segundos.</span>
+        </div>`;
+
+      const formData = new FormData();
+      if (profileChoice === 'embedded') {
+        formData.append('use_embedded_icc', 'true');
+      } else {
+        formData.append('use_embedded_icc', 'false');
+        formData.append('custom_icc', profileChoice);
+      }
+
+      try {
+        const res = await fetch(`/api/convert-to-cmyk/${currentJobId}`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+
+        if (!res.ok || data.status !== 'success') {
+          const errMsg = data.detail || data.errors?.join('; ') || 'Error desconocido';
+          statusEl.innerHTML = `
+            <div class="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+              <i class="fa-solid fa-circle-xmark mt-0.5 text-red-500"></i>
+              <div>
+                <p class="font-semibold">Error en la conversión</p>
+                <p class="mt-0.5">${errMsg}</p>
+              </div>
+            </div>`;
+          return;
+        }
+
+        const warnings = data.errors?.length > 0
+          ? `<p class="mt-1 text-amber-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Advertencias en ${data.errors.length} imagen(es) — ${data.errors.slice(0,2).join('; ')}</p>`
+          : '';
+
+        statusEl.innerHTML = `
+          <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 space-y-2">
+            <p class="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+              <i class="fa-solid fa-circle-check text-emerald-600"></i>
+              Conversión completada: ${data.images_converted} imagen(es) convertida(s) a CMYK
+              ${data.images_skipped > 0 ? `<span class="text-slate-500 font-normal">(${data.images_skipped} omitidas: ya CMYK o escala de grises)</span>` : ''}
+            </p>
+            ${warnings}
+            <a href="${data.download_url}" target="_blank"
+              class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-sm">
+              <i class="fa-solid fa-file-arrow-down"></i>
+              Descargar PDF CMYK convertido
+            </a>
+          </div>`;
+
+      } catch (err) {
+        statusEl.innerHTML = `
+          <div class="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+            <i class="fa-solid fa-circle-xmark mt-0.5"></i>
+            <span>Error de red o del servidor: ${err.message}</span>
+          </div>`;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Convertir imágenes RGB → CMYK';
+      }
+    }
 
   </script>
 </body>

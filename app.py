@@ -17,6 +17,7 @@ from preflight_engine import IntelliPrintEngine
 from icc_manager import get_available_icc_profiles, detect_pdf_output_intent
 from spellcheck_engine import save_word_to_glossary
 from report_generator import generate_preflight_certificate_pdf
+from color_converter import convert_rgb_images_to_cmyk, extract_embedded_icc_to_tempfile
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -341,6 +342,109 @@ async def download_pdf_file(job_id: str):
         media_type="application/pdf",
         filename=f"IntelliPrint_{filename}"
     )
+
+@app.post("/api/convert-to-cmyk/{job_id}")
+async def convert_images_to_cmyk(
+    job_id: str,
+    use_embedded_icc: bool = Form(True),
+    custom_icc: Optional[str] = Form(None),
+):
+    """
+    Convierte las imágenes RGB del PDF a CMYK usando perfiles ICC.
+    - use_embedded_icc=true  → usa el OutputIntent embebido en el PDF
+    - use_embedded_icc=false → usa custom_icc (nombre de archivo en icc_profiles/)
+    """
+    job_json_path = JOBS_DIR / f"{job_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    pdf_path = job_data.get("job_meta", {}).get("pdf_path")
+    if not pdf_path or not os.path.exists(pdf_path):
+        raise HTTPException(status_code=404, detail="PDF original no encontrado en el servidor.")
+
+    ICC_PROFILES_DIR = BASE_DIR / "icc_profiles"
+    dst_icc_path = None
+    temp_icc_file = None
+
+    if use_embedded_icc:
+        # Intentar extraer el ICC embebido en el PDF
+        temp_icc_file = extract_embedded_icc_to_tempfile(pdf_path)
+        if temp_icc_file:
+            dst_icc_path = temp_icc_file
+        else:
+            # Si no hay ICC embebido, usar el seleccionado en el job o el predeterminado
+            fallback_name = job_data.get("job_meta", {}).get("selected_icc", "ISOcoated_v2_300_bas.icc")
+            dst_icc_path = str(ICC_PROFILES_DIR / fallback_name)
+    else:
+        if not custom_icc:
+            raise HTTPException(status_code=400, detail="Se requiere un perfil ICC personalizado.")
+        # Validar nombre para evitar path traversal
+        safe_name = Path(custom_icc).name
+        dst_icc_path = str(ICC_PROFILES_DIR / safe_name)
+        if not os.path.exists(dst_icc_path):
+            raise HTTPException(status_code=400, detail=f"Perfil ICC no encontrado: {safe_name}")
+
+    output_path = JOBS_DIR / f"{job_id}_cmyk_converted.pdf"
+
+    try:
+        conv_result = convert_rgb_images_to_cmyk(
+            pdf_path=pdf_path,
+            dst_icc_path=dst_icc_path,
+            output_path=str(output_path),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error durante la conversión: {e}")
+    finally:
+        # Limpiar el archivo temporal del ICC extraído
+        if temp_icc_file and os.path.exists(temp_icc_file):
+            try:
+                os.unlink(temp_icc_file)
+            except Exception:
+                pass
+
+    if not conv_result.get("success"):
+        errors = conv_result.get("errors", [])
+        raise HTTPException(status_code=500, detail=f"La conversión falló: {'; '.join(errors)}")
+
+    # Guardar la ruta del PDF convertido en el job
+    job_data["job_meta"]["cmyk_converted_pdf_path"] = str(output_path)
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "success",
+        "images_converted": conv_result["images_converted"],
+        "images_skipped": conv_result["images_skipped"],
+        "errors": conv_result.get("errors", []),
+        "download_url": f"/api/download-cmyk/{job_id}",
+    }
+
+
+@app.get("/api/download-cmyk/{job_id}")
+async def download_cmyk_pdf(job_id: str):
+    """Descarga el PDF con imágenes convertidas a CMYK."""
+    job_json_path = JOBS_DIR / f"{job_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    converted_path = JOBS_DIR / f"{job_id}_cmyk_converted.pdf"
+    if not converted_path.exists():
+        raise HTTPException(status_code=404, detail="PDF convertido no encontrado. Ejecuta la conversión primero.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    clean_name = filename.replace(".pdf", "")
+
+    return FileResponse(
+        path=str(converted_path),
+        media_type="application/pdf",
+        filename=f"IntelliPrint_CMYK_{clean_name}.pdf",
+    )
+
 
 if __name__ == "__main__":
     import uvicorn
