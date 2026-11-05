@@ -180,7 +180,7 @@
 
           <div class="flex flex-wrap items-center gap-2">
             <a id="downloadPdfBtn" href="#" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition">
-              <i class="fa-solid fa-file-pdf"></i> Descargar PDF con ICC
+              <i class="fa-solid fa-file-pdf"></i> <span id="downloadPdfBtnLabel">Descargar PDF con ICC</span>
             </a>
             <a id="downloadCertBtn" href="#" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-file-shield"></i> Descargar Ficha en PDF
@@ -658,7 +658,12 @@
 
       const downloadPdfBtn = document.getElementById('downloadPdfBtn');
       if (downloadPdfBtn && currentJobId) {
+        // Resetear al PDF original con ICC (sin conversión aún)
         downloadPdfBtn.href = `/api/download-pdf/${currentJobId}`;
+        downloadPdfBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
+        downloadPdfBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        const lbl = document.getElementById('downloadPdfBtnLabel');
+        if (lbl) lbl.textContent = 'Descargar PDF con ICC';
       }
 
       const downloadCertBtn = document.getElementById('downloadCertBtn');
@@ -1022,19 +1027,30 @@
           : '';
 
         statusEl.innerHTML = `
-          <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 space-y-2">
+          <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 space-y-1">
             <p class="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
               <i class="fa-solid fa-circle-check text-emerald-600"></i>
               Conversión completada: ${data.images_converted} imagen(es) convertida(s) a CMYK
               ${data.images_skipped > 0 ? `<span class="text-slate-500 font-normal">(${data.images_skipped} omitidas: ya CMYK o escala de grises)</span>` : ''}
             </p>
             ${warnings}
-            <a href="${data.download_url}" target="_blank"
-              class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-sm">
-              <i class="fa-solid fa-file-arrow-down"></i>
-              Descargar PDF CMYK convertido
-            </a>
+            <p class="text-[11px] text-emerald-700">
+              <i class="fa-solid fa-arrow-up mr-1"></i>
+              El botón azul <strong>"Descargar PDF"</strong> arriba ya apunta al PDF convertido.
+            </p>
           </div>`;
+
+        // Actualizar el botón azul principal para descargar el PDF CMYK convertido
+        const pdfBtn = document.getElementById('downloadPdfBtn');
+        const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+        if (pdfBtn) {
+          pdfBtn.href = data.download_url;
+          pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+          pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+        }
+        if (pdfBtnLabel) {
+          pdfBtnLabel.textContent = 'Descargar PDF CMYK';
+        }
 
       } catch (err) {
         statusEl.innerHTML = `
