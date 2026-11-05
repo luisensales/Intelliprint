@@ -5,22 +5,39 @@ import pikepdf
 
 ICC_DIR = Path(__file__).parent / "icc_profiles"
 
+FRIENDLY_NAMES = {
+    "PSOcoated_v3.icc": ("PSO Coated v3 (FOGRA51 - Estucado)", "CMYK"),
+    "PSOuncoated_v3_FOGRA52.icc": ("PSO Uncoated v3 (FOGRA52 - No estucado)", "CMYK"),
+    "ISOcoated_v2_300_bas.icc": ("ISO Coated v2 300% (FOGRA39 - Estucado)", "CMYK"),
+    "ISOcoated_v2_eci.icc": ("ISO Coated v2 ECI (FOGRA39)", "CMYK"),
+    "sRGB2014.icc": ("sRGB IEC61966-2.1 (Pantalla/Web)", "RGB"),
+    "AdobeRGB1998.icc": ("Adobe RGB 1998 (Fotografía/RGB amplio)", "RGB")
+}
+
 def get_available_icc_profiles():
     profiles = []
+    seen_keys = set()
     
     # 1. Scanned local profiles in icc_profiles/
     if ICC_DIR.exists():
         for f in os.listdir(ICC_DIR):
             if f.lower().endswith(('.icc', '.icm')):
                 path = ICC_DIR / f
+                if not path.is_file() or path.stat().st_size < 100:
+                    continue
                 size_kb = round(path.stat().st_size / 1024, 1)
                 
-                # Guess family
-                family = "CMYK" if any(k in f.lower() for k in ["coated", "cmyk", "fogra", "gracol", "swop"]) else "RGB"
-                if "gray" in f.lower():
-                    family = "Gray"
+                if f in FRIENDLY_NAMES:
+                    name, family = FRIENDLY_NAMES[f]
+                else:
+                    family = "CMYK" if any(k in f.lower() for k in ["coated", "cmyk", "fogra", "gracol", "swop"]) else "RGB"
+                    if "gray" in f.lower():
+                        family = "Gray"
+                    name = f.replace(".icc", "").replace(".icm", "").replace("_", " ")
 
-                name = f.replace(".icc", "").replace(".icm", "").replace("_", " ")
+                seen_keys.add(f.lower())
+                seen_keys.add(name.lower())
+
                 profiles.append({
                     "id": f,
                     "filename": f,
@@ -30,19 +47,23 @@ def get_available_icc_profiles():
                     "source": "local_folder"
                 })
 
-    # 2. Add standard catalog references
+    # 2. Add standard catalog references (only if not already provided locally)
     catalog_refs = [
-        {"id": "CAT_PSO_COATED_V3", "filename": None, "name": "PSO Coated v3 (FOGRA51)", "family": "CMYK", "source": "catalog"},
-        {"id": "CAT_PSO_UNCOATED_V3", "filename": None, "name": "PSO Uncoated v3 (FOGRA52)", "family": "CMYK", "source": "catalog"},
+        {"id": "CAT_PSO_COATED_V3", "filename": "PSOcoated_v3.icc", "name": "PSO Coated v3 (FOGRA51)", "family": "CMYK", "source": "catalog"},
+        {"id": "CAT_PSO_UNCOATED_V3", "filename": "PSOuncoated_v3_FOGRA52.icc", "name": "PSO Uncoated v3 (FOGRA52)", "family": "CMYK", "source": "catalog"},
         {"id": "CAT_ECICMYK_V2", "filename": None, "name": "eciCMYK v2 (FOGRA59 - Intercambio)", "family": "CMYK", "source": "catalog"},
-        {"id": "CAT_SRGB", "filename": None, "name": "sRGB IEC61966-2.1", "family": "RGB", "source": "catalog"}
+        {"id": "CAT_SRGB", "filename": "sRGB2014.icc", "name": "sRGB IEC61966-2.1", "family": "RGB", "source": "catalog"}
     ]
     
-    # Avoid duplicates by name
-    existing_names = [p["name"].lower() for p in profiles]
     for ref in catalog_refs:
-        if ref["name"].lower() not in existing_names:
-            profiles.append(ref)
+        # Check if already covered by local file
+        ref_fn = (ref.get("filename") or "").lower()
+        ref_n = ref["name"].lower()
+        if ref_fn and ref_fn in seen_keys:
+            continue
+        if any(ref_n in p["name"].lower() or p["name"].lower() in ref_n for p in profiles):
+            continue
+        profiles.append(ref)
 
     return profiles
 
@@ -137,22 +158,47 @@ def apply_icc_to_pdf(pdf_path, selected_icc_id):
             icc_bytes = f.read()
 
         clean_name = selected_icc_id.lower()
-        if "coated" in clean_name or "cmyk" in clean_name or "fogra" in clean_name:
+        if "psouncoated" in clean_name or "fogra52" in clean_name:
             family = "CMYK"
             n_components = 4
-            identifier = "FOGRA39" if "300" in clean_name else "FOGRA51"
-            info = selected_icc_id.replace(".icc", "").replace(".icm", "").replace("_", " ")
-            condition = "Impresión offset comercial estucado"
-        elif "srgb" in clean_name or "rgb" in clean_name:
+            identifier = "FOGRA52"
+            info = "PSO Uncoated v3 (FOGRA52)"
+            condition = "Offset comercial papel no estucado FOGRA52"
+        elif "psocoated" in clean_name or "fogra51" in clean_name:
+            family = "CMYK"
+            n_components = 4
+            identifier = "FOGRA51"
+            info = "PSO Coated v3 (FOGRA51)"
+            condition = "Offset comercial papel estucado FOGRA51"
+        elif "isocoated_v2_300" in clean_name:
+            family = "CMYK"
+            n_components = 4
+            identifier = "FOGRA39"
+            info = "ISO Coated v2 300% (basICColor)"
+            condition = "Offset comercial estucado 300% TAC FOGRA39"
+        elif "isocoated" in clean_name or "fogra39" in clean_name:
+            family = "CMYK"
+            n_components = 4
+            identifier = "FOGRA39"
+            info = "ISO Coated v2 ECI (FOGRA39)"
+            condition = "Offset comercial estucado FOGRA39"
+        elif "adobergb" in clean_name:
+            family = "RGB"
+            n_components = 3
+            identifier = "AdobeRGB1998"
+            info = "Adobe RGB (1998)"
+            condition = "Espacio de color extendido Adobe RGB"
+        elif "srgb" in clean_name:
             family = "RGB"
             n_components = 3
             identifier = "sRGB"
             info = "sRGB IEC61966-2.1"
             condition = "Visualización estándar en monitor"
         else:
-            family = "CMYK"
-            n_components = 4
-            info = selected_icc_id
+            family = "CMYK" if any(k in clean_name for k in ["cmyk", "coated", "offset"]) else "RGB"
+            n_components = 4 if family == "CMYK" else 3
+            identifier = selected_icc_id
+            info = selected_icc_id.replace(".icc", "").replace(".icm", "").replace("_", " ")
     elif selected_icc_id in CATALOG_DATA:
         c_info = CATALOG_DATA[selected_icc_id]
         identifier = c_info["identifier"]
