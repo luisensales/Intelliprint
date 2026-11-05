@@ -414,6 +414,14 @@ async def convert_images_to_cmyk(
     with open(job_json_path, "w", encoding="utf-8") as f:
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
+    # Regenerar el certificado PDF si ya existe (para que refleje los avisos RGB resueltos)
+    cert_path = JOBS_DIR / f"{job_id}_ficha_tecnica.pdf"
+    if cert_path.exists():
+        try:
+            generate_preflight_certificate_pdf(job_data, cert_path)
+        except Exception as e:
+            print(f"[convert-to-cmyk] Aviso: no se pudo regenerar el certificado: {e}")
+
     return {
         "status": "success",
         "images_converted": conv_result["images_converted"],

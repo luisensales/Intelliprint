@@ -144,23 +144,33 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     y += 30
 
     findings = job_data.get("findings", [])
+
+    # Si se ha generado un PDF convertido a CMYK, filtrar los avisos de imágenes RGB
+    cmyk_converted = job_data.get("job_meta", {}).get("cmyk_converted_pdf_path")
+    if cmyk_converted:
+        findings = [f for f in findings if "rgb" not in f.get("title", "").lower() and "rgb" not in f.get("message", "").lower()]
+
     if not findings:
         page.draw_rect(pymupdf.Rect(35, y, 560, y + 35), fill=(0.92, 0.98, 0.94), color=c_green, width=0.5)
         page.insert_text(pymupdf.Point(45, y + 22), "✓ Documento totalmente limpio. Supera todas las reglas obligatorias del perfil de preimpresión.", fontsize=8.5, fontname="helv", color=c_green)
         y += 45
     else:
         for idx, f in enumerate(findings[:12]):
-            if y > 760:
+            if y > 750:
                 break
             is_err = f.get("severity") == "ERROR"
             b_col = c_red if is_err else c_amber
-            page.draw_rect(pymupdf.Rect(35, y, 560, y + 24), fill=(0.99, 0.95, 0.95) if is_err else (0.99, 0.98, 0.94), color=b_col, width=0.5)
+            fill_col = (0.99, 0.95, 0.95) if is_err else (0.99, 0.98, 0.94)
+            # Bloque de 2 líneas: título arriba, mensaje debajo
+            page.draw_rect(pymupdf.Rect(35, y, 560, y + 36), fill=fill_col, color=b_col, width=0.5)
             badge = "[ERROR]" if is_err else "[AVISO]"
-            page.insert_text(pymupdf.Point(42, y + 15), f"{badge} Pág {f.get('page', 1)}: {f.get('title', '')}", fontsize=8, fontname="helv", color=b_col)
+            title_text = f"{badge} Pág {f.get('page', 1)}: {f.get('title', '')}"
+            if len(title_text) > 85: title_text = title_text[:82] + "..."
+            page.insert_text(pymupdf.Point(42, y + 14), title_text, fontsize=8, fontname="helv", color=b_col)
             msg = f.get("message", "")
-            if len(msg) > 65: msg = msg[:62] + "..."
-            page.insert_text(pymupdf.Point(260, y + 15), msg, fontsize=7.5, fontname="helv", color=c_slate)
-            y += 28
+            if len(msg) > 95: msg = msg[:92] + "..."
+            page.insert_text(pymupdf.Point(42, y + 28), msg, fontsize=7, fontname="helv", color=c_slate)
+            y += 40
 
     # Footer
     page.draw_line(pymupdf.Point(35, 805), pymupdf.Point(560, 805), color=c_border, width=0.5)
