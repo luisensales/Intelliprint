@@ -162,6 +162,9 @@
           </div>
 
           <div class="flex items-center gap-2">
+            <a id="downloadPdfBtn" href="#" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition">
+              <i class="fa-solid fa-file-pdf"></i> Descargar PDF con ICC
+            </a>
             <button id="downloadJsonBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-code"></i> JSON Oficial
             </button>
@@ -496,6 +499,11 @@
       document.getElementById('resProfileBadge').textContent = data.job_meta.profile_id;
       document.getElementById('resFileHash').textContent = data.job_meta.sha256.substring(0, 16) + '...';
 
+      const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+      if (downloadPdfBtn && currentJobId) {
+        downloadPdfBtn.href = `/api/download-pdf/${currentJobId}`;
+      }
+
       // Technical Badge
       const techBadge = document.getElementById('badgeTechnical');
       const tech = data.triple_result.technical;
@@ -532,7 +540,6 @@
               <div class="flex items-center gap-2">
                 <span class="font-bold">${f.title}</span>
                 <span class="text-[10px] px-1.5 py-0.2 rounded bg-white/70 border border-current font-mono">Pág ${f.page}</span>
-                <span class="text-[10px] uppercase font-bold tracking-wider">${f.category}</span>
               </div>
               <p class="mt-0.5 text-slate-700">${f.message}</p>
             </div>

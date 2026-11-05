@@ -5,7 +5,7 @@ import pymupdf as fitz
 import pikepdf
 from decimal import Decimal
 from pathlib import Path
-from icc_manager import detect_pdf_output_intent
+from icc_manager import detect_pdf_output_intent, apply_icc_to_pdf
 from spellcheck_engine import PrepressSpellChecker
 
 VARNISH_KEYWORDS = ['barniz', 'varnish', 'laca', 'lacquer', 'uv', 'gloss', 'brillo', 'mate', 'matt', 'acabado', 'dieline', 'troquel', 'stamping']
@@ -289,6 +289,11 @@ class IntelliPrintEngine:
             req_family = "RGB"
             requires_bleed = False
 
+        # Apply ICC profile to PDF if user chose a custom profile from catalog/folder
+        applied_icc_info = None
+        if icc_choice == "custom_selection" and selected_icc:
+            applied_icc_info = apply_icc_to_pdf(pdf_path, selected_icc)
+
         # Open with PyMuPDF
         try:
             doc = fitz.open(pdf_path)
@@ -449,6 +454,10 @@ class IntelliPrintEngine:
             pike_doc.close()
         except Exception:
             pass
+
+        # If custom ICC was applied, ensure output_intent_info reflects it
+        if applied_icc_info and applied_icc_info.get("applied"):
+            output_intent_info = applied_icc_info
 
         # Check Output Intent requirements
         if req_family == "CMYK":

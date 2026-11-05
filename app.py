@@ -147,7 +147,8 @@ async def check_pdf(
         "sha256": pdf_sha256,
         "profile_id": profile_id,
         "icc_option": icc_option,
-        "selected_icc": selected_icc
+        "selected_icc": selected_icc,
+        "pdf_path": str(file_path)
     }
 
     # Persist Job JSON
@@ -234,6 +235,23 @@ async def download_json_report(job_id: str):
         path=str(job_json_path),
         media_type="application/json",
         filename=f"Informe_IntelliPrint_{job_id}.json"
+    )
+
+@app.get("/api/download-pdf/{job_id}")
+async def download_pdf_file(job_id: str):
+    job_json_path = JOBS_DIR / f"{job_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+    pdf_p = job_data.get("job_meta", {}).get("pdf_path")
+    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    if not pdf_p or not os.path.exists(pdf_p):
+        raise HTTPException(status_code=404, detail="Archivo PDF no encontrado en el servidor.")
+    return FileResponse(
+        path=pdf_p,
+        media_type="application/pdf",
+        filename=f"IntelliPrint_{filename}"
     )
 
 if __name__ == "__main__":
