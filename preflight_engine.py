@@ -390,15 +390,22 @@ class IntelliPrintEngine:
                 # Color check for images
                 is_cmyk = (cs == 4 or "CMYK" in str(cs).upper())
                 is_gray = (cs == 1 or "GRAY" in str(cs).upper())
+                is_rgb = (cs == 3 or "RGB" in str(cs).upper())
+
+                # Map numeric colorspace code to readable name
+                CS_NAMES = {1: "Escala de grises", 2: "Calcomp", 3: "RGB", 4: "CMYK"}
+                cs_label = CS_NAMES.get(cs, str(cs)) if isinstance(cs, int) else str(cs)
+
                 if req_family == "CMYK" and not is_cmyk and not is_gray:
                     non_cmyk_images += 1
+                    cs_advice = "RGB" if is_rgb else cs_label
                     findings.append({
                         "page": p_idx + 1,
                         "rule_id": "SOURCE_COLOR_DIAGNOSTIC",
                         "severity": "WARNING",
                         "category": "Color",
-                        "title": f"Imagen en espacio {cs}",
-                        "message": f"Imagen en espacio {cs}. Se admite para conversión gestionada, pero se aconseja verificar su apariencia."
+                        "title": f"Imagen en modo {cs_advice} (requiere CMYK)",
+                        "message": f"Imagen {i_idx+1} en pág {p_idx+1} está en espacio {cs_advice}. El perfil {profile_id} exige imágenes CMYK. Se admite conversión gestionada pero debe verificarse su apariencia en destino."
                     })
 
         # Font Embedding Inspection
