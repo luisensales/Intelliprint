@@ -46,26 +46,20 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     p_mendi = assets_dir / "logo-mendizabala.png"
     p_edu   = assets_dir / "logo-dept-educacion-1.png"
 
-    # Auto-generate high-res PNGs from SVGs if not present
-    if not p_sales.exists() and (assets_dir / "logo-salesianos.svg").exists():
-        pymupdf.open(str(assets_dir / "logo-salesianos.svg"))[0].get_pixmap(dpi=300).save(str(p_sales))
-    if not p_edu.exists() and (assets_dir / "logo-dept-educacion-1.svg").exists():
-        pymupdf.open(str(assets_dir / "logo-dept-educacion-1.svg"))[0].get_pixmap(dpi=300).save(str(p_edu))
-
     if p_sales.exists() and p_mendi.exists() and p_edu.exists():
-        capsule = pymupdf.Rect(355, 15, 567, 59)
-        page.draw_rect(capsule, fill=(1, 1, 1), radius=0.10)
+        capsule = pymupdf.Rect(310, 13, 567, 62)
+        page.draw_rect(capsule, fill=(1, 1, 1), radius=0.08)
 
         # 1. Salesianos
-        page.insert_image(pymupdf.Rect(363, 20, 423, 54), filename=str(p_sales), keep_proportion=True)
-        page.draw_line(pymupdf.Point(429, 22), pymupdf.Point(429, 52), color=(0.85, 0.85, 0.85), width=0.6)
+        page.insert_image(pymupdf.Rect(318, 17, 390, 58), filename=str(p_sales), keep_proportion=True)
+        page.draw_line(pymupdf.Point(395, 20), pymupdf.Point(395, 55), color=(0.88, 0.88, 0.88), width=0.6)
 
         # 2. Mendizabala
-        page.insert_image(pymupdf.Rect(435, 20, 497, 54), filename=str(p_mendi), keep_proportion=True)
-        page.draw_line(pymupdf.Point(503, 22), pymupdf.Point(503, 52), color=(0.85, 0.85, 0.85), width=0.6)
+        page.insert_image(pymupdf.Rect(400, 17, 474, 58), filename=str(p_mendi), keep_proportion=True)
+        page.draw_line(pymupdf.Point(479, 20), pymupdf.Point(479, 55), color=(0.88, 0.88, 0.88), width=0.6)
 
         # 3. Departamento de Educación
-        page.insert_image(pymupdf.Rect(509, 20, 559, 54), filename=str(p_edu), keep_proportion=True)
+        page.insert_image(pymupdf.Rect(484, 17, 560, 58), filename=str(p_edu), keep_proportion=True)
 
     meta = job_data.get("job_meta", {})
     triple = job_data.get("triple_result", {})
