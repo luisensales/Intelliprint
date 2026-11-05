@@ -24,16 +24,48 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     page.draw_rect(pymupdf.Rect(0, 0, 595.3, 75), fill=c_navy)
 
     # Logo first (left), seamless without white background or border
-    logo_path = Path(__file__).parent / "assets" / "Logo-intelliprint.jpg"
-    if logo_path.exists():
-        page.insert_image(pymupdf.Rect(30, 13, 214, 65), filename=str(logo_path), keep_proportion=True)
-        text_x = 226
+    assets_dir = Path(__file__).parent / "assets"
+    imago_path = assets_dir / "Logo-intelliprint-imago.jpg"
+    full_logo_path = assets_dir / "Logo-intelliprint.jpg"
+
+    if imago_path.exists():
+        page.insert_image(pymupdf.Rect(28, 13, 76, 62), filename=str(imago_path), keep_proportion=True)
+        text_x = 84
+    elif full_logo_path.exists():
+        page.insert_image(pymupdf.Rect(28, 16, 150, 58), filename=str(full_logo_path), keep_proportion=True)
+        text_x = 158
     else:
         text_x = 35
 
-    # Then title and subtitle text
-    page.insert_text(pymupdf.Point(text_x, 35), "INTELLIPRINT · DICTAMEN OFICIAL DE PRODUCCIÓN", fontsize=12.5, color=(1, 1, 1), fontname="helv")
-    page.insert_text(pymupdf.Point(text_x, 53), "Certificado de Preflight, Control de Calidad y Autorización de Salida a Taller", fontsize=8.5, color=(0.75, 0.82, 0.90), fontname="helv")
+    # Title and subtitle text
+    page.insert_text(pymupdf.Point(text_x, 35), "INTELLIPRINT · DICTAMEN OFICIAL", fontsize=11.5, color=(1, 1, 1), fontname="helv")
+    page.insert_text(pymupdf.Point(text_x, 52), "Certificado de Preflight y Control de Calidad", fontsize=8, color=(0.75, 0.82, 0.90), fontname="helv")
+
+    # 3 Institutional Partner Logos: Salesianos, Mendizabala, Dept. Educación
+    p_sales = assets_dir / "logo-salesianos.png"
+    p_mendi = assets_dir / "logo-mendizabala.png"
+    p_edu   = assets_dir / "logo-dept-educacion-1.png"
+
+    # Auto-generate high-res PNGs from SVGs if not present
+    if not p_sales.exists() and (assets_dir / "logo-salesianos.svg").exists():
+        pymupdf.open(str(assets_dir / "logo-salesianos.svg"))[0].get_pixmap(dpi=300).save(str(p_sales))
+    if not p_edu.exists() and (assets_dir / "logo-dept-educacion-1.svg").exists():
+        pymupdf.open(str(assets_dir / "logo-dept-educacion-1.svg"))[0].get_pixmap(dpi=300).save(str(p_edu))
+
+    if p_sales.exists() and p_mendi.exists() and p_edu.exists():
+        capsule = pymupdf.Rect(355, 15, 567, 59)
+        page.draw_rect(capsule, fill=(1, 1, 1), radius=0.10)
+
+        # 1. Salesianos
+        page.insert_image(pymupdf.Rect(363, 20, 423, 54), filename=str(p_sales), keep_proportion=True)
+        page.draw_line(pymupdf.Point(429, 22), pymupdf.Point(429, 52), color=(0.85, 0.85, 0.85), width=0.6)
+
+        # 2. Mendizabala
+        page.insert_image(pymupdf.Rect(435, 20, 497, 54), filename=str(p_mendi), keep_proportion=True)
+        page.draw_line(pymupdf.Point(503, 22), pymupdf.Point(503, 52), color=(0.85, 0.85, 0.85), width=0.6)
+
+        # 3. Departamento de Educación
+        page.insert_image(pymupdf.Rect(509, 20, 559, 54), filename=str(p_edu), keep_proportion=True)
 
     meta = job_data.get("job_meta", {})
     triple = job_data.get("triple_result", {})
@@ -133,7 +165,7 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     page.insert_text(pymupdf.Point(35, 818), "IntelliPrint Preflight Web v1.2.0 · Sistema Profesional de Calidad en Preimpresión", fontsize=7.5, fontname="helv", color=c_slate)
     page.insert_text(pymupdf.Point(450, 818), f"Certificado ID: {meta.get('job_id', 'N/A')}", fontsize=7.5, fontname="helv", color=c_slate)
 
-    doc.save(str(output_path))
+    doc.save(str(output_path), deflate=True, garbage=4)
     doc.close()
     return output_path
 
