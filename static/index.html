@@ -576,7 +576,16 @@
       // Metrics Tab
       const summ = data.job_summary;
       document.getElementById('metricPages').textContent = summ.pages;
-      document.getElementById('metricBleed').textContent = `${summ.bleed_detected_mm} mm`;
+      
+      const metricBleedEl = document.getElementById('metricBleed');
+      if (summ.bleed_status === 'NOT_REQUIRED') {
+        metricBleedEl.innerHTML = '<span class="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-[11px] font-semibold border border-emerald-200">No requerida (márgenes blancos)</span>';
+      } else if (summ.bleed_status === 'PASS') {
+        metricBleedEl.innerHTML = `<span class="text-emerald-700 font-bold">${summ.bleed_detected_mm} mm (Cumple)</span>`;
+      } else {
+        metricBleedEl.innerHTML = `<span class="text-red-700 font-bold">${summ.bleed_detected_mm} mm (Insuficiente)</span>`;
+      }
+
       document.getElementById('metricImages').textContent = summ.total_images;
       document.getElementById('metricLowRes').textContent = summ.low_res_images;
 

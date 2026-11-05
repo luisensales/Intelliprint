@@ -177,6 +177,53 @@ def check_spot_ink(spot_name, is_overprinting, page_num, results, context="objet
         else:
             results["other_spot_knockout"] += 1
 
+def is_color_white(color):
+    if color is None:
+        return True
+    if isinstance(color, (int, float)):
+        return abs(color - 1.0) < 0.02
+    if isinstance(color, (list, tuple)):
+        if len(color) == 1:
+            return abs(color[0] - 1.0) < 0.02
+        elif len(color) == 3:
+            return all(abs(c - 1.0) < 0.02 for c in color)
+        elif len(color) == 4:
+            return all(abs(c) < 0.02 for c in color)
+    return False
+
+def detect_page_edge_elements(page, tol_pt=2.83):
+    trim = page.trimbox
+    if trim.width <= 0 or trim.height <= 0:
+        trim = page.mediabox
+
+    edge_elements = []
+    # 1. Imágenes ráster
+    for img in page.get_images(full=True):
+        xref = img[0]
+        for r in page.get_image_rects(xref):
+            if r.width < 5 or r.height < 5:
+                continue
+            if (r.x0 <= trim.x0 + tol_pt) or (r.y0 <= trim.y0 + tol_pt) or (r.x1 >= trim.x1 - tol_pt) or (r.y1 >= trim.y1 - tol_pt):
+                edge_elements.append({"type": "image", "rect": [round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1)]})
+
+    # 2. Fondos / vectores con relleno
+    try:
+        drawings = page.get_drawings()
+    except Exception:
+        drawings = []
+
+    for d in drawings:
+        fill_color = d.get("fill")
+        if fill_color is None or is_color_white(fill_color):
+            continue
+        r = d.get("rect")
+        if not r or r.width < 5 or r.height < 5:
+            continue
+        if (r.x0 <= trim.x0 + tol_pt) or (r.y0 <= trim.y0 + tol_pt) or (r.x1 >= trim.x1 - tol_pt) or (r.y1 >= trim.y1 - tol_pt):
+            edge_elements.append({"type": "vector_fill", "rect": [round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1)]})
+
+    return edge_elements
+
 def check_pdf(file_path, target_dpi=300):
     if not os.path.exists(file_path):
         print(f"Error: El archivo {file_path} no existe.")
@@ -189,24 +236,44 @@ def check_pdf(file_path, target_dpi=300):
         print(f"Error al abrir el PDF: {e}")
         return
 
-    # 1. Chequear Cajas (Sangre / TrimBox)
-    print(f"\n[1] CAJAS DE PÁGINA (Pág 1)")
-    page = doc[0]  
-    mediabox = page.mediabox
-    trimbox = page.trimbox
-    bleedbox = page.bleedbox
+    # 1. Chequear Cajas y Sangre condicional a elementos al corte
+    print(f"\n[1] CAJAS DE PÁGINA Y SANGRADO CONDICIONAL")
+    pages_with_edge_elems = []
+    pages_failing_bleed = []
 
-    print(f"  - MediaBox (Lienzo total): {mediabox}")
-    print(f"  - TrimBox  (Corte final):  {trimbox}")
-    print(f"  - BleedBox (Área sangre):  {bleedbox}")
+    for p_idx in range(len(doc)):
+        p = doc[p_idx]
+        t = p.trimbox if (p.trimbox.width > 0 and p.trimbox.height > 0) else p.mediabox
+        m = p.mediabox
 
-    if mediabox != trimbox:
-        if trimbox.width == 0 or trimbox.height == 0:
-            print("  => NOTA: TrimBox no está bien definido (ancho o alto = 0).")
-        else:
-            print("  => CONCLUSIÓN: El archivo tiene SANGRE definida (MediaBox es distinto al TrimBox).")
+        b_top = round((t.y0 - m.y0) * 25.4 / 72.0, 1)
+        b_bottom = round((m.y1 - t.y1) * 25.4 / 72.0, 1)
+        b_left = round((t.x0 - m.x0) * 25.4 / 72.0, 1)
+        b_right = round((m.x1 - t.x1) * 25.4 / 72.0, 1)
+        p_bleed = max(0, min(b_top, b_bottom, b_left, b_right))
+
+        edge_elems = detect_page_edge_elements(p)
+        if edge_elems:
+            pages_with_edge_elems.append(p_idx + 1)
+            if t == m or p_bleed < 2.99:
+                pages_failing_bleed.append((p_idx + 1, p_bleed, len(edge_elems)))
+
+    first_page = doc[0]
+    print(f"  - MediaBox (Pág 1): {first_page.mediabox}")
+    print(f"  - TrimBox  (Pág 1): {first_page.trimbox}")
+
+    if not pages_with_edge_elems:
+        print("  => CONCLUSIÓN: Ninguna página tiene fondos o imágenes a ras de corte.")
+        print("     -> Sangrado NO obligatorio en este documento (blanco intencionado).")
     else:
-        print("  => CONCLUSIÓN: El archivo NO tiene sangre (MediaBox = TrimBox).")
+        print(f"  => CONCLUSIÓN: {len(pages_with_edge_elems)} página(s) contienen fondos/imágenes a ras de corte: {pages_with_edge_elems}")
+        if pages_failing_bleed:
+            for p_num, b_mm, elem_count in pages_failing_bleed:
+                msg = f"Pág {p_num}: Contiene {elem_count} elementos a ras de corte sin sangre de 3 mm (detectado: ~{b_mm} mm)."
+                print(f"     [!] ALERTA: {msg}")
+                results["warnings_details"].append(msg)
+        else:
+            print("     -> Todas las páginas con elementos al corte disponen de al menos 3 mm de sangre.")
 
     # 2. Chequear Imágenes (Resolución y Color Space)
     print(f"\n[2] IMÁGENES (Color y Resolución)")
