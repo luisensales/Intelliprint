@@ -1,0 +1,1605 @@
+{
+  "specification_type": "design_specification",
+  "schema": {
+    "id": "intelliprint.profiles.design_specification",
+    "version": "1.0.0",
+    "description": "Esquema propio descriptivo de IntelliPrint; no es un JSON Schema ni un motor ejecutable.",
+    "native_import_compatibility": {
+      "Adobe_Acrobat": false,
+      "Enfocus_PitStop": false
+    },
+    "is_icc_profile": false
+  },
+  "project": "IntelliPrint",
+  "version": "1.2.0",
+  "date": "2026-10-17",
+  "language": "es-ES",
+  "status": "design_baseline_pending_implementation",
+  "scope": {
+    "purpose": "Definir tres perfiles propios para análisis, propuestas de corrección, revisión humana y revalidación de copias PDF.",
+    "conformance_statement": "Cumple el perfil básico IntelliPrint indicado cuando todos sus requisitos obligatorios aplicables se han comprobado y superado; mostrar avisos, excepciones y revisión editorial.",
+    "pdf_x_requirement": false,
+    "pdf_x_validation_or_certification": false,
+    "general_production_approval_is_not_implied": true,
+    "implemented_features_claimed": false,
+    "basic_color_policy": "La familia exigida corresponde al ICC de SALIDA documental: CMYK para OFFSET_300 y DIGITAL_200; RGB para PANTALLA_RGB. El ICC de salida debe ser real, incrustado, válido e inequívoco. Los espacios y perfiles de los objetos de origen se diagnostican por separado y no tienen que ser uniformes.",
+    "optional_production_advice": "La caracterización de una máquina, soporte o imprenta concretos y el TAC son asesoramiento opcional; no se exigen para superar el perfil básico.",
+    "catalog_is_not_allowlist": true,
+    "color_source_diagnostics": "Se admiten orígenes RGB, CMYK, Gray y Lab técnicamente interpretables y varios ICC de origen. La mezcla o una caracterización de origen pendiente no invalidan por sí solas la comprobación básica del ICC de salida.",
+    "output_declaration_is_not_conversion": true
+  },
+  "units": {
+    "print_image_resolution": "ppp efectivos de imagen, equivalentes a PPI; no resolución DPI de la impresora",
+    "physical_geometry": "mm",
+    "screen_render_size": "píxeles físicos del área de página renderizada",
+    "pdf_coordinates": "Normalizar transformaciones, rotación y UserUnit antes de obtener dimensiones físicas.",
+    "comparison": "Comparar con valores sin redondear; redondear solo para presentación.",
+    "geometry_comparison_epsilon_mm": 0.01,
+    "geometry_epsilon_note": "Tolerancia numérica de implementación propuesta; el diseño y las correcciones deben reservar al menos 3 mm reales."
+  },
+  "work_order_fields": [
+    {
+      "id": "job_id",
+      "type": "string",
+      "required_for": [
+        "all"
+      ],
+      "default": null
+    },
+    {
+      "id": "profile_id",
+      "type": "enum",
+      "required_for": [
+        "all"
+      ],
+      "allowed": [
+        "OFFSET_300",
+        "DIGITAL_200",
+        "PANTALLA_RGB"
+      ],
+      "default": null
+    },
+    {
+      "id": "source_file_sha256",
+      "type": "string",
+      "required_for": [
+        "all"
+      ],
+      "source": "calculado al recibir el original"
+    },
+    {
+      "id": "final_page_geometry",
+      "type": "per_page_object",
+      "required_for": [
+        "print"
+      ],
+      "default": null,
+      "description": "Formato final y rectángulo de corte por página; admitir grupos de páginas solo cuando el encargo lo confirme."
+    },
+    {
+      "id": "trim_confirmed",
+      "type": "boolean",
+      "required_for": [
+        "print"
+      ],
+      "default": false,
+      "description": "La existencia de TrimBox no constituye por sí sola confirmación del corte."
+    },
+    {
+      "id": "trim_confirmation_source",
+      "type": "string",
+      "required_for": [
+        "print"
+      ],
+      "default": null,
+      "description": "Encargo, plantilla verificada o decisión registrada del operario."
+    },
+    {
+      "id": "finishing_geometry",
+      "type": "enum",
+      "required_for": [
+        "print"
+      ],
+      "allowed": [
+        "rectangular",
+        "complex_die_cut"
+      ],
+      "default": null
+    },
+    {
+      "id": "bleed_content_intent",
+      "type": "per_page_edge_segments",
+      "required_for": [
+        "print"
+      ],
+      "default": null,
+      "description": "Tramos que deben continuar tras el corte, tramos de blanco intencionado y confirmación. Una lista vacía solo es concluyente si se confirma que ningún elemento necesita llegar al corte."
+    },
+    {
+      "id": "destination_output_condition",
+      "type": "object",
+      "required_for": [],
+      "default": null,
+      "description": "Datos opcionales de imprenta, dispositivo, soporte o condición de salida. Su ausencia no bloquea el perfil básico ni obliga a elegir una máquina.",
+      "scope": "optional_production_advice"
+    },
+    {
+      "id": "selected_document_output_icc_profile",
+      "type": "object_or_null",
+      "required_for": [
+        "declare_output_without_conversion",
+        "convert_copy_to_output"
+      ],
+      "default": null,
+      "description": "ICC de salida seleccionado para declarar otro destino o convertir una copia. No hace falta volver a elegirlo al conservar una declaración documental válida. Debe quedar realmente incrustado mediante un mecanismo admitido por el formato y el motor."
+    },
+    {
+      "id": "source_color_conditions",
+      "type": "per_object_or_confirmed_context",
+      "required_for": [
+        "verified_actual_color_conversion"
+      ],
+      "default": null,
+      "description": "Diagnóstico de los espacios y perfiles de origen. Para una conversión colorimétrica comprobada se necesita un origen identificado, por ICC válido, definición colorimétrica o contexto confirmado; no sustituir una fuente desconocida por el ICC de salida sin fundamento."
+    },
+    {
+      "id": "special_inks_and_finishing_review",
+      "type": "array",
+      "required_for": [],
+      "default": [],
+      "description": "Inventario y decisiones sobre tintas especiales, barnices, blancos de apoyo y troqueles. Su presencia no incumple por sí sola la familia del ICC de salida; revisar su tratamiento de producción y no convertir separaciones de acabado automáticamente."
+    },
+    {
+      "id": "tac_limit_percent",
+      "type": "number_or_null",
+      "required_for": [],
+      "default": null,
+      "description": "Límite opcional acordado para un análisis de producción solicitado. Sin porcentaje universal; un valor null no bloquea el perfil básico.",
+      "scope": "optional_production_advice"
+    },
+    {
+      "id": "screen_mode_id",
+      "type": "enum",
+      "required_for": [
+        "PANTALLA_RGB"
+      ],
+      "allowed": [
+        "SCREEN_1000",
+        "SCREEN_2000",
+        "SCREEN_4000"
+      ],
+      "default": "SCREEN_2000"
+    },
+    {
+      "id": "screen_display_area",
+      "type": "per_page_rectangle",
+      "required_for": [
+        "PANTALLA_RGB"
+      ],
+      "default": null,
+      "description": "Área de página prevista para lectura, con recorte visible y proporción confirmados. No incluye controles del visor."
+    },
+    {
+      "id": "screen_file_size_limit_mb",
+      "type": "number_or_null",
+      "required_for": [],
+      "default": null,
+      "description": "Sin límite de peso obligatorio por defecto."
+    },
+    {
+      "id": "proofreading_languages",
+      "type": "array_or_null",
+      "required_for": [
+        "proofreading_if_requested"
+      ],
+      "default": null
+    },
+    {
+      "id": "operator_identity",
+      "type": "string",
+      "required_for": [
+        "approval",
+        "final_release"
+      ],
+      "default": null
+    },
+    {
+      "id": "color_profile_decision",
+      "type": "enum",
+      "required_for": [
+        "all"
+      ],
+      "allowed": [
+        "preserve_output_and_sources",
+        "declare_output_without_conversion",
+        "convert_copy_to_output"
+      ],
+      "default": "preserve_output_and_sources",
+      "description": "Tres acciones independientes: conservar destino y fuentes; declarar otro destino sin convertir valores; o convertir realmente una copia. Mostrar el efecto de cada acción y requerir aprobación de los cambios."
+    },
+    {
+      "id": "detected_embedded_icc_profiles",
+      "type": "array",
+      "required_for": [],
+      "source": "calculado durante el análisis",
+      "description": "Inventario separado de ICC de salida documental, ICC de origen por objeto y perfiles incidentales/no utilizados; incluir hash, familia, versión, clase, función y ubicación. Un ICC encontrado solo en una imagen no satisface el requisito de salida documental."
+    },
+    {
+      "id": "explicit_icc_assignment",
+      "type": "object_or_null",
+      "required_for": [
+        "icc_assignment_if_requested"
+      ],
+      "default": null,
+      "description": "Reparación separada para identificar o asignar explícitamente un perfil de ORIGEN, con contenido afectado, fundamento y aprobación. No equivale a declarar el destino ni a convertir valores. Una suposición de origen no justificada no permite afirmar una conversión colorimétrica comprobada."
+    },
+    {
+      "id": "document_output_icc_declaration",
+      "type": "object_or_null",
+      "required_for": [
+        "basic_output_icc_check"
+      ],
+      "source": "detectado en el PDF o creado en una copia mediante una acción aprobada",
+      "default": null,
+      "description": "Perfil binario de salida, hash, mecanismo documental, objeto de declaración y ámbito de aplicación. Resolver el destino inequívoco del trabajo; los perfiles de origen no lo sustituyen."
+    },
+    {
+      "id": "output_treatment",
+      "type": "enum",
+      "required_for": [
+        "all"
+      ],
+      "allowed": [
+        "preserve_sources_for_deferred_conversion",
+        "normalize_copy_to_output"
+      ],
+      "default": "preserve_sources_for_deferred_conversion",
+      "description": "Conservar fuentes para una eventual conversión al visualizar o imprimir, o normalizar una copia mediante conversión real solicitada. La declaración del destino no obliga a un consumidor externo a seguirlo."
+    }
+  ],
+  "result_model": {
+    "technical_statuses": {
+      "pass": "Comprobación ejecutada con evidencia suficiente y requisito satisfecho.",
+      "fail": "Comprobación ejecutada con incumplimiento demostrado.",
+      "not_checked": "Comprobación no realizada o sin datos suficientes; incluye decisiones pendientes de revisión humana.",
+      "error": "El análisis se intentó, pero no produjo una conclusión fiable.",
+      "not_applicable": "La regla no corresponde al contenido o al destino, con motivo registrado."
+    },
+    "severity_values": [
+      "blocking",
+      "warning",
+      "information"
+    ],
+    "editorial_status_values": [
+      "not_requested",
+      "pending_review",
+      "suggested",
+      "approved",
+      "rejected",
+      "applied",
+      "revalidation_required"
+    ],
+    "remediation_status_values": [
+      "open",
+      "candidate_prepared",
+      "awaiting_approval",
+      "approved",
+      "applied",
+      "verified",
+      "exception_accepted",
+      "not_correctable_automatically"
+    ],
+    "minimum_check_result_fields": [
+      "rule_id",
+      "technical_status",
+      "severity",
+      "required",
+      "page",
+      "object_or_occurrence_id",
+      "location",
+      "observed_value",
+      "expected_value",
+      "evidence",
+      "not_checked_or_error_reason",
+      "proposed_action",
+      "remediation_status"
+    ],
+    "aggregation": {
+      "mandatory_fail": "does_not_meet_profile",
+      "mandatory_not_checked_or_error_without_known_fail": "inconclusive",
+      "mandatory_fail_with_incomplete_checks": "does_not_meet_profile_and_analysis_incomplete",
+      "all_mandatory_applicable_pass_with_warnings": "meets_mandatory_requirements_with_warnings",
+      "all_mandatory_applicable_pass_without_warnings": "meets_intelliprint_profile",
+      "not_applicable": "Excluir del cálculo solo con justificación; no confundir con una comprobación pendiente.",
+      "accepted_exception": "Conservar fail, not_checked o error. La aceptación humana nunca lo transforma en pass.",
+      "changed_profile_or_job_parameters": "Guardar nueva versión o instantánea de parámetros y repetir las reglas afectadas; la copia final siempre se revalida por completo."
+    },
+    "production_release": {
+      "separate_from_profile_verdict": true,
+      "operator_authorization_required": true,
+      "human_exception_release": "Una liberación excepcional debe identificarse como tal, sin convertirla en cumplimiento técnico.",
+      "basic_profile_approval": "Comprobar un ICC de salida documental real, incrustado, válido, inequívoco y de la familia prevista, junto con las demás reglas obligatorias del perfil. No exigir identidad ni configuración de una prensa o RIP para superar la comprobación básica de salida.",
+      "optional_production_advice": "Mostrar por separado las comprobaciones de producción solicitadas. No convertir un consejo opcional pendiente en requisito obligatorio básico.",
+      "scope_limit": "Un destino declarado no convierte los objetos ni garantiza que un RIP externo lo utilice. El diagnóstico de fuentes y el estado de conversión se presentan por separado; superar el perfil básico no es una aprobación universal de producción."
+    },
+    "color_conversion_statuses": {
+      "not_requested": "No se ha solicitado ni ejecutado una conversión de valores; no atribuir una conversión al archivo por la presencia de un ICC.",
+      "deferred": "Se conservan los espacios de origen y se declara el destino; una eventual conversión se deja al visor o flujo de salida. Su aplicación externa no está garantizada.",
+      "applied_verified": "Se ha ejecutado y verificado una conversión real de la copia dentro del alcance documentado, con orígenes identificados, destino, parámetros, vista previa y revalidación. No certifica el comportamiento de cualquier dispositivo externo.",
+      "not_verified": "Se desconoce si la conversión se aplicó, no pudo comprobarse o faltan datos de origen para respaldar su corrección colorimétrica."
+    },
+    "color_verdict_separation": "El resultado técnico del ICC de salida, el diagnóstico de orígenes y el estado de conversión son resultados distintos. Orígenes mezclados o una conversión diferida no transforman un ICC de salida válido en fail."
+  },
+  "shared_computation_policies": {
+    "page_scope": "Todas las páginas y sus recursos realmente utilizados; no limitar el análisis a la primera.",
+    "print_effective_image_resolution": {
+      "scope": "Cada uso visible de cada imagen, incluidas reutilizaciones a tamaños distintos, imágenes inline y contenido de Form XObjects.",
+      "measurement": "Calcular píxeles por dimensión física mediante la CTM de la aparición y las longitudes de sus ejes transformados.",
+      "axes": [
+        "x",
+        "y"
+      ],
+      "acceptance": "Ambos ejes deben alcanzar el mínimo del perfil; informar los dos valores y el menor.",
+      "average_axes": false,
+      "axis_aligned_bbox_as_sole_measurement": false,
+      "clipping": "Usar el recorte para localizar la parte visible, conservando su escala de muestreo. No dividir los píxeles completos por el ancho del fragmento recortado.",
+      "rotation_and_shear": "Resolver con la transformación completa. Si la implementación no puede medir fiablemente un caso, registrar not_checked o error.",
+      "exclude_vectors_and_live_text": true,
+      "unused_resources": "No convertir un recurso no pintado en una incidencia de imagen visible.",
+      "masks": "Analizar máscaras y máscaras suaves por separado, con su propia geometría y efecto visible; no tratarlas como fotografías ni omitir su posible pixelación.",
+      "metadata_dpi_change_can_satisfy_rule": false,
+      "resampling_can_establish_original_detail": false,
+      "application_upsampling": "No utilizar una ampliación de píxeles realizada por IntelliPrint para presentar la falta de detalle como corregida. Conservar la incidencia de detalle de origen y registrar la operación.",
+      "previous_external_resampling": "No afirmar detección infalible de remuestreos anteriores: una cifra de PPI no garantiza nitidez real."
+    },
+    "screen_image_sampling": {
+      "formula_description": "Ancho físico de página renderizada = ancho CSS de página a zoom 1 × DPR × factor de zoom.",
+      "target_raster": "Derivar la altura con la proporción del área visible confirmada. Los píxeles se refieren a la página, no al ancho total de la pantalla.",
+      "per_occurrence": "Proyectar cada aparición de imagen al ráster objetivo mediante su CTM y recorte. Comparar la densidad de muestras disponible con la demandada en ambos ejes.",
+      "minimum_source_samples_per_target_pixel": 1.0,
+      "clipping": "Comparar el subconjunto de píxeles fuente correspondiente a la parte visible; conservar la escala original del muestreo.",
+      "insufficient_samples": "fail para el objetivo de calidad seleccionado, con ubicación y valores observados.",
+      "missing_target_or_unresolved_transform": "not_checked; no sustituir el objetivo por 72 ppp.",
+      "automatic_upsampling": false,
+      "vectors_and_text": "Conservar su representación vectorial o textual; no rasterizar todo el PDF para satisfacer una medida de pantalla."
+    },
+    "print_geometry_and_bleed": {
+      "minimum_bleed_mm_each_side": 3.0,
+      "extra_bleed_allowed": true,
+      "sides": [
+        "left",
+        "right",
+        "top",
+        "bottom"
+      ],
+      "geometry_rule": "Reservar al menos 3 mm desde el corte confirmado por cada lado, dentro de un soporte y cajas coherentes; comprobar cada lado de cada página.",
+      "trim_source": "No asumir automáticamente que TrimBox es correcto ni que MediaBox distinto de TrimBox demuestra sangrado.",
+      "box_declaration": "Registrar cajas explícitas y valores heredados o por defecto. Una caja ausente no autoriza a inventar el corte.",
+      "actual_content_rule": "Exigir continuidad solo en los tramos de elementos que deben alcanzar el corte, hasta los 3 mm mínimos exteriores.",
+      "intentional_white": "El blanco intencionado y confirmado no constituye un error de sangre.",
+      "no_edge_content": "Si se confirma que ningún elemento llega al corte, la regla de continuidad de contenido puede ser not_applicable; la reserva geométrica de 3 mm sigue siendo obligatoria en estos perfiles.",
+      "ambiguous_artwork": "not_checked con revisión humana; las cajas correctas no sustituyen la comprobación de contenido.",
+      "corners": "Comprobar continuidad también en esquinas de elementos que las ocupan; evitar huecos, solapes y cambios de apariencia.",
+      "complex_die_cut": "Revisión experta y geometría de corte específica; no aplicar una expansión rectangular como solución universal."
+    },
+    "interior_safety_margin": {
+      "distance_mm": 3.0,
+      "severity": "warning",
+      "mandatory": false,
+      "origin": "Propuesta propia de IntelliPrint, independiente de los 3 mm de sangre exterior.",
+      "measurement": "Distancia hacia el interior del corte confirmado.",
+      "scope": "Texto y elementos críticos identificados o confirmados, con su ubicación visible.",
+      "exclusions": [
+        "fondos",
+        "imágenes a sangre",
+        "decoración que cruza el corte intencionadamente"
+      ],
+      "uncertain_semantics": "Solicitar revisión; no afirmar identificación infalible de logos, códigos o contenido importante."
+    },
+    "icc_policy": {
+      "separate_roles": [
+        "document_output",
+        "object_source",
+        "default_source_space",
+        "incidental_or_unused"
+      ],
+      "document_output_requirement": {
+        "required_family_by_profile": {
+          "OFFSET_300": "CMYK",
+          "DIGITAL_200": "CMYK",
+          "PANTALLA_RGB": "RGB"
+        },
+        "real_embedded_binary_required": true,
+        "metadata_name_or_image_icc_is_sufficient": false,
+        "accepted_declaration": "Declaración documental como OutputIntent cuando el formato y el motor admitan ese mecanismo y su ámbito esté resuelto. Una propiedad inventada por la aplicación o una referencia incidental no satisface la regla.",
+        "format_and_motor_scope": "Verificar que la declaración tenga significado documental en el formato y motor utilizados; si no se puede comprobar, not_checked. No crear indicadores falsos de conformidad PDF/X.",
+        "unambiguous_output": "Identificar inequívocamente el destino aplicable al trabajo. Duplicados del mismo perfil no implican conflicto; destinos distintos de ámbito aplicable sin resolver requieren corrección o revisión.",
+        "known_conflicting_outputs": "fail si el conflicto está demostrado; not_checked si el motor no puede resolver el ámbito.",
+        "checks": [
+          "binario ICC extraíble y legible",
+          "estructura, cabecera y tablas coherentes",
+          "familia real del ICC de salida",
+          "versión y clase compatibles con ese uso documental",
+          "declaración válida y ámbito inequívoco"
+        ],
+        "versions": "Aceptar ICC v2 y v4 técnicamente compatibles. No rechazar perfiles personalizados o antiguos por su nombre. Un tipo no soportado queda not_checked, sin declararlo corrupto automáticamente.",
+        "devicelink": "No usar un DeviceLink como sustituto de un ICC normal de caracterización de salida; describe una transformación.",
+        "no_conversion_claim": "La presencia o modificación del ICC de salida no demuestra modificación de los valores de los objetos ni aplicación por un RIP externo."
+      },
+      "source_diagnostic": {
+        "scope": "Objetos utilizados en todas las páginas: imágenes, texto, trazos, rellenos, degradados, patrones, espacios indexados, formularios y recursos anidados; máscaras diferenciadas.",
+        "allowed_interpretable_sources": [
+          "RGB",
+          "CMYK",
+          "Gray",
+          "Lab"
+        ],
+        "multiple_or_mixed_sources": "Admitidos sin exigir uniformidad; mantener cada perfil de origen y mostrar su función y cobertura.",
+        "ICCBased": "Identificar y comprobar el perfil fuente del objeto, su familia real, componentes y soporte técnico.",
+        "DefaultColorSpaces": "Resolver DefaultRGB, DefaultCMYK o DefaultGray en el contexto de recursos aplicable y registrar su uso como caracterización de origen.",
+        "device_independent_sources": "Una definición colorimétrica interpretable, como Lab o un espacio calibrado, puede aportar información de origen sin un ICC individual.",
+        "untagged_rgb": "Aviso de falta de caracterización. Identificar el origen o proponer asignación explícita; no sustituirlo por sRGB ni por el ICC de salida silenciosamente.",
+        "untagged_cmyk": "No asumir que su origen es idéntico a un ICC de salida distinto. Un contexto documental original técnicamente aplicable debe registrarse antes de cambiar el destino; si no está fundamentado, la caracterización queda pendiente.",
+        "changed_output_with_unchanged_cmyk": "Cambiar solo la declaración puede cambiar la interpretación de valores CMYK sin etiqueta; explicarlo y no presentarlo como conversión ni preservación colorimétrica demostrada.",
+        "neutral_sources": "Conservar negros y grises de forma compatible; el negro solo K puede mantenerse como origen CMYK incluso con destino RGB. No convertirlo solo para que coincidan familias.",
+        "masks": "Analizarlas por separado; no tratarlas como fuentes cromáticas con ICC ausente.",
+        "diagnostic_independence": "Un origen sin caracterización o un ICC fuente problemático no invalida por sí mismo la regla de destino; sí se informa y puede impedir verificar una conversión. Los fallos efectivos de análisis o renderizado permanecen en sus reglas propias."
+      },
+      "actions": {
+        "preserve_output_and_sources": "Conservar declaración de salida válida, perfiles, espacios y valores de origen; acción predeterminada.",
+        "declare_output_without_conversion": "Seleccionar e incrustar otro destino documental en una copia sin convertir valores. Explicar el alcance y los posibles cambios de interpretación, previsualizar y obtener aprobación.",
+        "convert_copy_to_output": "Convertir efectivamente una copia al destino con orígenes identificados, parámetros documentados, vista previa, aprobación y revalidación. No confundir con cambiar etiquetas o declarar un OutputIntent.",
+        "source_assignment": "Acción de reparación separada para un origen, con fundamento y aprobación. Asignar interpreta números existentes; no los convierte."
+      },
+      "output_treatments": {
+        "default": "preserve_sources_for_deferred_conversion",
+        "preserve_sources_for_deferred_conversion": "Conservar fuentes para una eventual conversión al visualizar o imprimir. La aplicación informa de esta intención, sin garantizar que el consumidor externo la respete.",
+        "normalize_copy_to_output": "Solo si se solicita: ejecutar la conversión real de los objetos seleccionados de la copia y documentar elementos preservados, perfiles y parámetros.",
+        "normalization_requires_action": "convert_copy_to_output",
+        "source_preservation_compatible_actions": [
+          "preserve_output_and_sources",
+          "declare_output_without_conversion"
+        ]
+      },
+      "conversion_verification": {
+        "identified_source_required": true,
+        "unknown_source": "No afirmar conversión colorimétrica comprobada. Pedir datos o una asignación explícita fundamentada; una suposición sin justificar deja not_verified.",
+        "evidence": "Registrar fuentes efectivas, destino, motor y versión, intención, parámetros, alcance de objetos, valores transformados o evidencia equivalente del motor, elementos preservados y comparación de la copia.",
+        "destination_declaration_only": "No genera applied_verified; indicar not_requested o deferred según el tratamiento.",
+        "scope": "applied_verified describe la operación comprobada en la copia, no la fidelidad de cualquier dispositivo ni la configuración de un RIP externo."
+      },
+      "profile_identity": "Registrar nombre y hash del binario además de función documental o de origen. Nombres iguales no garantizan perfiles idénticos.",
+      "special_inks": "Separar color de proceso, tintas especiales y separaciones de acabado. Revisar su uso; no convertir barnices, troqueles o blancos de apoyo automáticamente.",
+      "no_universal_certificate": "Un ICC de salida válido no prueba conversión aplicada, uniformidad interna, reproducción fiel en cualquier dispositivo ni conformidad PDF/X."
+    }
+  },
+  "common_rule_catalog": [
+    {
+      "id": "PDF_READABILITY",
+      "required": true,
+      "severity": "blocking",
+      "description": "Documento legible y análisis de todas sus páginas. Un fallo de apertura o análisis no equivale a ausencia de incidencias.",
+      "unknown_policy": "error o not_checked con motivo; sin veredicto favorable global"
+    },
+    {
+      "id": "CONFIRMED_FINAL_GEOMETRY",
+      "required": true,
+      "severity": "blocking",
+      "applies_to": "print",
+      "description": "Formato final y corte confirmados, comprobados en todas las páginas.",
+      "unknown_policy": "not_checked"
+    },
+    {
+      "id": "BLEED_GEOMETRY_3MM",
+      "required": true,
+      "severity": "blocking",
+      "applies_to": "print",
+      "description": "Reserva geométrica mínima de 3 mm por lado; admite mayor sangre y exige cajas coherentes."
+    },
+    {
+      "id": "BLEED_CONTENT_CONTINUITY",
+      "required": true,
+      "severity": "blocking",
+      "applies_to": "print_edge_segments_requiring_bleed",
+      "description": "Continuidad real en los tramos que deben llegar al corte; blanco intencionado no es incidencia.",
+      "unknown_policy": "not_checked y revisión humana"
+    },
+    {
+      "id": "PRINT_IMAGE_EFFECTIVE_PPI",
+      "required": true,
+      "severity": "blocking",
+      "applies_to": "print_visible_raster_images",
+      "description": "Cada aparición y ambos ejes superan el mínimo del perfil; vectores excluidos y máscaras diferenciadas."
+    },
+    {
+      "id": "ONE_BIT_DETAIL_ADVISORY",
+      "required": false,
+      "severity": "warning",
+      "applies_to": "print_visible_one_bit_text_or_line_images",
+      "description": "Aviso de calidad por debajo del umbral propuesto para texto o línea de 1 bit; no sustituye ni eleva el mínimo obligatorio del perfil."
+    },
+    {
+      "id": "INTERIOR_MARGIN_3MM_ADVISORY",
+      "required": false,
+      "severity": "warning",
+      "applies_to": "print_identified_critical_elements",
+      "description": "Aviso por proximidad inferior a 3 mm al corte, con exclusiones de fondos y elementos a sangre."
+    },
+    {
+      "id": "USED_FONTS_EMBEDDED",
+      "required": true,
+      "severity": "blocking",
+      "description": "Fuentes utilizadas incrustadas o subconjuntos completos para todos los glifos utilizados; contemplar fuentes compuestas y fuentes Type 3 autocontenidas.",
+      "inspection_limit": "Si no se puede confirmar incrustación o cobertura de un caso, not_checked; una etiqueta de subconjunto no demuestra defecto.",
+      "curves": "Texto ya convertido en curvas no exige una fuente para dibujarse, pero puede generar avisos editoriales o de accesibilidad."
+    },
+    {
+      "id": "PRINT_OUTPUT_CONTEXT",
+      "required": false,
+      "severity": "information",
+      "applies_to": "optional_production_advice_if_requested",
+      "description": "Información y asesoramiento opcionales sobre imprenta, soporte y condición de salida; no se requiere un ICC específico de máquina para aprobar el perfil básico.",
+      "null_policy": "No bloquea el perfil básico. Mostrar not_checked solo dentro del asesoramiento opcional solicitado; si no se solicita, indicar fuera del alcance de ese informe."
+    },
+    {
+      "id": "PRINT_TAC",
+      "required": false,
+      "severity": "warning",
+      "applies_to": "optional_production_advice_if_requested",
+      "description": "Análisis opcional de cobertura total de tinta con método, condición y límite identificados; sin TAC universal.",
+      "null_or_unimplemented_policy": "No bloquea el perfil básico. Si se solicita y no puede medirse, not_checked en el apartado opcional.",
+      "enabled_by_default": false
+    },
+    {
+      "id": "SCREEN_TARGET_SAMPLING",
+      "required": true,
+      "severity": "blocking",
+      "applies_to": "PANTALLA_RGB_visible_raster_images",
+      "description": "Cada aparición cubre los píxeles demandados por el modo de pantalla seleccionado en ambos ejes.",
+      "unknown_policy": "not_checked"
+    },
+    {
+      "id": "SCREEN_NAVIGATION_PRESERVED",
+      "required": true,
+      "severity": "blocking",
+      "applies_to": "screen_corrected_copy_with_existing_links_or_bookmarks",
+      "description": "Conservar enlaces, destinos internos y marcadores y verificar que la corrección no los elimina ni rompe. No afirmar disponibilidad de webs externas por conservar una URL."
+    },
+    {
+      "id": "SCREEN_VECTOR_TEXT_PRESERVED",
+      "required": true,
+      "severity": "blocking",
+      "applies_to": "screen_corrected_copy",
+      "description": "Conservar texto y vectores existentes; no aplanar o rasterizar todo el documento como procedimiento de optimización."
+    },
+    {
+      "id": "SCREEN_ACCESSIBILITY_ADVISORY",
+      "required": false,
+      "severity": "warning",
+      "applies_to": "PANTALLA_RGB",
+      "description": "Avisos sobre texto buscable, idioma, etiquetas, orden de lectura y alternativas cuando puedan comprobarse. No constituye certificación de accesibilidad."
+    },
+    {
+      "id": "SCREEN_FILE_SIZE",
+      "required": false,
+      "severity": "information",
+      "applies_to": "PANTALLA_RGB",
+      "description": "Informar del peso. Sin límite obligatorio por defecto; cualquier objetivo adicional debe quedar registrado en el trabajo."
+    },
+    {
+      "id": "PROOFREADING_REVIEW",
+      "required": false,
+      "severity": "information",
+      "description": "Sugerencias editoriales con estado propio y aprobación humana por edición; no confundir ausencia de sugerencias con corrección lingüística certificada."
+    },
+    {
+      "id": "RENDER_INTEGRITY",
+      "required": true,
+      "severity": "blocking",
+      "applies_to": "all",
+      "description": "Renderizar todas las páginas y comprobar pérdidas detectables de contenido, glifos e imágenes. En una copia corregida, comparar también las áreas afectadas y las que deben permanecer intactas.",
+      "unknown_policy": "not_checked o error; no afirmar ausencia de defectos visuales no comprobados"
+    },
+    {
+      "id": "PRINT_COMPOSITING",
+      "required": true,
+      "severity": "blocking",
+      "applies_to": "print_relevant_transparency_or_overprint",
+      "description": "Detectar y analizar transparencias, sobreimpresión, composición y renderizado del PDF. No eliminar transparencias ni confundir blanco de proceso con tinta blanca de apoyo. La mezcla de espacios de origen no es un defecto por sí misma; identificar el contexto de renderizado utilizado.",
+      "unknown_policy": "not_checked o error cuando no pueda analizarse la composición o el renderizado del PDF. La ausencia de caracterización de un origen se informa en su diagnóstico, sin convertirla por sí sola en fallo de composición; la compatibilidad con una prensa o RIP concretos es asesoramiento opcional."
+    },
+    {
+      "id": "SCREEN_DISPLAY_AREA",
+      "required": true,
+      "severity": "blocking",
+      "applies_to": "PANTALLA_RGB",
+      "description": "Área de lectura confirmada y recorte correcto, sin pérdidas detectables de contenido. Las marcas y el área de sangre quedan fuera de la vista de lectura; cualquier cambio de recorte se previsualiza.",
+      "unknown_policy": "not_checked"
+    },
+    {
+      "id": "DOCUMENT_OUTPUT_ICC",
+      "required": true,
+      "severity": "blocking",
+      "applies_to": "all_profiles_document_output",
+      "description": "ICC de salida documental real, incrustado, válido e inequívoco: CMYK en OFFSET_300/DIGITAL_200 o RGB en PANTALLA_RGB. Verificar el binario y su declaración mediante un mecanismo admitido por el formato/motor, como OutputIntent cuando corresponda. No basta un ICC incidental o de una imagen. No exige PDF/X ni valida conformidad PDF/X.",
+      "known_missing_invalid_wrong_family_or_conflicting_declaration": "fail",
+      "unable_to_verify": "not_checked",
+      "analysis_failure": "error",
+      "source_family_uniformity_required": false,
+      "conversion_required_to_pass_this_rule": false
+    },
+    {
+      "id": "SOURCE_COLOR_DIAGNOSTIC",
+      "required": false,
+      "severity": "warning",
+      "applies_to": "used_source_objects",
+      "description": "Inventariar y diagnosticar espacios RGB, CMYK, Gray/Lab y perfiles de origen de objetos utilizados, incluidas asociaciones ICCBased y espacios predeterminados. La mezcla o varios ICC de origen no constituyen un incumplimiento del destino.",
+      "uncharacterized_rgb": "Aviso de falta de caracterización; proponer identificar o asignar origen explícitamente. No afirmar una conversión colorimétrica comprobada.",
+      "unidentified_or_invalid_source_profile": "Registrar el problema en el diagnóstico independiente; puede impedir verificar una conversión solicitada, pero no invalida automáticamente el ICC de salida. Los fallos reales de lectura o renderizado se valoran en sus reglas propias."
+    },
+    {
+      "id": "OUTPUT_CONVERSION_STATUS",
+      "required": false,
+      "severity": "information",
+      "applies_to": "all_profiles",
+      "description": "Informar por separado de destino declarado, conservación de fuentes y conversión: not_requested, deferred, applied_verified o not_verified. Incrustar o cambiar un destino no equivale a convertir."
+    },
+    {
+      "id": "SPECIAL_INKS_FINISHING_REVIEW",
+      "required": false,
+      "severity": "warning",
+      "applies_to": "special_inks_or_finishing_separations_present",
+      "description": "Revisar tintas especiales y separaciones de acabado según el trabajo. No rechazar por pertenecer a otro espacio ni convertir automáticamente barnices, blancos de apoyo o troqueles."
+    },
+    {
+      "id": "BLACK_TEXT_OVERPRINT",
+      "required": false,
+      "severity": "warning",
+      "applies_to": "print_black_text_objects",
+      "description": "En textos negros (100% K o DeviceGray 0), exigir siempre sobreimpresión para evitar desajustes de registro y filetes blancos. Detectar e informar de cualquier texto negro 100% en calado (knockout)."
+    },
+    {
+      "id": "SPECIAL_INKS_OVERPRINT_POLICY",
+      "required": true,
+      "severity": "blocking",
+      "applies_to": "print_special_inks_and_finishing",
+      "description": "Sobreimpresión diferenciada para tintas especiales: los barnices y acabados técnicos (laca, UV, troquel) deben sobreimprimir siempre (overprint activado) para no calar el contenido inferior; las tintas planas y Pantones no deben sobreimprimir (deben calar / knockout) para evitar alteraciones cromáticas con tintas subyacentes."
+    }
+  ],
+  "profiles": [
+    {
+      "id": "OFFSET_300",
+      "name": "IntelliPrint Offset 300",
+      "version": "1.2.0",
+      "destination": "print_offset",
+      "minimum_effective_image_ppi": {
+        "x": 300,
+        "y": 300
+      },
+      "one_bit_text_line_advisory": {
+        "warn_below_ppi": 600,
+        "check_each_axis": true,
+        "severity": "warning",
+        "mandatory": false,
+        "status": "proposed_quality_advisory",
+        "mandatory_floor_unchanged_ppi": 300
+      },
+      "bleed_mm_each_side": 3.0,
+      "interior_margin_advisory_mm": 3.0,
+      "color": {
+        "required_document_output_icc_family": "CMYK",
+        "document_output_icc_required": true,
+        "output_icc_must_be_embedded_valid_and_unambiguous": true,
+        "default_action": "preserve_output_and_sources",
+        "default_output_treatment": "preserve_sources_for_deferred_conversion",
+        "catalog_membership_required": false,
+        "custom_output_profiles_accepted_if_technically_valid": true,
+        "existing_valid_output_policy": "Conservar por defecto el ICC de salida documental existente y las fuentes. Un perfil válido de origen o incidental no sustituye al destino documental.",
+        "allowed_interpretable_source_families": [
+          "RGB",
+          "CMYK",
+          "Gray",
+          "Lab"
+        ],
+        "source_uniformity_required": false,
+        "mixed_sources_policy": "Admitir mezcla y varios ICC de origen; registrar inventario y diagnóstico independientes, sin fail por mezcla o por ser RGB/CMYK.",
+        "uncharacterized_source_policy": "Aviso y caracterización pendiente; solicitar datos para reparar o verificar una conversión cuando corresponda. No presentar una conversión colorimétrica como comprobada con un origen desconocido.",
+        "neutral_source_handling": "Conservar negros y grises de forma compatible con el tratamiento elegido. No forzar cuatro tintas ni convertir por la mera diferencia de familia con el destino; resolver explícitamente su origen si se solicita una conversión real.",
+        "special_inks_and_finishing": "Revisión propia de producción, sin rechazo por espacio de color; barnices, blancos de apoyo y troqueles no se convierten automáticamente.",
+        "declaring_output_converts_objects": false,
+        "external_consumer_honors_output_guaranteed": false,
+        "conversion_status_reported_separately": true,
+        "missing_invalid_or_wrong_family_output": "fail",
+        "unable_to_verify_output": "not_checked",
+        "specific_printer_or_rip_required_for_basic_profile": false,
+        "paper_or_machine_selection_required_for_basic_profile": false,
+        "tac_required_for_basic_profile": false
+      },
+      "required_rule_ids": [
+        "PDF_READABILITY",
+        "CONFIRMED_FINAL_GEOMETRY",
+        "BLEED_GEOMETRY_3MM",
+        "BLEED_CONTENT_CONTINUITY",
+        "PRINT_IMAGE_EFFECTIVE_PPI",
+        "USED_FONTS_EMBEDDED",
+        "RENDER_INTEGRITY",
+        "PRINT_COMPOSITING",
+        "DOCUMENT_OUTPUT_ICC",
+        "SPECIAL_INKS_OVERPRINT_POLICY"
+      ],
+      "advisory_rule_ids": [
+        "ONE_BIT_DETAIL_ADVISORY",
+        "INTERIOR_MARGIN_3MM_ADVISORY",
+        "PROOFREADING_REVIEW",
+        "SOURCE_COLOR_DIAGNOSTIC",
+        "OUTPUT_CONVERSION_STATUS",
+        "SPECIAL_INKS_FINISHING_REVIEW",
+        "BLACK_TEXT_OVERPRINT"
+      ],
+      "optional_production_rule_ids": [
+        "PRINT_OUTPUT_CONTEXT",
+        "PRINT_TAC"
+      ]
+    },
+    {
+      "id": "DIGITAL_200",
+      "name": "IntelliPrint Digital 200",
+      "version": "1.2.0",
+      "destination": "print_digital",
+      "minimum_effective_image_ppi": {
+        "x": 200,
+        "y": 200
+      },
+      "one_bit_text_line_advisory": {
+        "warn_below_ppi": 600,
+        "check_each_axis": true,
+        "severity": "warning",
+        "mandatory": false,
+        "status": "proposed_quality_advisory",
+        "mandatory_floor_unchanged_ppi": 200
+      },
+      "bleed_mm_each_side": 3.0,
+      "interior_margin_advisory_mm": 3.0,
+      "color": {
+        "required_document_output_icc_family": "CMYK",
+        "document_output_icc_required": true,
+        "output_icc_must_be_embedded_valid_and_unambiguous": true,
+        "default_action": "preserve_output_and_sources",
+        "default_output_treatment": "preserve_sources_for_deferred_conversion",
+        "catalog_membership_required": false,
+        "custom_output_profiles_accepted_if_technically_valid": true,
+        "existing_valid_output_policy": "Conservar por defecto el ICC de salida documental existente y las fuentes. Un perfil válido de origen o incidental no sustituye al destino documental.",
+        "allowed_interpretable_source_families": [
+          "RGB",
+          "CMYK",
+          "Gray",
+          "Lab"
+        ],
+        "source_uniformity_required": false,
+        "mixed_sources_policy": "Admitir mezcla y varios ICC de origen; registrar inventario y diagnóstico independientes, sin fail por mezcla o por ser RGB/CMYK.",
+        "uncharacterized_source_policy": "Aviso y caracterización pendiente; solicitar datos para reparar o verificar una conversión cuando corresponda. No presentar una conversión colorimétrica como comprobada con un origen desconocido.",
+        "neutral_source_handling": "Conservar negros y grises de forma compatible con el tratamiento elegido. No forzar cuatro tintas ni convertir por la mera diferencia de familia con el destino; resolver explícitamente su origen si se solicita una conversión real.",
+        "special_inks_and_finishing": "Revisión propia de producción, sin rechazo por espacio de color; barnices, blancos de apoyo y troqueles no se convierten automáticamente.",
+        "declaring_output_converts_objects": false,
+        "external_consumer_honors_output_guaranteed": false,
+        "conversion_status_reported_separately": true,
+        "missing_invalid_or_wrong_family_output": "fail",
+        "unable_to_verify_output": "not_checked",
+        "specific_printer_or_rip_required_for_basic_profile": false,
+        "paper_or_machine_selection_required_for_basic_profile": false,
+        "tac_required_for_basic_profile": false
+      },
+      "required_rule_ids": [
+        "PDF_READABILITY",
+        "CONFIRMED_FINAL_GEOMETRY",
+        "BLEED_GEOMETRY_3MM",
+        "BLEED_CONTENT_CONTINUITY",
+        "PRINT_IMAGE_EFFECTIVE_PPI",
+        "USED_FONTS_EMBEDDED",
+        "RENDER_INTEGRITY",
+        "PRINT_COMPOSITING",
+        "DOCUMENT_OUTPUT_ICC",
+        "SPECIAL_INKS_OVERPRINT_POLICY"
+      ],
+      "advisory_rule_ids": [
+        "ONE_BIT_DETAIL_ADVISORY",
+        "INTERIOR_MARGIN_3MM_ADVISORY",
+        "PROOFREADING_REVIEW",
+        "SOURCE_COLOR_DIAGNOSTIC",
+        "OUTPUT_CONVERSION_STATUS",
+        "SPECIAL_INKS_FINISHING_REVIEW",
+        "BLACK_TEXT_OVERPRINT"
+      ],
+      "optional_production_rule_ids": [
+        "PRINT_OUTPUT_CONTEXT",
+        "PRINT_TAC"
+      ]
+    },
+    {
+      "id": "PANTALLA_RGB",
+      "name": "IntelliPrint Pantalla RGB",
+      "version": "1.2.0",
+      "destination": "screen",
+      "fixed_ppi_requirement": 96,
+      "default_screen_mode_id": "SCREEN_2000",
+      "screen_modes": [
+        {
+          "id": "SCREEN_1000",
+          "physical_page_width_px": 1000,
+          "css_page_width_at_zoom_1_px": 1000,
+          "device_pixel_ratio": 1,
+          "zoom_factor": 1,
+          "name": "Ligero",
+          "reference_parameters_are_example": true
+        },
+        {
+          "id": "SCREEN_2000",
+          "physical_page_width_px": 2000,
+          "css_page_width_at_zoom_1_px": 1000,
+          "device_pixel_ratio": 2,
+          "zoom_factor": 1,
+          "name": "Equilibrado",
+          "reference_parameters_are_example": true
+        },
+        {
+          "id": "SCREEN_4000",
+          "physical_page_width_px": 4000,
+          "css_page_width_at_zoom_1_px": 1000,
+          "device_pixel_ratio": 2,
+          "zoom_factor": 2,
+          "name": "Detalle",
+          "reference_parameters_are_example": true
+        }
+      ],
+      "image_quality": {
+        "minimum_source_samples_per_target_pixel_each_axis": 1.0,
+        "insufficient": "fail del objetivo de calidad seleccionado",
+        "unknown": "not_checked",
+        "automatic_upsampling": false,
+        "scope_note": "El resultado corresponde al tamaño de renderizado elegido; no garantiza nitidez a cualquier zoom."
+      },
+      "color": {
+        "required_document_output_icc_family": "RGB",
+        "document_output_icc_required": true,
+        "output_icc_must_be_embedded_valid_and_unambiguous": true,
+        "default_action": "preserve_output_and_sources",
+        "default_output_treatment": "preserve_sources_for_deferred_conversion",
+        "catalog_membership_required": false,
+        "custom_output_profiles_accepted_if_technically_valid": true,
+        "existing_valid_output_policy": "Conservar por defecto el ICC de salida documental existente y las fuentes. Un perfil válido de origen o incidental no sustituye al destino documental.",
+        "allowed_interpretable_source_families": [
+          "RGB",
+          "CMYK",
+          "Gray",
+          "Lab"
+        ],
+        "source_uniformity_required": false,
+        "mixed_sources_policy": "Admitir mezcla y varios ICC de origen; registrar inventario y diagnóstico independientes, sin fail por mezcla o por ser RGB/CMYK.",
+        "uncharacterized_source_policy": "Aviso y caracterización pendiente; solicitar datos para reparar o verificar una conversión cuando corresponda. No presentar una conversión colorimétrica como comprobada con un origen desconocido.",
+        "neutral_source_handling": "Conservar negros y grises de forma compatible con el tratamiento elegido. No forzar cuatro tintas ni convertir por la mera diferencia de familia con el destino; resolver explícitamente su origen si se solicita una conversión real.",
+        "special_inks_and_finishing": "Revisión propia de producción, sin rechazo por espacio de color; barnices, blancos de apoyo y troqueles no se convierten automáticamente.",
+        "declaring_output_converts_objects": false,
+        "external_consumer_honors_output_guaranteed": false,
+        "conversion_status_reported_separately": true,
+        "missing_invalid_or_wrong_family_output": "fail",
+        "unable_to_verify_output": "not_checked",
+        "specific_printer_or_rip_required_for_basic_profile": false,
+        "paper_or_machine_selection_required_for_basic_profile": false,
+        "tac_required_for_basic_profile": false,
+        "recommended_output_catalog_id": "SRGB",
+        "srgb_is_mandatory": false,
+        "other_valid_rgb_outputs": "Cualquier ICC RGB válido y admitido para la declaración documental de salida puede conservarse; no se obliga a sRGB."
+      },
+      "bleed_rule_status": "not_applicable",
+      "interior_margin_mm_rule_status": "not_applicable",
+      "tac_rule_status": "not_applicable",
+      "file_size_limit_mb": null,
+      "preservation": [
+        "texto",
+        "vectores",
+        "fuentes incrustadas",
+        "enlaces",
+        "destinos internos",
+        "marcadores"
+      ],
+      "required_rule_ids": [
+        "PDF_READABILITY",
+        "USED_FONTS_EMBEDDED",
+        "SCREEN_TARGET_SAMPLING",
+        "SCREEN_NAVIGATION_PRESERVED",
+        "SCREEN_VECTOR_TEXT_PRESERVED",
+        "RENDER_INTEGRITY",
+        "SCREEN_DISPLAY_AREA",
+        "DOCUMENT_OUTPUT_ICC"
+      ],
+      "advisory_rule_ids": [
+        "SCREEN_ACCESSIBILITY_ADVISORY",
+        "SCREEN_FILE_SIZE",
+        "PROOFREADING_REVIEW",
+        "SOURCE_COLOR_DIAGNOSTIC",
+        "OUTPUT_CONVERSION_STATUS",
+        "SPECIAL_INKS_FINISHING_REVIEW"
+      ]
+    }
+  ],
+  "correction_policy": {
+    "original_is_immutable": true,
+    "work_on_new_copy": true,
+    "all_proposals_show_location_and_before_after": true,
+    "parameter_changes": "Cambiar un requisito del encargo no modifica ni mejora el PDF; guardar parámetros y volver a evaluar.",
+    "deterministic_candidate_preparation": "Puede preparar una copia revisable cuando las precondiciones sean verificables; la entrega final necesita autorización del operario.",
+    "geometry": "Ajustar cajas solo con corte confirmado y contenido disponible; ampliar el soporte o las cajas no crea sangre real.",
+    "resolution": "Proponer sustitución por una fuente de mayor detalle o reducción aprobada de la colocación. No aprobar mediante metadatos DPI ni remuestreo ascendente.",
+    "color": "Distinguir conservar destino y fuentes, declarar otro destino sin conversión y convertir realmente una copia. Declarar un ICC de salida no modifica los valores de los objetos ni obliga a un RIP externo a usarlo. Toda modificación necesita explicación, vista previa, aprobación y revalidación; para afirmar conversión colorimétrica comprobada se requiere origen identificado.",
+    "fonts": "Incorporar la fuente correcta o volver a exportar cuando sea viable; no sustituir tipografía silenciosamente ni convertir todo el texto en curvas.",
+    "margins": "Mover elementos altera la composición: requiere propuesta localizada y aprobación; no desplazar fondos ni imágenes a sangre para eliminar un aviso genérico.",
+    "screen_optimization": "Conservar texto y vectores. Reducción o compresión de imágenes solo con parámetros visibles, conservación del objetivo de muestreo y revisión del resultado.",
+    "revalidate_after_any_correction": "Repetir todas las comprobaciones aplicables sobre la copia final y comparar con el original. Ninguna corrección aplicada equivale por sí sola a una incidencia resuelta.",
+    "unsupported_correction": "not_correctable_automatically con explicación y alternativa de revisión del archivo de origen.",
+    "spot_colors": "Revisar tintas especiales y separaciones de acabado según el trabajo. No son un fallo del ICC de salida por pertenecer a otro espacio. No convertir barnices, troqueles o blancos de apoyo automáticamente; cualquier transformación de tinta especial requiere una decisión concreta. Conservar negros y grises compatibles con el tratamiento elegido, sin forzar cuatro tintas.",
+    "source_icc_assignment": "Identificar o asignar explícitamente perfiles de origen como reparación separada; registrar fundamento y contenido afectado. No llamar conversión a la asignación ni presentar una suposición de origen como caracterización comprobada."
+  },
+  "proofreading_policy": {
+    "separate_from_technical_verdict": true,
+    "suggestions_only_by_default": true,
+    "human_approval_required_for_each_edit": true,
+    "show": [
+      "página",
+      "fragmento original",
+      "propuesta",
+      "idioma",
+      "contexto",
+      "efecto previsto sobre la composición"
+    ],
+    "names_brands_and_mixed_languages": "Permitir ignorar sugerencias y vocabulario del proyecto; no corregir automáticamente nombres, marcas o cambios de idioma.",
+    "live_text": "Aplicar únicamente ediciones aprobadas, conservando intención y posición cuando sea posible.",
+    "image_or_outlined_text": "OCR puede ayudar a sugerir; la corrección requiere revisión manual y no se equipara a una edición fiable de texto PDF.",
+    "after_edit": [
+      "revalidar fuentes y glifos",
+      "revisar saltos y reflujo",
+      "revisar posiciones y márgenes",
+      "comparar visualmente",
+      "repetir preflight completo de la copia final"
+    ]
+  },
+  "ai_bleed_extension": {
+    "availability": "planned_not_implemented",
+    "trained_model_required_for_uniform_vector_extension": false,
+    "priority_order": [
+      "reutilizar contenido existente fuera del corte",
+      "extender un fondo vectorial uniforme con operaciones deterministas",
+      "proponer extensión fotográfica con un modelo preentrenado"
+    ],
+    "existing_content": "Comprobar si ya existe continuidad suficiente antes de generar píxeles o modificar cajas.",
+    "uniform_vector_background": {
+      "method": "Extensión exacta de un fondo uniforme compatible únicamente al área exterior requerida.",
+      "preserve": [
+        "valores de color",
+        "espacio y perfil ICC",
+        "tintas especiales y separaciones de acabado según su revisión de producción",
+        "alpha",
+        "sobreimpresión",
+        "modo de mezcla cuando corresponda"
+      ],
+      "compatibility_required": true,
+      "uncertain_appearance": "No aplicar automáticamente si transparencias, sobreimpresión, mezclas o estructura impiden preservar la apariencia.",
+      "candidate_preparation": "Puede prepararse una copia determinista sin modelo generativo; requiere autorización final del operario."
+    },
+    "photographic_extension": {
+      "model_policy": "Modelo preentrenado; no presupone crear un modelo propio ni disponer de un dataset de entrenamiento.",
+      "provider": null,
+      "model": null,
+      "availability_until_provider_is_selected": "no disponible",
+      "approval_required_for_each_ai_proposal": true,
+      "automatic_final_application": false
+    },
+    "geometry_and_protection": {
+      "mask": "Únicamente la banda exterior al TrimBox confirmado, en los tramos que deben alcanzar el corte; incluir esquinas necesarias.",
+      "preserve_inside_trim": "Conservar el contenido original dentro del corte mediante composición y recorte explícitos; la máscara por sí sola no se considera garantía suficiente.",
+      "original_design_scaling": false,
+      "original_design_translation": false,
+      "original_design_reflow": false,
+      "corners": "Resolver esquinas como área continua, evitando huecos y solapamientos que alteren color o transparencia.",
+      "minimum_final_bleed_mm_each_required_side": 3.0,
+      "extra_bleed_allowed": true,
+      "partial_existing_bleed": "Conservar la sangre auténtica ya válida y completar solo la zona que falta.",
+      "gap_inside_trim": "Si el fondo termina antes del corte, una franja exterior no corrige ese hueco interior; cualquier relleno interior es una propuesta distinta que necesita aprobación."
+    },
+    "validation": {
+      "inside_trim_comparison": "Comparar original y copia dentro del corte con el mismo renderizador y condiciones de color; cualquier diferencia inesperada bloquea la propuesta hasta revisión.",
+      "preserve_original_objects_where_possible": true,
+      "boundary_review": "Revisar costuras, coherencia visual, esquinas y continuidad en el borde de corte.",
+      "final_color": "Identificar el origen del contenido añadido y conservarlo de forma compatible con la composición. Comprobar el ICC de salida documental y respetar el tratamiento elegido: fuentes conservadas o conversión real aprobada. No normalizar automáticamente el interior ni asumir que declarar el destino ya convirtió la extensión.",
+      "final_resolution": "La extensión ráster debe satisfacer la resolución efectiva del perfil a su tamaño final de colocación, en ambos ejes.",
+      "full_copy_revalidation": true
+    },
+    "block_without_expert_review": [
+      "logos",
+      "textos",
+      "rostros",
+      "productos",
+      "troqueles complejos",
+      "contenido protegido o semántico que no pueda identificarse con confianza"
+    ],
+    "expert_scope": "Se aplica a elementos afectados por la extensión o cuya continuidad pueda alterarse; no autoriza al modelo a redibujar el contenido interior.",
+    "release": "Cada propuesta generativa necesita aprobación humana explícita y la copia final necesita autorización del operario."
+  },
+  "permissions": {
+    "profile_threshold_or_rule_changes": "Responsable de perfiles; generar versión nueva y no sobrescribir silenciosamente criterios anteriores.",
+    "work_order_parameter_changes": "Operario autorizado; conservar valores anteriores, motivo e identidad.",
+    "pdf_property_corrections": "Operario autorizado; propuestas concretas, copia y revalidación.",
+    "editorial_text_changes": "Revisor autorizado; aprobación independiente por cada edición.",
+    "ai_bleed_proposals": "Aprobación explícita por propuesta; revisión experta cuando corresponda.",
+    "final_release": "Operario autorizado tras revisar informe y copia.",
+    "one_person_may_hold_multiple_roles": true
+  },
+  "report_contract": {
+    "required_fields": [
+      "job_id",
+      "original_filename",
+      "original_sha256",
+      "candidate_filename",
+      "candidate_sha256",
+      "profile_id",
+      "profile_version",
+      "specification_version",
+      "resolved_job_parameters",
+      "analysis_timestamp",
+      "analysis_engine_and_version",
+      "rules_executed",
+      "rule_results_with_evidence",
+      "not_checked_and_errors",
+      "technical_verdict",
+      "editorial_status",
+      "changes_proposed",
+      "changes_approved",
+      "changes_applied",
+      "approval_identities_and_timestamps",
+      "accepted_exceptions",
+      "original_candidate_comparison",
+      "revalidation_results",
+      "final_release_status",
+      "detected_icc_profiles",
+      "icc_effective_associations",
+      "icc_profile_decision",
+      "icc_conversion_or_assignment_action",
+      "icc_before_after",
+      "icc_approval_record",
+      "optional_production_advice_results",
+      "document_output_icc_before_after",
+      "document_output_declaration_mechanism",
+      "source_color_diagnostic",
+      "color_profile_action",
+      "output_treatment",
+      "color_conversion_status",
+      "conversion_verification_scope",
+      "external_output_route_not_guaranteed",
+      "special_inks_and_finishing_review"
+    ],
+    "parameter_snapshot": "Incluir corte, sangre, umbrales por eje, modos de pantalla, idiomas, ICC de salida antes/después con hash y mecanismo documental, diagnóstico de espacios y perfiles de origen, acción elegida, tratamiento de salida y estado de conversión. Imprenta, soporte y TAC permanecen opcionales.",
+    "ai_trace": "Cuando se utilice IA, registrar proveedor/modelo, propuesta, área exterior afectada, parámetros relevantes, aprobación y resultado de comparación dentro del corte.",
+    "preflight_vs_editorial": "Presentar resultados técnicos y revisión de texto por separado.",
+    "partial_analysis": "Mostrar lo no comprobado junto al veredicto, sin ocultarlo bajo un indicador verde.",
+    "no_invented_measurements": true,
+    "icc_decision_record": "Separar perfil de salida, ICC de origen e incidentales. Registrar si se conservó la declaración, se cambió sin convertir o se convirtió realmente la copia; incluir perfiles, alcance, parámetros, aprobaciones, comparación y revalidación. La mezcla de orígenes no es un fallo de la familia de salida.",
+    "optional_production_advice": "Presentar asesoramiento de máquina/TAC y revisión de tintas/acabados por separado. No convertir estos consejos en requisitos de identidad/configuración RIP para la aprobación básica del ICC de salida.",
+    "conversion_record": "Informar not_requested, deferred, applied_verified o not_verified y su evidencia. Un origen sin caracterización impide afirmar una conversión colorimétrica comprobada; un ICC de salida incrustado no demuestra que un RIP externo lo haya aplicado.",
+    "color_results_separation": "Mostrar tres apartados distintos: cumplimiento del ICC de salida, diagnóstico de orígenes y estado de conversión/ruta. El veredicto general sigue teniendo en cuenta las demás reglas obligatorias, como resolución, sangre y fuentes."
+  },
+  "reference_urls": [
+    {
+      "url": "https://pymupdf.readthedocs.io/en/latest/page.html",
+      "purpose": "API de apariciones de imágenes, get_image_info y get_image_rects; soporte técnico para el diseño, no perfil normativo.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://pymupdf.readthedocs.io/en/latest/app3.html",
+      "purpose": "Transformaciones de imágenes y relación entre coordenadas, escala y colocación.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://developer.adobe.com/acrobat-pdfl-sdk/guides/pdfcreation/pdf-create-commonsettings",
+      "purpose": "Referencia de parámetros separados para imágenes de color, grises y monocromas; los umbrales IntelliPrint son decisiones propias del proyecto.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://registry.color.org/profile-registry/PSOcoated_v3",
+      "purpose": "Referencia nominal PSO Coated v3, FOGRA51; no se descarga ni valida su binario.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://registry.color.org/profile-registry/PSOuncoated_v3_FOGRA52",
+      "purpose": "Referencia nominal PSO Uncoated v3, FOGRA52.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://eci.org/doku.php?id=en:downloads",
+      "purpose": "Distribuciones ECI y referencias heredadas ISO Coated v2.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://eci.org/doku.php_id=en_colourstandards_workingcolorspaces.html",
+      "purpose": "eciCMYK v2 y FOGRA59 como espacio de intercambio.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://registry.color.org/profile-registry/GRACoL2013_CRPC6",
+      "purpose": "Referencia nominal GRACoL 2013 CRPC6.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://registry.color.org/profile-registry/GRACoL2013UNC_CRPC3",
+      "purpose": "Referencia nominal GRACoL 2013 Uncoated CRPC3.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://registry.color.org/profile-registry/SWOP2013C3_CRPC5",
+      "purpose": "Referencia nominal SWOP 2013 C3 CRPC5.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://registry.color.org/profile-registry/JapanColor2011Coated",
+      "purpose": "Referencia nominal Japan Color 2011 Coated.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://registry.color.org/rgb-registry/srgbprofiles",
+      "purpose": "Implementaciones ICC de sRGB; sRGB2014.icc es una candidata nominal, sin fijar ni validar un binario.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://registry.color.org/rgb-registry/adobergb",
+      "purpose": "Referencia de codificación Adobe RGB (1998).",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://registry.color.org/rgb-registry/displayp3",
+      "purpose": "Referencia de codificación Display P3, no DCI-P3.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://www.color.org/specifications/ICC.1-2022-05.pdf",
+      "purpose": "Estructura y clases de perfiles ICC; no impone pertenencia al catálogo.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://color.org/v2spec.xalter",
+      "purpose": "ICC continúa reconociendo perfiles v2 válidos.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://pdfa.org/wp-content/uploads/2011/08/tn0002_color_in_pdfa-1_2008-03-141.pdf",
+      "purpose": "Descripción de ICCBased, espacios predeterminados y OutputIntent. Sus requisitos PDF/A no se adoptan como reglas de IntelliPrint.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://helpx.adobe.com/acrobat/using/output-intents-pdfs-acrobat-pro.html",
+      "purpose": "OutputIntent describe un destino; su declaración no convierte los valores de color.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://helpx.adobe.com/acrobat/using/color-conversion-ink-management-acrobat.html",
+      "purpose": "Diferencia entre espacios de origen, conversión efectiva de objetos y gestión de tintas.",
+      "consulted_on": "2026-10-17"
+    },
+    {
+      "url": "https://help.fiery.com/cws/FieryXF/9.0_cws_7.2/en-us/GUID-CEA89A79-AB68-46F4-87D7-E2FFF53898B4.html",
+      "purpose": "Ejemplo de configuración de perfiles y uso opcional del OutputIntent en un flujo Fiery; no garantiza que cualquier RIP aplique la declaración.",
+      "consulted_on": "2026-10-17"
+    }
+  ],
+  "color_profile_ui": {
+    "title": "ICC de salida del documento",
+    "source_diagnostic_title": "Espacios y perfiles de origen",
+    "show_document_output": [
+      "nombre y hash del ICC",
+      "familia de salida",
+      "versión y clase",
+      "mecanismo documental y ámbito",
+      "validez y ausencia de conflictos"
+    ],
+    "show_sources_separately": [
+      "espacios RGB/CMYK/Gray/Lab utilizados",
+      "ICC de origen y ubicación",
+      "objetos sin caracterización",
+      "tintas especiales y acabados",
+      "diagnóstico y datos necesarios para una conversión solicitada"
+    ],
+    "default_selection": "preserve_output_and_sources",
+    "options": [
+      {
+        "id": "preserve_output_and_sources",
+        "label": "Conservar destino y fuentes (recomendado)",
+        "description": "Mantener un ICC de salida válido y los espacios de origen existentes, aunque sean variados. No realizar conversiones."
+      },
+      {
+        "id": "declare_output_without_conversion",
+        "label": "Declarar otro destino sin convertir",
+        "description": "Seleccionar e incrustar otro ICC de salida en una copia sin cambiar valores de color; mostrar explicación, efecto previsto y aprobación."
+      },
+      {
+        "id": "convert_copy_to_output",
+        "label": "Convertir una copia al destino",
+        "description": "Aplicar una conversión real con orígenes identificados, vista previa, aprobación y revalidación."
+      }
+    ],
+    "information_action": {
+      "id": "explain_output_and_sources",
+      "label": "Ver explicación",
+      "description": "Distinguir destino documental, perfiles de origen, declaración y conversión."
+    },
+    "output_treatments": [
+      {
+        "id": "preserve_sources_for_deferred_conversion",
+        "label": "Conservar fuentes para la salida",
+        "default": true,
+        "description": "Una eventual conversión se deja al visor o flujo de impresión; su aplicación externa no se garantiza."
+      },
+      {
+        "id": "normalize_copy_to_output",
+        "label": "Normalizar una copia mediante conversión",
+        "default": false,
+        "description": "Solo si se solicita convertir realmente; requiere datos de origen y verificación de la operación."
+      }
+    ],
+    "missing_output_profile": "Pedir elegir un ICC de salida para una declaración explícita; un perfil incidental en una imagen no es suficiente. No solicitar por defecto identidad o configuración de RIP, prensa, papel ni TAC.",
+    "missing_source_profile": "Mostrar un aviso independiente y pedir datos para identificar/asignar el origen cuando se quiera reparar o verificar una conversión.",
+    "source_assignment_action": {
+      "label": "Identificar o asignar perfil de origen",
+      "separate_from_output_declaration_and_conversion": true,
+      "explicit_approval_required": true
+    },
+    "mixed_sources": "Mostrar la mezcla de forma diagnóstica, sin marcarla como fallo del destino ni convertirla automáticamente.",
+    "before_after": "Comparar por separado ICC de salida, espacios y perfiles de origen, valores o cambios aplicados, estado de conversión y vista previa de la copia.",
+    "conversion_status_visible": true,
+    "no_direct_release": true,
+    "final_step": "Aprobar los cambios concretos, revalidar la copia completa e informar por separado del resultado del perfil y del estado de conversión."
+  },
+  "icc_profile_catalog": {
+    "version": "1.2.0",
+    "catalog_type": "nominal_reference_catalog",
+    "is_allowlist": false,
+    "custom_profiles_accepted": true,
+    "acceptance_rule": "Catálogo nominal abierto: para salida, la aceptación depende del ICC real, válido, incrustado, del uso documental admitido y de la familia de destino; los perfiles de origen se diagnostican por separado. No depende del nombre ni de pertenecer a la lista.",
+    "default_behavior": "Conservar primero el ICC de salida documental válido y las fuentes. Los favoritos orientan una declaración de destino o una conversión elegidas; no fuerzan uniformidad de los objetos.",
+    "icc_binaries_bundled": false,
+    "downloads_performed": false,
+    "binary_validation_performed": false,
+    "distribution_note": "Catálogo documental. Los nombres y enlaces no prueban que se haya validado un binario; antes de incluir una distribución concreta se deben registrar sus términos, versión y hash.",
+    "favorites": [
+      {
+        "profile_id": "OFFSET_300",
+        "context": "declaración de destino o conversión elegida para estucado",
+        "catalog_id": "PSO_COATED_V3",
+        "automatically_applied": false
+      },
+      {
+        "profile_id": "OFFSET_300",
+        "context": "declaración de destino o conversión elegida para no estucado",
+        "catalog_id": "PSO_UNCOATED_V3",
+        "automatically_applied": false
+      },
+      {
+        "profile_id": "DIGITAL_200",
+        "context": "referencia opcional de salida o conversión elegida con intercambio CMYK",
+        "catalog_id": "ECICMYK_V2",
+        "automatically_applied": false,
+        "note": "Es una referencia de intercambio, no una máquina universal. Conservar primero el destino existente válido; la declaración no garantiza que el RIP externo aplique ese destino.",
+        "display_label": "eciCMYK v2 — intercambio CMYK (opcional)"
+      },
+      {
+        "profile_id": "PANTALLA_RGB",
+        "context": "declaración de destino o conversión elegida para pantalla",
+        "catalog_id": "SRGB",
+        "automatically_applied": false
+      }
+    ],
+    "entries": [
+      {
+        "id": "PSO_COATED_V3",
+        "name": "PSO Coated v3",
+        "family": "CMYK",
+        "nominal_filename": "PSOcoated_v3.icc",
+        "characterization_reference": "FOGRA51",
+        "source_url": "https://registry.color.org/profile-registry/PSOcoated_v3",
+        "provider_from_source": "European Color Initiative",
+        "usage_note": "Offset en papel estucado; favorito propuesto para convertir o crear un trabajo adecuado a esa condición.",
+        "reference_status": "current_reference",
+        "copyright": {
+          "holder_from_source": "Heidelberger Druckmaschinen AG",
+          "binary_notice": null,
+          "terms_source_url": "https://registry.color.org/profile-registry/PSOcoated_v3",
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed"
+      },
+      {
+        "id": "PSO_UNCOATED_V3",
+        "name": "PSO Uncoated v3",
+        "family": "CMYK",
+        "nominal_filename": "PSOuncoated_v3_FOGRA52.icc",
+        "characterization_reference": "FOGRA52",
+        "source_url": "https://registry.color.org/profile-registry/PSOuncoated_v3_FOGRA52",
+        "provider_from_source": "European Color Initiative",
+        "usage_note": "Offset en papel no estucado; favorito propuesto para convertir o crear un trabajo adecuado a esa condición.",
+        "reference_status": "current_reference",
+        "copyright": {
+          "holder_from_source": "Heidelberger Druckmaschinen AG",
+          "binary_notice": null,
+          "terms_source_url": "https://registry.color.org/profile-registry/PSOuncoated_v3_FOGRA52",
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed"
+      },
+      {
+        "id": "ISO_COATED_V2",
+        "name": "ISO Coated v2",
+        "family": "CMYK",
+        "nominal_filename": "ISOcoated_v2_eci.icc",
+        "characterization_reference": "FOGRA39",
+        "source_url": "https://eci.org/doku.php?id=en:downloads",
+        "provider_from_source": "European Color Initiative",
+        "usage_note": "Referencia heredada; conservar archivos existentes si el ICC es válido. No sustituirlo solo por ser antiguo.",
+        "reference_status": "legacy_accepted",
+        "copyright": {
+          "holder_from_source": null,
+          "binary_notice": null,
+          "terms_source_url": "https://eci.org/doku.php?id=en:downloads",
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed"
+      },
+      {
+        "id": "ISO_COATED_V2_300",
+        "name": "ISO Coated v2 300%",
+        "family": "CMYK",
+        "nominal_filename": "ISOcoated_v2_300_eci.icc",
+        "characterization_reference": "FOGRA39",
+        "source_url": "https://eci.org/doku.php?id=en:downloads",
+        "provider_from_source": "European Color Initiative",
+        "usage_note": "Referencia heredada; 300% forma parte del nombre de esta variante y no fija un TAC obligatorio general de IntelliPrint.",
+        "reference_status": "legacy_accepted",
+        "copyright": {
+          "holder_from_source": null,
+          "binary_notice": null,
+          "terms_source_url": "https://eci.org/doku.php?id=en:downloads",
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed"
+      },
+      {
+        "id": "ECICMYK_V2",
+        "name": "eciCMYK v2 — intercambio CMYK",
+        "family": "CMYK",
+        "nominal_filename": "eciCMYK_v2.icc",
+        "characterization_reference": "FOGRA59",
+        "source_url": "https://eci.org/doku.php_id=en_colourstandards_workingcolorspaces.html",
+        "provider_from_source": "European Color Initiative",
+        "usage_note": "Espacio de intercambio CMYK, no perfil de una máquina universal. Referencia propuesta para trabajo digital nuevo o conversión explícita en un flujo que lo interprete.",
+        "reference_status": "exchange_reference",
+        "copyright": {
+          "holder_from_source": null,
+          "binary_notice": null,
+          "terms_source_url": "https://eci.org/doku.php_id=en_colourstandards_workingcolorspaces.html",
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed",
+        "nominal_profile_name": "eciCMYK v2"
+      },
+      {
+        "id": "GRACOL_2013_CRPC6",
+        "name": "GRACoL 2013 CRPC6",
+        "family": "CMYK",
+        "nominal_filename": "GRACoL2013_CRPC6.icc",
+        "characterization_reference": "CGATS21-2-CRPC6",
+        "source_url": "https://registry.color.org/profile-registry/GRACoL2013_CRPC6",
+        "provider_from_source": "Idealliance",
+        "usage_note": "Referencia internacional adicional de proceso CMYK.",
+        "reference_status": "additional_reference",
+        "copyright": {
+          "holder_from_source": "X-Rite, Inc.",
+          "binary_notice": null,
+          "terms_source_url": "https://registry.color.org/profile-registry/GRACoL2013_CRPC6",
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed"
+      },
+      {
+        "id": "GRACOL_2013_UNC_CRPC3",
+        "name": "GRACoL 2013 Uncoated CRPC3",
+        "family": "CMYK",
+        "nominal_filename": "GRACoL2013UNC_CRPC3.icc",
+        "characterization_reference": "CGATS21-2-CRPC3",
+        "source_url": "https://registry.color.org/profile-registry/GRACoL2013UNC_CRPC3",
+        "provider_from_source": "Idealliance",
+        "usage_note": "Referencia internacional adicional de proceso CMYK para condición no estucada.",
+        "reference_status": "additional_reference",
+        "copyright": {
+          "holder_from_source": null,
+          "binary_notice": null,
+          "terms_source_url": "https://registry.color.org/profile-registry/GRACoL2013UNC_CRPC3",
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed"
+      },
+      {
+        "id": "SWOP_2013_C3_CRPC5",
+        "name": "SWOP 2013 C3 CRPC5",
+        "family": "CMYK",
+        "nominal_filename": "SWOP2013C3_CRPC5.icc",
+        "characterization_reference": "CGATS21-2-CRPC5",
+        "source_url": "https://registry.color.org/profile-registry/SWOP2013C3_CRPC5",
+        "provider_from_source": "Idealliance",
+        "usage_note": "Referencia internacional adicional de proceso CMYK.",
+        "reference_status": "additional_reference",
+        "copyright": {
+          "holder_from_source": "X-Rite, Inc.",
+          "binary_notice": null,
+          "terms_source_url": "https://registry.color.org/profile-registry/SWOP2013C3_CRPC5",
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed"
+      },
+      {
+        "id": "JAPAN_COLOR_2011_COATED",
+        "name": "Japan Color 2011 Coated",
+        "family": "CMYK",
+        "nominal_filename": "JapanColor2011Coated.icc",
+        "characterization_reference": "Japan Color 2011",
+        "source_url": "https://registry.color.org/profile-registry/JapanColor2011Coated",
+        "provider_from_source": null,
+        "usage_note": "Referencia internacional adicional para condición estucada.",
+        "reference_status": "additional_reference",
+        "copyright": {
+          "holder_from_source": null,
+          "binary_notice": null,
+          "terms_source_url": "https://registry.color.org/profile-registry/JapanColor2011Coated",
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed"
+      },
+      {
+        "id": "SRGB",
+        "name": "sRGB IEC61966-2.1",
+        "family": "RGB",
+        "nominal_filename": null,
+        "characterization_reference": "sRGB",
+        "source_url": "https://registry.color.org/rgb-registry/srgbprofiles",
+        "provider_from_source": null,
+        "usage_note": "Favorito propuesto para una conversión o trabajo nuevo de pantalla. No obligatorio si existe otro ICC RGB válido.",
+        "reference_status": "recommended_screen_reference",
+        "copyright": {
+          "holder_from_source": null,
+          "binary_notice": null,
+          "terms_source_url": "https://registry.color.org/rgb-registry/srgbprofiles",
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed",
+        "candidate_implementations": [
+          {
+            "nominal_filename": "sRGB2014.icc",
+            "status": "candidate_not_pinned",
+            "source_url": "https://registry.color.org/rgb-registry/srgbprofiles",
+            "pinned_binary_version": null,
+            "binary_sha256": null,
+            "icc_binary_bundled": false,
+            "binary_validation_status": "not_performed"
+          }
+        ]
+      },
+      {
+        "id": "ADOBE_RGB_1998",
+        "name": "Adobe RGB (1998)",
+        "family": "RGB",
+        "nominal_filename": null,
+        "characterization_reference": "Adobe RGB (1998)",
+        "source_url": "https://registry.color.org/rgb-registry/adobergb",
+        "provider_from_source": "Adobe",
+        "usage_note": "RGB admitido si el ICC incrustado es válido y está bien asociado. El binario exacto depende de la distribución elegida.",
+        "reference_status": "additional_reference",
+        "copyright": {
+          "holder_from_source": null,
+          "binary_notice": null,
+          "terms_source_url": "https://registry.color.org/rgb-registry/adobergb",
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed"
+      },
+      {
+        "id": "DISPLAY_P3",
+        "name": "Display P3",
+        "family": "RGB",
+        "nominal_filename": "Display P3.icc",
+        "characterization_reference": "Display P3",
+        "source_url": "https://registry.color.org/rgb-registry/displayp3",
+        "provider_from_source": "Apple",
+        "usage_note": "Display P3, distinto de DCI-P3. RGB admitido si el ICC incrustado es válido y está bien asociado.",
+        "reference_status": "additional_reference",
+        "copyright": {
+          "holder_from_source": null,
+          "binary_notice": null,
+          "terms_source_url": "https://registry.color.org/rgb-registry/displayp3",
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed"
+      },
+      {
+        "id": "CUSTOM_OR_PRINTER_PROFILE",
+        "name": "Perfil personalizado / de la imprenta",
+        "family": "CMYK_or_RGB",
+        "nominal_filename": null,
+        "characterization_reference": "Aportado por la imprenta o el usuario (ej. FOGRA51, FOGRA39 u otros datos de caracterización)",
+        "source_url": null,
+        "provider_from_source": "Imprenta / usuario",
+        "usage_note": "Perfil personalizado o suministrado por la imprenta; la lista lo incorpora admitiendo la validación del archivo ICC real incrustado aunque no figure en el catálogo estándar.",
+        "reference_status": "custom_or_printer_supplied",
+        "copyright": {
+          "holder_from_source": null,
+          "binary_notice": null,
+          "terms_source_url": null,
+          "redistribution_review_status": "not_assessed"
+        },
+        "pinned_binary_version": null,
+        "binary_sha256": null,
+        "icc_binary_bundled": false,
+        "binary_validation_status": "not_performed"
+      }
+    ]
+  },
+  "version_history": [
+    {
+      "version": "1.0.0",
+      "date": "2026-10-17",
+      "summary": "Primera especificación de tres perfiles, medición por aparición y ambos ejes, sangre, fuentes, correcciones y revisión humana.",
+      "is_current": false
+    },
+    {
+      "version": "1.1.0",
+      "date": "2026-10-17",
+      "summary": "Simplificación autorizada del color: CMYK con ICC coherente en ambos destinos de impresión; RGB con cualquier ICC RGB válido en pantalla; conservación predeterminada; catálogo nominal abierto y asesoramiento de producción opcional. Mantiene resolución, sangre, márgenes, modos de pantalla, ortografía y salvaguardas de corrección.",
+      "is_current": false
+    },
+    {
+      "version": "1.2.0",
+      "date": "2026-10-17",
+      "is_current": true,
+      "summary": "Aclaración autorizada: la familia requerida pertenece al ICC de salida documental, no a cada objeto. Se admiten fuentes interpretables mezcladas; se separan diagnóstico de origen, declaración de destino y conversión aplicada. Conservación predeterminada y tres acciones explícitas; sin exigir prensa/RIP para el control básico. Mantiene resolución, sangre, fuentes, IA, ortografía y catálogo nominal. Incorpora correcciones de documento y reglas de sobreimpresión: umbral de línea de 1 bit en Offset 300 ajustado a 600 ppp, criterio de 96 ppp en Pantalla RGB, perfil personalizado en catálogo, sobreimpresión obligatoria de textos negros al 100% (BLACK_TEXT_OVERPRINT) y política diferenciada para tintas especiales (SPECIAL_INKS_OVERPRINT_POLICY: sobreimprimir barnices y calar pantones)."
+    }
+  ]
+}
