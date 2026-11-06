@@ -628,6 +628,58 @@ async def apply_overprint_fix(job_id: str, mode: str = "all"):
 
     # Guardar la ruta en el job para el endpoint de descarga
     job_data["job_meta"]["overprint_fixed_pdf_path"] = str(output_path)
+
+    # Actualizar estadisticas y limpiar incidencias resueltas de la ficha tecnica
+    stats = job_data.get("job_summary", {}).get("overprint_stats", {})
+    if mode == "all":
+        # Resolver todas las incidencias de texto en calado (100% y 80%)
+        job_data["findings"] = [
+            f for f in job_data.get("findings", [])
+            if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "DARK_80_TEXT_KNOCKOUT")
+            and "calado" not in f.get("title", "").lower()
+        ]
+        stats["black_100_overprint"] = stats.get("black_100_overprint", 0) + stats.get("black_100_knockout", 0)
+        stats["black_100_knockout"] = 0
+        stats["dark_80_overprint"] = stats.get("dark_80_overprint", 0) + stats.get("dark_80_knockout", 0)
+        stats["dark_80_knockout"] = 0
+        stats["black_text_overprint"] = stats.get("black_text_overprint", 0) + stats.get("black_text_knockout", 0)
+        stats["black_text_knockout"] = 0
+    else:
+        # Resolver unicamente las incidencias de negro puro 100% K
+        job_data["findings"] = [
+            f for f in job_data.get("findings", [])
+            if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT_100",)
+            and "100% k" not in f.get("title", "").lower()
+        ]
+        stats["black_100_overprint"] = stats.get("black_100_overprint", 0) + stats.get("black_100_knockout", 0)
+        stats["black_100_knockout"] = 0
+        stats["black_text_overprint"] = stats.get("black_100_overprint", 0) + stats.get("dark_80_overprint", 0)
+        stats["black_text_knockout"] = stats.get("dark_80_knockout", 0)
+
+    # Recalcular resultado tecnico general
+    all_findings = job_data.get("findings", [])
+    errs = sum(1 for f in all_findings if f.get("severity") == "ERROR")
+    warns = sum(1 for f in all_findings if f.get("severity") == "WARNING")
+    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
+    tech["errors_count"] = errs
+    tech["warnings_count"] = warns
+    if errs > 0:
+        tech["status"] = "FAIL"
+        tech["label"] = "NO CUMPLE"
+    elif warns > 0:
+        tech["status"] = "PASS_WITH_WARNINGS"
+        tech["label"] = "CUMPLE CON AVISOS"
+    else:
+        tech["status"] = "PASS"
+        tech["label"] = "CUMPLE"
+
+    # Regenerar el PDF de la Ficha Tecnica oficial para que el Dictamen no muestre el error resuelto
+    cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
+    try:
+        generate_preflight_certificate_pdf(job_data, cert_path)
+    except Exception as e:
+        print(f"[apply-overprint] Aviso: no se pudo regenerar certificado PDF: {e}")
+
     with open(job_json_path, "w", encoding="utf-8") as f:
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
@@ -636,8 +688,13 @@ async def apply_overprint_fix(job_id: str, mode: str = "all"):
         "mode": mode,
         "pages_modified": result["pages_modified"],
         "text_ops_fixed": result["text_ops_fixed"],
+        "text_100_fixed": result.get("text_100_fixed", 0),
+        "text_80_fixed": result.get("text_80_fixed", 0),
         "errors": result.get("errors", []),
         "download_url": f"/api/download-overprint/{safe_id}",
+        "overprint_stats": stats,
+        "findings": job_data["findings"],
+        "triple_result": job_data["triple_result"],
     }
 
 

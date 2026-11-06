@@ -319,27 +319,51 @@
                 <i class="fa-solid fa-layer-group text-blue-600"></i> Sobreimpresión & Tintas Especiales
               </h4>
               <ul class="text-xs space-y-2 text-slate-600">
+                <!-- Desglose Texto 100% K -->
                 <li class="flex justify-between py-1 border-b border-slate-100">
-                  <span>Texto negro/oscuro (≥80% K) sobreimprime:</span>
-                  <span id="metricBlackOverprint" class="font-bold text-emerald-600"></span>
+                  <span class="font-medium text-slate-700">Texto 100% K sobreimprime:</span>
+                  <span id="metricBlack100Overprint" class="font-bold text-emerald-600">0</span>
                 </li>
                 <li class="flex justify-between py-1 border-b border-slate-100">
-                  <span>Texto negro/oscuro (≥80% K) cala (knockout):</span>
-                  <span id="metricBlackKnockout" class="font-bold text-amber-600"></span>
+                  <span class="font-medium text-slate-700">Texto 100% K cala (knockout):</span>
+                  <span id="metricBlack100Knockout" class="font-bold text-amber-600">0</span>
                 </li>
+
+                <!-- Desglose Texto oscuro 80%-99% K -->
+                <li class="flex justify-between py-1 border-b border-slate-100">
+                  <span class="text-slate-600">Texto oscuro (80%-99% K) sobreimprime:</span>
+                  <span id="metricDark80Overprint" class="font-bold text-emerald-600">0</span>
+                </li>
+                <li class="flex justify-between py-1 border-b border-slate-100">
+                  <span class="text-slate-600">Texto oscuro (80%-99% K) cala (knockout):</span>
+                  <span id="metricDark80Knockout" class="font-bold text-amber-600">0</span>
+                </li>
+
+                <!-- Textos hechos / corregidos por Auto-Trapping -->
+                <li id="metricOverprintDoneRow" class="hidden flex justify-between py-1 border-b border-emerald-200 bg-emerald-50 px-2 rounded-md">
+                  <span class="text-emerald-800 font-semibold flex items-center gap-1">
+                    <i class="fa-solid fa-circle-check text-emerald-600"></i> Auto-Trapping aplicado:
+                  </span>
+                  <span id="metricOverprintDoneCount" class="font-bold text-emerald-700">0 textos</span>
+                </li>
+
+                <!-- Barnices & Pantones -->
                 <li class="flex justify-between py-1 border-b border-slate-100">
                   <span>Barnices en sobreimpresión (obligatorio):</span>
-                  <span id="metricVarnishOverprint" class="font-bold text-emerald-600"></span>
+                  <span id="metricVarnishOverprint" class="font-bold text-emerald-600">0</span>
                 </li>
                 <li class="flex justify-between py-1 border-b border-slate-100">
                   <span>Barnices en calado (error crítico):</span>
-                  <span id="metricVarnishKnockout" class="font-bold text-red-600"></span>
+                  <span id="metricVarnishKnockout" class="font-bold text-red-600">0</span>
                 </li>
                 <li class="flex justify-between py-1">
                   <span>Pantones sobreimprimiendo (aviso):</span>
-                  <span id="metricPantoneOverprint" class="font-bold text-slate-800"></span>
+                  <span id="metricPantoneOverprint" class="font-bold text-slate-800">0</span>
                 </li>
               </ul>
+              <!-- Campos ocultos de compatibilidad -->
+              <span id="metricBlackOverprint" class="hidden"></span>
+              <span id="metricBlackKnockout" class="hidden"></span>
 
               <!-- Acción Auto-Trapping directamente en la tarjeta de Métricas -->
               <div id="cardOverprintActionBox" class="mt-3 pt-3 border-t border-slate-100 space-y-2">
@@ -1047,12 +1071,30 @@
       document.getElementById('metricImages').textContent = summ.total_images;
       document.getElementById('metricLowRes').textContent = summ.low_res_images;
 
-      const over = summ.overprint_stats;
-      document.getElementById('metricBlackOverprint').textContent = over.black_text_overprint;
-      document.getElementById('metricBlackKnockout').textContent = over.black_text_knockout;
-      document.getElementById('metricVarnishOverprint').textContent = over.varnish_overprint;
-      document.getElementById('metricVarnishKnockout').textContent = over.varnish_knockout;
-      document.getElementById('metricPantoneOverprint').textContent = over.pantone_overprint;
+      const over = summ.overprint_stats || {};
+      const k100OP = over.black_100_overprint ?? (over.black_text_overprint || 0);
+      const k100KO = over.black_100_knockout ?? (over.black_text_knockout || 0);
+      const k80OP  = over.dark_80_overprint ?? 0;
+      const k80KO  = over.dark_80_knockout ?? 0;
+
+      const elK100OP = document.getElementById('metricBlack100Overprint');
+      const elK100KO = document.getElementById('metricBlack100Knockout');
+      const elK80OP  = document.getElementById('metricDark80Overprint');
+      const elK80KO  = document.getElementById('metricDark80Knockout');
+
+      if (elK100OP) elK100OP.textContent = k100OP;
+      if (elK100KO) elK100KO.textContent = k100KO;
+      if (elK80OP)  elK80OP.textContent  = k80OP;
+      if (elK80KO)  elK80KO.textContent  = k80KO;
+
+      const elBOP = document.getElementById('metricBlackOverprint');
+      const elBKO = document.getElementById('metricBlackKnockout');
+      if (elBOP) elBOP.textContent = over.black_text_overprint || 0;
+      if (elBKO) elBKO.textContent = over.black_text_knockout || 0;
+
+      document.getElementById('metricVarnishOverprint').textContent = over.varnish_overprint || 0;
+      document.getElementById('metricVarnishKnockout').textContent = over.varnish_knockout || 0;
+      document.getElementById('metricPantoneOverprint').textContent = over.pantone_overprint || 0;
 
       // Sincronizar todos los paneles y botones de Auto-Trapping (en Métricas, Separaciones e Incidencias)
       const hasKnockout = (over.black_text_knockout || 0) > 0;
@@ -1402,12 +1444,38 @@
             b.innerHTML = '<i class="fa-solid fa-circle-check"></i> Trapping Aplicado';
           });
 
-          // Actualizar métricas
+          // Actualizar métricas desglosadas (100% K y 80% K)
+          if (data.overprint_stats) {
+            const el100OP = document.getElementById('metricBlack100Overprint');
+            const el100KO = document.getElementById('metricBlack100Knockout');
+            const el80OP  = document.getElementById('metricDark80Overprint');
+            const el80KO  = document.getElementById('metricDark80Knockout');
+            if (el100OP) el100OP.textContent = data.overprint_stats.black_100_overprint ?? 0;
+            if (el100KO) el100KO.textContent = data.overprint_stats.black_100_knockout ?? 0;
+            if (el80OP)  el80OP.textContent  = data.overprint_stats.dark_80_overprint ?? 0;
+            if (el80KO)  el80KO.textContent  = data.overprint_stats.dark_80_knockout ?? 0;
+          }
+
+          // Fila informativa de textos hechos / corregidos
+          const doneRow = document.getElementById('metricOverprintDoneRow');
+          const doneCount = document.getElementById('metricOverprintDoneCount');
+          if (doneRow && doneCount) {
+            doneRow.classList.remove('hidden');
+            let detail = `${data.text_ops_fixed} textos`;
+            if (data.text_100_fixed > 0 && data.text_80_fixed > 0) {
+              detail += ` (${data.text_100_fixed} de 100% K + ${data.text_80_fixed} de 80% K)`;
+            } else if (data.text_100_fixed > 0) {
+              detail += ` (100% K)`;
+            } else if (data.text_80_fixed > 0) {
+              detail += ` (80% K)`;
+            }
+            doneCount.textContent = detail;
+          }
+
           const knockoutEl = document.getElementById('metricBlackKnockout');
           if (knockoutEl) {
             if (mode === 'k100') {
-              const currentKO = parseInt(knockoutEl.textContent) || 0;
-              const remaining = Math.max(0, currentKO - data.text_ops_fixed);
+              const remaining = data.overprint_stats ? data.overprint_stats.dark_80_knockout : 0;
               knockoutEl.innerHTML = `<span class="text-amber-600 font-bold">${remaining} <span class="text-[10px] font-normal text-slate-500">(100% K corregido; 80% K calando)</span></span>`;
             } else {
               knockoutEl.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
@@ -1415,8 +1483,8 @@
           }
           const overprintEl = document.getElementById('metricBlackOverprint');
           if (overprintEl && data.text_ops_fixed) {
-            const currentVal = parseInt(overprintEl.textContent) || 0;
-            overprintEl.textContent = `${currentVal + data.text_ops_fixed} (+${data.text_ops_fixed})`;
+            const total = data.overprint_stats ? data.overprint_stats.black_text_overprint : (parseInt(overprintEl.textContent) || 0) + data.text_ops_fixed;
+            overprintEl.textContent = `${total} (+${data.text_ops_fixed})`;
           }
 
           // Actualizar textos informativos en los diferentes paneles
@@ -1443,7 +1511,7 @@
             el.innerHTML = `
               <div class="flex flex-wrap items-center gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 mt-2">
                 <i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i>
-                <span>Sobreimpresión inyectada (${modeLabel}) en <strong>${data.pages_modified}</strong> pág(s), <strong>${data.text_ops_fixed}</strong> textos corregidos.</span>
+                <span>Sobreimpresión inyectada (${modeLabel}): <strong>${data.pages_modified}</strong> pág(s), <strong>${data.text_ops_fixed}</strong> textos corregidos.</span>
                 <a href="${data.download_url}" target="_blank"
                   class="ml-auto flex items-center gap-1 font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg transition-all shadow-sm">
                   <i class="fa-solid fa-download"></i> Descargar PDF corregido
@@ -1468,40 +1536,62 @@
             updateSeparationPreview();
           }
 
-          // ── Actualizar lista de Incidencias Técnicas (findingsList) ──
-          // Buscar por data-rule-id O por texto del título (doble búsqueda para robustez)
-          let knockoutResolved = 0;
+          // ── BORRAR las incidencias corregidas de la lista (findingsList) ──
           document.querySelectorAll('#findingsList > div').forEach(div => {
             const ruleId = div.dataset.ruleId || '';
-            const allText = div.textContent || '';
-            const isKnockout = ruleId === 'BLACK_TEXT_KNOCKOUT'
-              || (allText.includes('calado') && allText.includes('K'))
-              || allText.includes('knockout');
-            if (!isKnockout) return;
+            const allText = (div.textContent || '').toLowerCase();
+            const is100KO = (ruleId === 'BLACK_TEXT_KNOCKOUT_100') || (allText.includes('100% k') && allText.includes('calado'));
+            const is80KO  = (ruleId === 'DARK_80_TEXT_KNOCKOUT')  || (allText.includes('80%') && allText.includes('calado'));
+            const isGenericKO = (ruleId === 'BLACK_TEXT_KNOCKOUT') || (allText.includes('calado') && allText.includes('knockout'));
 
-            div.className = 'p-3 rounded-lg border text-xs flex items-start gap-3 bg-emerald-50/70 border-emerald-200 text-emerald-900 transition-all';
-            const iconDiv = div.querySelector('div:first-child');
-            if (iconDiv) iconDiv.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600"></i>';
-            const titleSpan = div.querySelector('span.font-bold');
-            if (titleSpan && !titleSpan.innerHTML.includes('Auto-Trapping')) {
-              const label = mode === 'all' ? 'Ambos corregidos' : '100% K corregido';
-              titleSpan.innerHTML += ` <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-800 font-bold ml-1">✓ Auto-Trapping aplicado (${label})</span>`;
-            }
-            knockoutResolved++;
-          });
-
-          // Si mode='all', ocultar siempre el banner (el fix fue exitoso aunque el div ya estuviera resuelto)
-          if (mode === 'all') {
-            const overprintBanner = document.getElementById('findingsOverprintBanner');
-            if (overprintBanner) overprintBanner.classList.add('hidden');
-            // Restar del contador solo si había findings que marcar
-            if (knockoutResolved > 0) {
-              const countEl = document.getElementById('findingsCount');
-              if (countEl) {
-                const current = parseInt(countEl.textContent) || 0;
-                countEl.textContent = Math.max(0, current - knockoutResolved);
+            if (mode === 'all') {
+              if (is100KO || is80KO || isGenericKO) {
+                div.remove(); // Borrar completamente de la ficha
+              }
+            } else if (mode === 'k100') {
+              if (is100KO) {
+                div.remove(); // Borrar solo las de 100% K
               }
             }
+          });
+
+          // Sincronizar contador de incidencias con los datos reales del backend
+          const countEl = document.getElementById('findingsCount');
+          const findingsListEl = document.getElementById('findingsList');
+          if (data.findings) {
+            if (countEl) countEl.textContent = data.findings.length;
+            if (data.findings.length === 0 && findingsListEl) {
+              findingsListEl.innerHTML = '<div class="p-4 bg-emerald-50 text-emerald-800 rounded-lg text-xs font-medium">✅ El documento supera todos los requisitos obligatorios y avisos del perfil. Todas las incidencias han sido resueltas.</div>';
+            }
+          } else {
+            const remaining = document.querySelectorAll('#findingsList > div').length;
+            if (countEl) countEl.textContent = remaining;
+          }
+
+          // Actualizar dictamen técnico general si viene del backend
+          if (data.triple_result && data.triple_result.technical) {
+            const tech = data.triple_result.technical;
+            const techBadge = document.getElementById('badgeTechnical');
+            const descTech = document.getElementById('descTechnical');
+            if (techBadge) {
+              techBadge.textContent = tech.label;
+              if (tech.status === 'PASS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-emerald-100 text-emerald-800 border border-emerald-200';
+              } else if (tech.status === 'PASS_WITH_WARNINGS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-amber-100 text-amber-800 border border-amber-200';
+              } else {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-red-100 text-red-800 border border-red-200';
+              }
+            }
+            if (descTech) {
+              descTech.textContent = `${tech.errors_count} errores críticos, ${tech.warnings_count} advertencias.`;
+            }
+          }
+
+          // Ocultar banner si ya no hay calados
+          if (mode === 'all' || (data.overprint_stats && data.overprint_stats.black_text_knockout === 0)) {
+            const overprintBanner = document.getElementById('findingsOverprintBanner');
+            if (overprintBanner) overprintBanner.classList.add('hidden');
           }
 
         } else {

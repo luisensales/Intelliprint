@@ -155,17 +155,25 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     tech = triple.get("technical", {})
     all_findings  = job_data.get("findings", [])
     cmyk_converted = meta.get("cmyk_converted_pdf_path")
+    overprint_fixed = meta.get("overprint_fixed_pdf_path")
+
+    adj_warnings = tech.get("warnings_count", 0)
+    adj_errors   = tech.get("errors_count",   0)
 
     if cmyk_converted:
         rgb_findings = [f for f in all_findings
                         if "rgb" in f.get("title", "").lower() or "rgb" in f.get("message", "").lower()]
         rgb_warnings = sum(1 for f in rgb_findings if f.get("severity") != "ERROR")
         rgb_errors   = sum(1 for f in rgb_findings if f.get("severity") == "ERROR")
-        adj_warnings = max(0, tech.get("warnings_count", 0) - rgb_warnings)
-        adj_errors   = max(0, tech.get("errors_count",   0) - rgb_errors)
-    else:
-        adj_warnings = tech.get("warnings_count", 0)
-        adj_errors   = tech.get("errors_count",   0)
+        adj_warnings = max(0, adj_warnings - rgb_warnings)
+        adj_errors   = max(0, adj_errors - rgb_errors)
+
+    if overprint_fixed:
+        op_findings = [f for f in all_findings
+                       if f.get("rule_id") in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "DARK_80_TEXT_KNOCKOUT")
+                       or "calado" in f.get("title", "").lower()]
+        op_warnings = sum(1 for f in op_findings if f.get("severity") != "ERROR")
+        adj_warnings = max(0, adj_warnings - op_warnings)
 
     if adj_errors > 0:
         t_status = "FAIL";            t_label = tech.get("label", "NO CUMPLE")
@@ -246,6 +254,11 @@ def generate_preflight_certificate_pdf(job_data, output_path):
         findings = [f for f in findings
                     if "rgb" not in f.get("title", "").lower()
                     and "rgb" not in f.get("message", "").lower()]
+
+    if overprint_fixed:
+        findings = [f for f in findings
+                    if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "DARK_80_TEXT_KNOCKOUT")
+                    and "calado" not in f.get("title", "").lower()]
 
     # Límite inferior del área útil en cada página
     BOTTOM_LIMIT = FOOTER_Y - 15

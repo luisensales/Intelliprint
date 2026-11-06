@@ -126,6 +126,20 @@ def extract_pdf_spot_colors(pike_doc) -> list[dict]:
     return list(spots.values())
 
 
+def _has_visible_text(op_str: str, operands: list) -> bool:
+    """Retorna True si la operacion contiene texto visible (no solo espacios en blanco)."""
+    if not operands:
+        return False
+    txt = []
+    if op_str in ('Tj', "'", '"'):
+        txt.append(str(operands[0]))
+    elif op_str == 'TJ':
+        for item in operands[0]:
+            if not isinstance(item, (int, float)):
+                txt.append(str(item))
+    return bool(''.join(txt).strip())
+
+
 def scan_content_stream(commands, resources, page_num, overprint_data):
     ext_gstates = {}
     if resources and '/ExtGState' in resources:
@@ -231,20 +245,37 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
                     is_dark_black = True
                     k_percent = int(round(k * 100))
 
-            if is_dark_black and is_fill:
+            # Solo evaluar sobreimpresion si hay texto visible real (evitar espacios vacios o saltos)
+            if is_dark_black and is_fill and _has_visible_text(op_str, operands):
+                is_pure_100 = (k_percent >= 99)
                 if state['op']:
                     overprint_data["black_text_overprint"] += 1
+                    if is_pure_100:
+                        overprint_data["black_100_overprint"] += 1
+                    else:
+                        overprint_data["dark_80_overprint"] += 1
                 else:
                     overprint_data["black_text_knockout"] += 1
-                    # Registrar máximo 1 incidencia por página para no saturar el informe
-                    if not any(inc["page"] == page_num and inc["type"] == "BLACK_TEXT_KNOCKOUT" for inc in overprint_data["incidents"]):
+                    if is_pure_100:
+                        overprint_data["black_100_knockout"] += 1
+                        inc_type = "BLACK_TEXT_KNOCKOUT_100"
+                        inc_title = "Texto 100% K en calado (knockout)"
+                        inc_msg = f"Texto en negro puro 100% K sin sobreimpresión en pág {page_num}. Debe sobreimprimir para evitar filetes blancos."
+                    else:
+                        overprint_data["dark_80_knockout"] += 1
+                        inc_type = "DARK_80_TEXT_KNOCKOUT"
+                        inc_title = f"Texto oscuro ({k_percent}% K) en calado (knockout)"
+                        inc_msg = f"Texto en negro u oscuro ({k_percent}% K) sin sobreimpresión en pág {page_num}. Puede sobreimprimirse con Auto-Trapping (Ambos)."
+
+                    # Registrar maximo 1 incidencia por tipo y pagina
+                    if not any(inc["page"] == page_num and inc["type"] == inc_type for inc in overprint_data["incidents"]):
                         overprint_data["incidents"].append({
                             "page": page_num,
-                            "type": "BLACK_TEXT_KNOCKOUT",
+                            "type": inc_type,
                             "severity": "WARNING",
                             "category": "Sobreimpresión",
-                            "title": "Texto negro u oscuro (≥80% K) en calado (knockout)",
-                            "message": f"Texto en negro u oscuro ({k_percent}% K) sin sobreimpresión en pág {page_num}. Debe sobreimprimir para evitar filetes blancos por desajuste de registro."
+                            "title": inc_title,
+                            "message": inc_msg
                         })
 
             if spot_name:
@@ -660,6 +691,10 @@ class IntelliPrintEngine:
         # OutputIntent & Document Color
         output_intent_info = {"has_output_intent": False, "identifier": "No declarado"}
         overprint_data = {
+            "black_100_overprint": 0,
+            "black_100_knockout": 0,
+            "dark_80_overprint": 0,
+            "dark_80_knockout": 0,
             "black_text_overprint": 0,
             "black_text_knockout": 0,
             "varnish_overprint": 0,
@@ -773,6 +808,10 @@ class IntelliPrintEngine:
                 "selected_icc": selected_icc,
                 "spot_colors": spot_colors_detected,
                 "overprint_stats": {
+                    "black_100_overprint": overprint_data.get("black_100_overprint", 0),
+                    "black_100_knockout": overprint_data.get("black_100_knockout", 0),
+                    "dark_80_overprint": overprint_data.get("dark_80_overprint", 0),
+                    "dark_80_knockout": overprint_data.get("dark_80_knockout", 0),
                     "black_text_overprint": overprint_data["black_text_overprint"],
                     "black_text_knockout": overprint_data["black_text_knockout"],
                     "varnish_overprint": overprint_data["varnish_overprint"],
