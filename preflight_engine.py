@@ -222,12 +222,12 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
             cs_type, spot_name = state['fill_cs']
             if cs_type == 'DeviceGray' and len(state['fill_color']) >= 1:
                 gray_val = state['fill_color'][0]
-                if gray_val <= 0.30:
+                if gray_val <= 0.20:
                     is_dark_black = True
                     k_percent = int(round((1.0 - gray_val) * 100))
             elif cs_type == 'DeviceCMYK' and len(state['fill_color']) >= 4:
                 c, m, y, k = state['fill_color'][:4]
-                if c <= 0.05 and m <= 0.05 and y <= 0.05 and k >= 0.70:
+                if c <= 0.05 and m <= 0.05 and y <= 0.05 and k >= 0.80:
                     is_dark_black = True
                     k_percent = int(round(k * 100))
 
@@ -243,7 +243,7 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
                             "type": "BLACK_TEXT_KNOCKOUT",
                             "severity": "WARNING",
                             "category": "Sobreimpresión",
-                            "title": "Texto negro u oscuro (≥70% K) en calado (knockout)",
+                            "title": "Texto negro u oscuro (≥80% K) en calado (knockout)",
                             "message": f"Texto en negro u oscuro ({k_percent}% K) sin sobreimpresión en pág {page_num}. Debe sobreimprimir para evitar filetes blancos por desajuste de registro."
                         })
 

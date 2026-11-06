@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Umbrales de deteccion de "negro oscuro"
 # ---------------------------------------------------------------------------
-DARK_K_THRESHOLD = 0.70    # K minimo para considerar color oscuro
+DARK_K_THRESHOLD = 0.80    # K minimo para considerar color oscuro (>= 80% K)
 CMY_MAX = 0.05             # CMY maximo para que sea negro puro (no color compuesto)
-GRAY_DARK_THRESHOLD = 0.30 # Para operador 'g': escala de grises <= este valor -> oscuro
+GRAY_DARK_THRESHOLD = 0.20 # Para operador 'g': escala de grises <= este valor (<= 0.20 equivale a >= 80% K)
 
 
 # ---------------------------------------------------------------------------
