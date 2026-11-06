@@ -1183,14 +1183,38 @@
         data.findings.forEach(f => {
           const div = document.createElement('div');
           const isErr = f.severity === 'ERROR';
-          div.className = `p-3 rounded-lg border text-xs flex items-start gap-3 ${isErr ? 'bg-red-50/50 border-red-200 text-red-900' : 'bg-amber-50/50 border-amber-200 text-amber-900'}`;
+          const is100KO = f.rule_id === 'BLACK_TEXT_KNOCKOUT_100';
+          const is80KO = f.rule_id === 'DARK_80_TEXT_KNOCKOUT';
+
+          let cardStyle = '';
+          let iconHtml = '';
+          let badgeHtml = '';
+
+          if (is100KO) {
+            cardStyle = 'bg-slate-900/5 border-slate-700 text-slate-950 ring-1 ring-slate-800/20';
+            iconHtml = '<span class="inline-flex items-center justify-center w-5 h-5 rounded bg-slate-900 text-white font-mono font-bold text-[10px] shadow-xs" title="Texto 100% K">100</span>';
+            badgeHtml = '<span class="text-[10px] bg-slate-900 text-white px-2 py-0.5 rounded font-bold ml-1 tracking-wide">100% K · Calado</span>';
+          } else if (is80KO) {
+            cardStyle = 'bg-amber-500/10 border-amber-400 text-amber-950 ring-1 ring-amber-500/20';
+            iconHtml = '<span class="inline-flex items-center justify-center w-5 h-5 rounded bg-amber-600 text-white font-mono font-bold text-[10px] shadow-xs" title="Texto >=80% K">80</span>';
+            badgeHtml = '<span class="text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded font-bold ml-1 tracking-wide">≥80% K · Gris Calado</span>';
+          } else if (isErr) {
+            cardStyle = 'bg-red-50/50 border-red-200 text-red-900';
+            iconHtml = '<i class="fa-solid fa-circle-xmark text-red-600 text-sm"></i>';
+          } else {
+            cardStyle = 'bg-amber-50/50 border-amber-200 text-amber-900';
+            iconHtml = '<i class="fa-solid fa-triangle-exclamation text-amber-600 text-sm"></i>';
+          }
+
+          div.className = `p-3 rounded-lg border text-xs flex items-start gap-3 ${cardStyle}`;
           div.dataset.ruleId = f.rule_id || '';
           div.innerHTML = `
-            <div class="mt-0.5"><i class="fa-solid ${isErr ? 'fa-circle-xmark text-red-600' : 'fa-triangle-exclamation text-amber-600'}"></i></div>
+            <div class="mt-0.5">${iconHtml}</div>
             <div class="flex-1">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-bold">${f.title}</span>
-                <span class="text-[10px] px-1.5 py-0.2 rounded bg-white/70 border border-current font-mono">Pág ${f.page}</span>
+                ${badgeHtml}
+                <span class="text-[10px] px-1.5 py-0.2 rounded bg-white/80 border border-slate-300 font-mono text-slate-700">Pág ${f.page}</span>
               </div>
               <p class="mt-0.5 text-slate-700">${f.message}</p>
             </div>
@@ -1310,7 +1334,17 @@
       if (findingsBanner) {
         findingsBanner.classList.toggle('hidden', !hasKnockout);
         const txt = document.getElementById('findingsOverprintText');
-        if (txt) txt.textContent = `Se han detectado ${over.black_text_knockout} textos negros en calado (knockout). Elige corregir ambos o solo 100% K en 1 clic.`;
+        if (txt) {
+          if (k100KO > 0 && k80KO > 0) {
+            txt.innerHTML = `Se detectaron <strong>${k100KO}</strong> textos al <strong>100% K</strong> y <strong>${k80KO}</strong> textos al <strong>≥80% K</strong> en calado. Puedes sobreimprimir solo los de 100% K o ambos en 1 clic.`;
+          } else if (k100KO > 0) {
+            txt.innerHTML = `Se detectaron <strong>${k100KO}</strong> textos al <strong>100% K</strong> en calado. Pulsa para sobreimprimir en 1 clic.`;
+          } else if (k80KO > 0) {
+            txt.innerHTML = `Se detectaron <strong>${k80KO}</strong> textos al <strong>≥80% K</strong> en calado. Pulsa para sobreimprimir en 1 clic.`;
+          } else {
+            txt.textContent = `Se han detectado ${over.black_text_knockout || 0} textos negros en calado (knockout).`;
+          }
+        }
       }
 
       // 2. Tarjeta en Métricas (Sobreimpresión & Tintas Especiales)
@@ -1767,21 +1801,32 @@
             updateSeparationPreview();
           }
 
+          // Actualizar métricas desglosadas de 100% K y 80% K
+          const elK100KO_fix = document.getElementById('metricBlack100Knockout');
+          const elK80KO_fix = document.getElementById('metricDark80Knockout');
+          if (elK100KO_fix) {
+            elK100KO_fix.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
+          }
+          if (elK80KO_fix && mode === 'all') {
+            elK80KO_fix.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
+          }
+
           // ── BORRAR las incidencias corregidas de la lista (findingsList) ──
           document.querySelectorAll('#findingsList > div').forEach(div => {
             const ruleId = div.dataset.ruleId || '';
             const allText = (div.textContent || '').toLowerCase();
-            const is100KO = (ruleId === 'BLACK_TEXT_KNOCKOUT_100') || (allText.includes('100% k') && allText.includes('calado'));
-            const is80KO  = (ruleId === 'DARK_80_TEXT_KNOCKOUT')  || (allText.includes('80%') && allText.includes('calado'));
-            const isGenericKO = (ruleId === 'BLACK_TEXT_KNOCKOUT') || (allText.includes('calado') && allText.includes('knockout') && !allText.includes('barniz'));
+            const is100KO = (ruleId === 'BLACK_TEXT_KNOCKOUT_100') || (!ruleId && allText.includes('100% k') && !allText.includes('80%'));
+            const is80KO  = (ruleId === 'DARK_80_TEXT_KNOCKOUT')  || (!ruleId && allText.includes('80%'));
+            const isGenericKO = (ruleId === 'BLACK_TEXT_KNOCKOUT') || (!ruleId && allText.includes('calado') && allText.includes('knockout') && !allText.includes('barniz') && !allText.includes('80%'));
 
             if (mode === 'all') {
               if (is100KO || is80KO || isGenericKO) {
                 div.remove(); // Borrar completamente de la ficha
               }
             } else if (mode === 'k100') {
-              if (is100KO) {
-                div.remove(); // Borrar solo las de 100% K
+              // Borrar ÚNICAMENTE las de 100% K, dejando intactas las de 80% K
+              if (is100KO && !is80KO) {
+                div.remove();
               }
             }
           });
@@ -1819,10 +1864,20 @@
             }
           }
 
-          // Ocultar banner si ya no hay calados
+          // Actualizar o ocultar banner de calados tras la corrección
+          const overprintBanner = document.getElementById('findingsOverprintBanner');
           if (mode === 'all' || (data.overprint_stats && data.overprint_stats.black_text_knockout === 0)) {
-            const overprintBanner = document.getElementById('findingsOverprintBanner');
             if (overprintBanner) overprintBanner.classList.add('hidden');
+          } else if (mode === 'k100') {
+            const remaining80 = data.overprint_stats ? (data.overprint_stats.dark_80_knockout ?? 0) : document.querySelectorAll('[data-rule-id="DARK_80_TEXT_KNOCKOUT"]').length;
+            if (remaining80 > 0 && overprintBanner) {
+              const findingsBannerText = document.getElementById('findingsOverprintText');
+              if (findingsBannerText) {
+                findingsBannerText.innerHTML = `<strong>100% K corregido.</strong> Se mantienen <strong>${remaining80}</strong> textos al <strong>≥80% K</strong> en calado. Pulsa <em>"Ambos (100% y ≥80%)"</em> si también deseas sobreimprimirlos.`;
+              }
+            } else if (overprintBanner) {
+              overprintBanner.classList.add('hidden');
+            }
           }
 
         } else {
