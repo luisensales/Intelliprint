@@ -166,7 +166,9 @@ def convert_rgb_images_to_cmyk(
             obj["/BitsPerComponent"] = 8
             obj["/Decode"] = pikepdf.Array([1, 0, 1, 0, 1, 0, 1, 0])
 
-            for key in ["/DecodeParms", "/SMask", "/Mask", "/Intent", "/Alternates"]:
+            # Limpiar parametros tecnicos antiguos incompatibles con el nuevo stream DCTDecode
+            # NOTA: Se conservan expresamente /SMask y /Mask para preservar las mascaras de transparencia (canales alfa)
+            for key in ["/DecodeParms", "/Intent", "/Alternates"]:
                 try:
                     del obj[key]
                 except KeyError:
