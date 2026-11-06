@@ -284,7 +284,8 @@ def _current_fill_is_dark(
     if color_space == "cmyk":
         return k >= dark_k_threshold and c <= cmy_max and m <= cmy_max and y <= cmy_max
     if color_space == "gray" and gray is not None:
-        return gray <= GRAY_DARK_THRESHOLD
+        gray_thresh = 0.01 if dark_k_threshold >= 0.99 else GRAY_DARK_THRESHOLD
+        return gray <= gray_thresh
     return False
 
 

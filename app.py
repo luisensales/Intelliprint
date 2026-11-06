@@ -569,8 +569,11 @@ async def download_cmyk_pdf(job_id: str):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/apply-overprint/{job_id}")
-async def apply_overprint_fix(job_id: str):
-    """Aplica sobreimpresión automática a textos negros oscuros en calado."""
+async def apply_overprint_fix(job_id: str, mode: str = "all"):
+    """
+    Aplica sobreimpresión automática a textos negros en calado.
+    mode: 'all' (ambos: 100% K y >=80% K) o 'k100' (solo negro puro 100% K).
+    """
     # Validar job_id para evitar path traversal
     safe_id = Path(job_id).name
     job_json_path = JOBS_DIR / f"{safe_id}.json"
@@ -592,7 +595,8 @@ async def apply_overprint_fix(job_id: str):
 
     output_path = JOBS_DIR / f"{safe_id}_overprint_fixed.pdf"
 
-    result = apply_overprint_to_dark_text(str(source_pdf), str(output_path))
+    k_threshold = 0.99 if mode == "k100" else 0.80
+    result = apply_overprint_to_dark_text(str(source_pdf), str(output_path), dark_k_threshold=k_threshold)
 
     if not result.get("success"):
         errors = result.get("errors", [])
@@ -608,6 +612,7 @@ async def apply_overprint_fix(job_id: str):
 
     return {
         "status": "success",
+        "mode": mode,
         "pages_modified": result["pages_modified"],
         "text_ops_fixed": result["text_ops_fixed"],
         "errors": result.get("errors", []),
