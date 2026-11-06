@@ -383,6 +383,122 @@
               </div>
             </div>
 
+            <!-- Metrics Card 4: Previsualización de Separaciones de Color (Estilo Acrobat Pro) -->
+            <div class="col-span-1 md:col-span-2 border border-slate-200 rounded-xl p-5 bg-white space-y-4 shadow-sm">
+              <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-100 pb-2.5">
+                <div>
+                  <h4 class="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <i class="fa-solid fa-layer-group text-blue-600"></i> Previsualizador de Separaciones de Color (Acrobat Output Preview)
+                  </h4>
+                  <p class="text-[11px] text-slate-500 mt-0.5">
+                    Inspecciona planchas individuales o desactiva el <strong>Proceso Negro</strong> para comprobar si el texto sobreimprime o cala (knockout) sobre la imagen de fondo.
+                  </p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <label class="text-[11px] font-semibold text-slate-600">Página:</label>
+                  <select id="sepPageSelect" onchange="updateSeparationPreview()" class="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-slate-50 outline-none font-semibold">
+                    <option value="1">Página 1</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Toolbar & Separations Dialog -->
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <!-- Controls Column (like Acrobat Output Preview dialog) -->
+                <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-4">
+                  <div>
+                    <h5 class="text-xs font-bold text-slate-800 flex items-center gap-1.5 mb-2">
+                      <i class="fa-solid fa-sliders text-slate-600"></i> Placas de Proceso CMYK
+                    </h5>
+                    <div class="space-y-2 bg-white p-3 rounded-lg border border-slate-200 text-xs">
+                      <label class="flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded">
+                        <span class="flex items-center gap-2">
+                          <input type="checkbox" id="sepChanC" checked onchange="updateSeparationPreview()" class="rounded text-cyan-600 focus:ring-cyan-500">
+                          <span class="font-medium text-slate-700">Proceso Cian</span>
+                        </span>
+                        <span class="w-3.5 h-3.5 rounded bg-cyan-400 border border-cyan-500"></span>
+                      </label>
+                      <label class="flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded">
+                        <span class="flex items-center gap-2">
+                          <input type="checkbox" id="sepChanM" checked onchange="updateSeparationPreview()" class="rounded text-pink-600 focus:ring-pink-500">
+                          <span class="font-medium text-slate-700">Proceso Magenta</span>
+                        </span>
+                        <span class="w-3.5 h-3.5 rounded bg-pink-500 border border-pink-600"></span>
+                      </label>
+                      <label class="flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded">
+                        <span class="flex items-center gap-2">
+                          <input type="checkbox" id="sepChanY" checked onchange="updateSeparationPreview()" class="rounded text-yellow-500 focus:ring-yellow-400">
+                          <span class="font-medium text-slate-700">Proceso Amarillo</span>
+                        </span>
+                        <span class="w-3.5 h-3.5 rounded bg-yellow-300 border border-yellow-400"></span>
+                      </label>
+                      <label class="flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded">
+                        <span class="flex items-center gap-2">
+                          <input type="checkbox" id="sepChanK" checked onchange="updateSeparationPreview()" class="rounded text-slate-900 focus:ring-slate-900">
+                          <span class="font-bold text-slate-900">Proceso Negro</span>
+                        </span>
+                        <span class="w-3.5 h-3.5 rounded bg-slate-900 border border-slate-950"></span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Quick Presets -->
+                  <div>
+                    <h5 class="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Vistas Rápidas</h5>
+                    <div class="grid grid-cols-2 gap-1.5 text-xs">
+                      <button type="button" onclick="setSepPreset('all')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-semibold transition text-[11px] text-center">
+                        <i class="fa-solid fa-palette text-blue-600 mr-1"></i> Todas (CMYK)
+                      </button>
+                      <button type="button" onclick="setSepPreset('no_k')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg text-amber-900 font-bold transition text-[11px] text-center" title="Desactiva el canal Negro para verificar si el texto cala sobre el fondo">
+                        <i class="fa-solid fa-eye-slash text-amber-600 mr-1"></i> Sin Negro (CMY)
+                      </button>
+                      <button type="button" onclick="setSepPreset('only_k')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-semibold transition text-[11px] text-center">
+                        <i class="fa-solid fa-file text-slate-700 mr-1"></i> Sólo Plancha K
+                      </button>
+                      <button type="button" onclick="setSepPreset('only_c')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-semibold transition text-[11px] text-center">
+                        <i class="fa-solid fa-droplet text-cyan-500 mr-1"></i> Sólo Cian
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Mode & Options -->
+                  <div class="space-y-2 pt-1 border-t border-slate-200 text-xs">
+                    <div class="flex items-center justify-between">
+                      <span class="text-slate-600 font-medium">Modo de visor:</span>
+                      <select id="sepViewMode" onchange="updateSeparationPreview()" class="text-[11px] border border-slate-200 rounded px-2 py-1 bg-white outline-none">
+                        <option value="color">Simulación Color</option>
+                        <option value="grayscale">Película RIP (Gris)</option>
+                      </select>
+                    </div>
+                    <div class="p-2.5 bg-blue-50 border border-blue-100 rounded-lg text-[11px] text-blue-900 space-y-1">
+                      <p class="font-bold flex items-center gap-1">
+                        <i class="fa-solid fa-circle-info text-blue-600"></i> ¿Cómo interpretar?
+                      </p>
+                      <p>
+                        Al pulsar <strong>"Sin Negro (CMY)"</strong>, si el texto tiene calado (knockout), verás su silueta en blanco perforando la imagen. Si sobreimprime, la imagen de fondo se verá continua.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Preview Canvas Column -->
+                <div class="lg:col-span-2 border border-slate-200 rounded-xl p-3 bg-slate-900 flex flex-col items-center justify-center min-h-[400px] relative overflow-hidden">
+                  <!-- Loading overlay -->
+                  <div id="sepLoadingOverlay" class="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center text-white text-xs gap-2 hidden z-10">
+                    <i class="fa-solid fa-spinner fa-spin text-blue-400 text-lg"></i>
+                    <span>Generando separación CMYK...</span>
+                  </div>
+
+                  <!-- Separation image -->
+                  <img id="sepPreviewImg" src="" alt="Previsualización de separación" class="max-h-[500px] w-auto object-contain rounded shadow-lg transition-opacity duration-200 hidden">
+                  <div id="sepEmptyNotice" class="text-slate-400 text-xs text-center py-12">
+                    <i class="fa-solid fa-layer-group text-3xl mb-2 text-slate-600 block"></i>
+                    Sube un PDF para inspeccionar sus separaciones de color.
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -774,6 +890,9 @@
       document.getElementById('metricVarnishKnockout').textContent = over.varnish_knockout;
       document.getElementById('metricPantoneOverprint').textContent = over.pantone_overprint;
 
+      // Inicializar Previsualizador de Separaciones de Color
+      initSeparations(summ.pages || 1);
+
       // Res Detected ICC Badge
       const origIcc = summ.original_icc_detected || {};
       const hasOrigIcc = origIcc.has_output_intent;
@@ -1062,6 +1181,75 @@
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Convertir imágenes RGB → CMYK';
       }
+    }
+
+    // -----------------------------------------------------------------------
+    // Previsualizador de Separaciones de Color (Acrobat Output Preview)
+    // -----------------------------------------------------------------------
+    function initSeparations(pageCount) {
+      const sel = document.getElementById('sepPageSelect');
+      if (!sel) return;
+      sel.innerHTML = '';
+      for (let i = 1; i <= pageCount; i++) {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = `Página ${i}`;
+        sel.appendChild(opt);
+      }
+      updateSeparationPreview();
+    }
+
+    function setSepPreset(preset) {
+      const chC = document.getElementById('sepChanC');
+      const chM = document.getElementById('sepChanM');
+      const chY = document.getElementById('sepChanY');
+      const chK = document.getElementById('sepChanK');
+      if (!chC) return;
+      if (preset === 'all') {
+        chC.checked = true; chM.checked = true; chY.checked = true; chK.checked = true;
+      } else if (preset === 'no_k') {
+        chC.checked = true; chM.checked = true; chY.checked = true; chK.checked = false;
+      } else if (preset === 'only_k') {
+        chC.checked = false; chM.checked = false; chY.checked = false; chK.checked = true;
+      } else if (preset === 'only_c') {
+        chC.checked = true; chM.checked = false; chY.checked = false; chK.checked = false;
+      }
+      updateSeparationPreview();
+    }
+
+    let sepDebounce = null;
+    function updateSeparationPreview() {
+      if (!currentJobId) return;
+      clearTimeout(sepDebounce);
+      sepDebounce = setTimeout(() => {
+        const page = document.getElementById('sepPageSelect')?.value || 1;
+        const c = document.getElementById('sepChanC')?.checked ?? true;
+        const m = document.getElementById('sepChanM')?.checked ?? true;
+        const y = document.getElementById('sepChanY')?.checked ?? true;
+        const k = document.getElementById('sepChanK')?.checked ?? true;
+        const mode = document.getElementById('sepViewMode')?.value || 'color';
+
+        const overlay = document.getElementById('sepLoadingOverlay');
+        const imgEl = document.getElementById('sepPreviewImg');
+        const notice = document.getElementById('sepEmptyNotice');
+
+        if (overlay) overlay.classList.remove('hidden');
+        const url = `/api/separations/${currentJobId}?page=${page}&c=${c}&m=${m}&y=${y}&k=${k}&mode=${mode}&dpi=110&t=${Date.now()}`;
+
+        const tempImg = new Image();
+        tempImg.onload = () => {
+          if (imgEl) {
+            imgEl.src = url;
+            imgEl.classList.remove('hidden');
+          }
+          if (notice) notice.classList.add('hidden');
+          if (overlay) overlay.classList.add('hidden');
+        };
+        tempImg.onerror = () => {
+          if (overlay) overlay.classList.add('hidden');
+        };
+        tempImg.src = url;
+      }, 100);
     }
 
   </script>

@@ -10,7 +10,7 @@ from typing import Optional
 from datetime import datetime
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import pymupdf
@@ -20,6 +20,7 @@ from icc_manager import get_available_icc_profiles, detect_pdf_output_intent
 from spellcheck_engine import save_word_to_glossary
 from report_generator import generate_preflight_certificate_pdf
 from color_converter import convert_rgb_images_to_cmyk, extract_embedded_icc_to_tempfile
+from separations_viewer import render_page_separation
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -560,6 +561,62 @@ async def download_cmyk_pdf(job_id: str):
         media_type="application/pdf",
         filename=f"IntelliPrint_CMYK_{clean_name}.pdf",
     )
+
+
+@app.get("/api/separations/{job_id}")
+async def get_page_separation(
+    job_id: str,
+    page: int = 1,
+    c: bool = True,
+    m: bool = True,
+    y: bool = True,
+    k: bool = True,
+    mode: str = "color",
+    dpi: int = 110,
+    use_converted: bool = True
+):
+    """
+    Renderiza la simulación de separaciones de color CMYK para la página seleccionada.
+    Permite activar/desactivar individualmente planchas de Cian, Magenta, Amarillo y Negro
+    para verificar visualmente sobreimpresiones y calados como en Adobe Acrobat Output Preview.
+    """
+    job_json_path = JOBS_DIR / f"{job_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    converted_path = job_data.get("job_meta", {}).get("cmyk_converted_pdf_path")
+    original_path = job_data.get("job_meta", {}).get("pdf_path")
+
+    target_pdf = None
+    if use_converted and converted_path and os.path.exists(converted_path):
+        target_pdf = converted_path
+    elif original_path and os.path.exists(original_path):
+        target_pdf = original_path
+
+    if not target_pdf:
+        raise HTTPException(status_code=404, detail="Archivo PDF no encontrado en el servidor.")
+
+    selected_icc = job_data.get("job_meta", {}).get("selected_icc")
+    icc_cmyk_path = (BASE_DIR / "icc_profiles" / selected_icc) if selected_icc else None
+
+    try:
+        img_bytes = render_page_separation(
+            pdf_path=target_pdf,
+            page_index=max(0, page - 1),
+            show_c=c,
+            show_m=m,
+            show_y=y,
+            show_k=k,
+            view_mode=mode,
+            dpi=min(200, max(60, dpi)),
+            icc_cmyk_path=icc_cmyk_path
+        )
+        return Response(content=img_bytes, media_type="image/jpeg")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error renderizando separación: {e}")
 
 
 if __name__ == "__main__":
