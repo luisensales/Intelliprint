@@ -154,29 +154,36 @@ def generate_preflight_certificate_pdf(job_data, output_path):
 
     tech = triple.get("technical", {})
     all_findings  = job_data.get("findings", [])
-    cmyk_converted = meta.get("cmyk_converted_pdf_path")
-    overprint_fixed = meta.get("overprint_fixed_pdf_path")
 
-    adj_warnings = tech.get("warnings_count", 0)
-    adj_errors   = tech.get("errors_count",   0)
+    # Filtrar incidencias resueltas según historial de correcciones
+    findings = list(all_findings)
+    if meta.get("has_cmyk_converted") or meta.get("cmyk_converted_pdf_path"):
+        findings = [f for f in findings
+                    if "rgb" not in f.get("title", "").lower()
+                    and "rgb" not in f.get("message", "").lower()]
 
-    if cmyk_converted:
-        rgb_findings = [f for f in all_findings
-                        if "rgb" in f.get("title", "").lower() or "rgb" in f.get("message", "").lower()]
-        rgb_warnings = sum(1 for f in rgb_findings if f.get("severity") != "ERROR")
-        rgb_errors   = sum(1 for f in rgb_findings if f.get("severity") == "ERROR")
-        adj_warnings = max(0, adj_warnings - rgb_warnings)
-        adj_errors   = max(0, adj_errors - rgb_errors)
+    if meta.get("has_overprint_fixed") or meta.get("overprint_fixed_pdf_path"):
+        op_mode = meta.get("overprint_mode", "all")
+        if op_mode == "k100":
+            findings = [f for f in findings
+                        if f.get("rule_id") != "BLACK_TEXT_KNOCKOUT_100"
+                        and "100% k" not in f.get("title", "").lower()]
+        else:
+            findings = [f for f in findings
+                        if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "DARK_80_TEXT_KNOCKOUT")
+                        and not (("calado" in f.get("title", "").lower() or "knockout" in f.get("title", "").lower())
+                                 and "barniz" not in f.get("title", "").lower())]
 
-    if overprint_fixed:
-        op_findings = [f for f in all_findings
-                       if f.get("rule_id") in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "DARK_80_TEXT_KNOCKOUT")
-                       or "calado" in f.get("title", "").lower()]
-        op_warnings = sum(1 for f in op_findings if f.get("severity") != "ERROR")
-        adj_warnings = max(0, adj_warnings - op_warnings)
+    if meta.get("has_varnish_overprint_fixed"):
+        findings = [f for f in findings
+                    if f.get("rule_id") != "VARNISH_KNOCKOUT"
+                    and "barniz" not in f.get("title", "").lower()]
+
+    adj_errors   = sum(1 for f in findings if f.get("severity") == "ERROR")
+    adj_warnings = sum(1 for f in findings if f.get("severity") == "WARNING")
 
     if adj_errors > 0:
-        t_status = "FAIL";            t_label = tech.get("label", "NO CUMPLE")
+        t_status = "FAIL";            t_label = "NO CUMPLE"
     elif adj_warnings > 0:
         t_status = "PASS_WITH_WARNINGS"; t_label = "CUMPLE CON AVISOS"
     else:
@@ -247,19 +254,8 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     y += 30
 
     # -----------------------------------------------------------------------
-    # Findings con paginación dinámica
+    # Findings con paginación dinámica (usando la lista ya filtrada)
     # -----------------------------------------------------------------------
-    findings = list(all_findings)
-    if cmyk_converted:
-        findings = [f for f in findings
-                    if "rgb" not in f.get("title", "").lower()
-                    and "rgb" not in f.get("message", "").lower()]
-
-    if overprint_fixed:
-        findings = [f for f in findings
-                    if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "DARK_80_TEXT_KNOCKOUT")
-                    and "calado" not in f.get("title", "").lower()]
-
     # Límite inferior del área útil en cada página
     BOTTOM_LIMIT = FOOTER_Y - 15
 
@@ -301,13 +297,16 @@ def generate_preflight_certificate_pdf(job_data, output_path):
             page.draw_rect(pymupdf.Rect(MARGIN_X, y, PAGE_W - MARGIN_X, y + FINDINGS_ROW_H - 4),
                            fill=fill_col, color=b_col, width=0.5)
 
-            title_text = f"{badge} Pág {f.get('page', 1)}: {f.get('title', '')}"
-            if len(title_text) > 88: title_text = title_text[:85] + "..."
-            page.insert_text(pymupdf.Point(42, y + 14), title_text, fontsize=8, fontname="helv", color=b_col)
+            raw_title = f"{badge} Pág {f.get('page', 1)}: {f.get('title', '')}"
+            # Reemplazar símbolos matemáticos no compatibles con Helvetica en PyMuPDF
+            clean_title = raw_title.replace("≥", ">=").replace("≤", "<=")
+            if len(clean_title) > 88: clean_title = clean_title[:85] + "..."
+            page.insert_text(pymupdf.Point(42, y + 14), clean_title, fontsize=8, fontname="helv", color=b_col)
 
-            msg = f.get("message", "")
-            if len(msg) > 100: msg = msg[:97] + "..."
-            page.insert_text(pymupdf.Point(42, y + 28), msg, fontsize=7, fontname="helv", color=p["slate"])
+            raw_msg = f.get("message", "")
+            clean_msg = raw_msg.replace("≥", ">=").replace("≤", "<=")
+            if len(clean_msg) > 100: clean_msg = clean_msg[:97] + "..."
+            page.insert_text(pymupdf.Point(42, y + 28), clean_msg, fontsize=7, fontname="helv", color=p["slate"])
 
             y += FINDINGS_ROW_H
 

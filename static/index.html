@@ -252,6 +252,22 @@
 
         <!-- Tab 1: Findings List -->
         <div id="tab-findings" class="tab-content p-6 space-y-3">
+          <!-- Banner Sobreimpresión de Barnices / Tintas Técnicas (Error Crítico) -->
+          <div id="findingsVarnishBanner" class="hidden p-3.5 bg-red-50 border border-red-300 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
+            <div class="flex items-start gap-2.5">
+              <i class="fa-solid fa-triangle-exclamation text-red-600 mt-0.5 text-sm shrink-0"></i>
+              <div>
+                <p class="font-bold text-red-900">Error Crítico: Tinta Técnica / Barniz en Calado (Knockout)</p>
+                <p id="findingsVarnishText" class="text-[11px] text-red-700 mt-0.5">El barniz o acabado está calando y borrará la cuatricromía inferior en plancha. Debe sobreimprimir obligatoriamente.</p>
+              </div>
+            </div>
+            <div class="shrink-0 flex items-center gap-1.5 flex-wrap">
+              <button onclick="applyVarnishOverprintFix()" class="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap btn-apply-varnish-overprint" title="Sobreimprime barnices y troqueles técnicos en 1 clic">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Sobreimprimir Barnices en 1 Clic
+              </button>
+            </div>
+          </div>
+
           <!-- Banner Auto-Trapping en Incidencias -->
           <div id="findingsOverprintBanner" class="hidden p-3.5 bg-amber-50 border border-amber-300 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
             <div class="flex items-start gap-2.5">
@@ -358,9 +374,15 @@
                   <span>Barnices en sobreimpresión (obligatorio):</span>
                   <span id="metricVarnishOverprint" class="font-bold text-emerald-600">0</span>
                 </li>
-                <li class="flex justify-between py-1 border-b border-slate-100">
+                <li class="flex justify-between items-center py-1 border-b border-slate-100">
                   <span>Barnices en calado (error crítico):</span>
-                  <span id="metricVarnishKnockout" class="font-bold text-red-600">0</span>
+                  <div class="flex items-center gap-2">
+                    <span id="metricVarnishKnockout" class="font-bold text-red-600">0</span>
+                    <button id="btnFixVarnishCard" onclick="applyVarnishOverprintFix()"
+                      class="hidden text-[10px] bg-red-600 hover:bg-red-700 text-white font-bold px-2 py-0.5 rounded shadow-xs cursor-pointer btn-apply-varnish-overprint" title="Sobreimprime barnices en 1 clic">
+                      <i class="fa-solid fa-wand-magic-sparkles"></i> Sobreimprimir
+                    </button>
+                  </div>
                 </li>
                 <li class="flex justify-between py-1">
                   <span>Pantones sobreimprimiendo (aviso):</span>
@@ -1202,6 +1224,13 @@
       document.getElementById('metricVarnishKnockout').textContent = over.varnish_knockout || 0;
       document.getElementById('metricPantoneOverprint').textContent = over.pantone_overprint || 0;
 
+      // Sincronizar aviso y botón de barnices en calado (error crítico)
+      const hasVarnishKO = (over.varnish_knockout || 0) > 0;
+      const varnishBanner = document.getElementById('findingsVarnishBanner');
+      if (varnishBanner) varnishBanner.classList.toggle('hidden', !hasVarnishKO);
+      const btnVarnishCard = document.getElementById('btnFixVarnishCard');
+      if (btnVarnishCard) btnVarnishCard.classList.toggle('hidden', !hasVarnishKO);
+
       // Sincronizar todos los paneles y botones de Auto-Trapping (en Métricas, Separaciones e Incidencias)
       const hasKnockout = (over.black_text_knockout || 0) > 0;
       const isDigital = (data.job_meta && data.job_meta.profile_id === 'DIGITAL_200');
@@ -1648,7 +1677,7 @@
             const allText = (div.textContent || '').toLowerCase();
             const is100KO = (ruleId === 'BLACK_TEXT_KNOCKOUT_100') || (allText.includes('100% k') && allText.includes('calado'));
             const is80KO  = (ruleId === 'DARK_80_TEXT_KNOCKOUT')  || (allText.includes('80%') && allText.includes('calado'));
-            const isGenericKO = (ruleId === 'BLACK_TEXT_KNOCKOUT') || (allText.includes('calado') && allText.includes('knockout'));
+            const isGenericKO = (ruleId === 'BLACK_TEXT_KNOCKOUT') || (allText.includes('calado') && allText.includes('knockout') && !allText.includes('barniz'));
 
             if (mode === 'all') {
               if (is100KO || is80KO || isGenericKO) {
@@ -1717,6 +1746,115 @@
         allButtons.forEach(b => {
           b.disabled = false;
           b.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Reintentar Auto-Trapping';
+        });
+      }
+    }
+
+    async function applyVarnishOverprintFix() {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo. Sube un PDF primero.');
+        return;
+      }
+      const allButtons = document.querySelectorAll('.btn-apply-varnish-overprint');
+      allButtons.forEach(b => {
+        b.disabled = true;
+        b.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sobreimprimiendo...';
+      });
+
+      try {
+        const res = await fetch(`/api/apply-varnish-overprint/${currentJobId}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          allButtons.forEach(b => {
+            b.disabled = false;
+            b.className = b.className.replace(/bg-red-\d+/, 'bg-emerald-600').replace(/hover:bg-red-\d+/, 'hover:bg-emerald-700');
+            b.innerHTML = '<i class="fa-solid fa-circle-check"></i> Barniz Sobreimpreso';
+          });
+
+          // Actualizar métricas
+          const koVarnishEl = document.getElementById('metricVarnishKnockout');
+          if (koVarnishEl) koVarnishEl.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
+          const opVarnishEl = document.getElementById('metricVarnishOverprint');
+          if (opVarnishEl && data.overprint_stats) {
+            opVarnishEl.textContent = data.overprint_stats.varnish_overprint;
+          }
+
+          // Actualizar banner en Incidencias
+          const banner = document.getElementById('findingsVarnishBanner');
+          if (banner) {
+            banner.className = 'p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center gap-3 text-xs shadow-xs text-emerald-800';
+            banner.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i> <span><strong>¡Sobreimpresión obligatoria aplicada a barnices y tintas técnicas!</strong> Se corrigieron ${data.objects_fixed} objetos. Las tintas cuatricromía subyacentes se imprimirán sin calado.</span>`;
+          }
+
+          // Eliminar incidencias de VARNISH_KNOCKOUT del DOM
+          document.querySelectorAll('#findingsList > div').forEach(div => {
+            const ruleId = div.dataset.ruleId || '';
+            const allText = (div.textContent || '').toLowerCase();
+            if (ruleId === 'VARNISH_KNOCKOUT' || (allText.includes('barniz') && allText.includes('calado'))) {
+              div.remove();
+            }
+          });
+
+          // Sincronizar contador de incidencias
+          const countEl = document.getElementById('findingsCount');
+          if (data.findings) {
+            if (countEl) countEl.textContent = data.findings.length;
+            if (data.findings.length === 0) {
+              const findingsListEl = document.getElementById('findingsList');
+              if (findingsListEl) {
+                findingsListEl.innerHTML = '<div class="p-4 bg-emerald-50 text-emerald-800 rounded-lg text-xs font-medium">✅ El documento supera todos los requisitos obligatorios y avisos del perfil. Todas las incidencias han sido resueltas.</div>';
+              }
+            }
+          }
+
+          // Actualizar dictamen técnico general si viene del backend
+          if (data.triple_result && data.triple_result.technical) {
+            const tech = data.triple_result.technical;
+            const techBadge = document.getElementById('badgeTechnical');
+            const descTech = document.getElementById('descTechnical');
+            if (techBadge) {
+              techBadge.textContent = tech.label;
+              if (tech.status === 'PASS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-emerald-100 text-emerald-800 border border-emerald-200';
+              } else if (tech.status === 'PASS_WITH_WARNINGS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-amber-100 text-amber-800 border border-amber-200';
+              } else {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-red-100 text-red-800 border border-red-200';
+              }
+            }
+            if (descTech) {
+              descTech.textContent = `${tech.errors_count} errores críticos, ${tech.warnings_count} advertencias.`;
+            }
+          }
+
+          // Actualizar botón de descarga principal de la cabecera
+          const pdfBtn = document.getElementById('downloadPdfBtn');
+          const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+          if (pdfBtn && data.download_url) {
+            pdfBtn.href = data.download_url;
+            pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+          }
+          if (pdfBtnLabel) {
+            pdfBtnLabel.textContent = 'Descargar PDF (Barniz Sobreimpreso)';
+          }
+
+          // Refrescar visor de separaciones
+          if (typeof updateSeparationPreview === 'function') {
+            updateSeparationPreview();
+          }
+        } else {
+          alert('Error al sobreimprimir barnices: ' + (data.detail || 'Error desconocido'));
+          allButtons.forEach(b => {
+            b.disabled = false;
+            b.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Reintentar';
+          });
+        }
+      } catch (err) {
+        alert('Error de conexión: ' + err.message);
+        allButtons.forEach(b => {
+          b.disabled = false;
+          b.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Reintentar';
         });
       }
     }
@@ -1833,19 +1971,22 @@
           btnShowCmyk.className = 'flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-full';
         }
 
-        // ── 4. Actualizar lista de Incidencias Técnicas (findingsList)
+        // ── 4. Actualizar lista de Incidencias Técnicas (findingsList) eliminando las incidencias de RGB resueltas
         document.querySelectorAll('#findingsList > div').forEach(div => {
           const text = div.textContent || '';
           if (text.includes('RGB') || text.includes('Espacio de color')) {
-            div.className = 'p-3 rounded-lg border text-xs flex items-start gap-3 bg-emerald-50/70 border-emerald-200 text-emerald-900 transition-all';
-            const iconDiv = div.querySelector('div:first-child');
-            if (iconDiv) iconDiv.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600"></i>';
-            const titleSpan = div.querySelector('span.font-bold');
-            if (titleSpan && !titleSpan.innerHTML.includes('Resuelto')) {
-              titleSpan.innerHTML += ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-800 font-bold ml-1">✓ Resuelto en PDF CMYK</span>';
-            }
+            div.remove();
           }
         });
+        const remainingCount = document.querySelectorAll('#findingsList > div').length;
+        const countEl = document.getElementById('findingsCount');
+        if (countEl) countEl.textContent = remainingCount;
+        if (remainingCount === 0) {
+          const findingsListEl = document.getElementById('findingsList');
+          if (findingsListEl) {
+            findingsListEl.innerHTML = '<div class="p-4 bg-emerald-50 text-emerald-800 rounded-lg text-xs font-medium">✅ El documento supera todos los requisitos obligatorios y avisos del perfil. Todas las incidencias han sido resueltas.</div>';
+          }
+        }
 
         // ── 5. Actualizar KPI Card de Color (badgeColor)
         const badgeColor = document.getElementById('badgeColor');

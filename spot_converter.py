@@ -307,3 +307,4 @@ def _transform_stream_spots_to_cmyk(
         new_commands.append((operands, op))
 
     return new_commands
+
