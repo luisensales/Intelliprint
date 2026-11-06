@@ -217,17 +217,21 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
             is_fill = (mode in [0, 2])
             is_stroke = (mode in [1, 2])
 
-            is_pure_black = False
+            is_dark_black = False
+            k_percent = 100
             cs_type, spot_name = state['fill_cs']
             if cs_type == 'DeviceGray' and len(state['fill_color']) >= 1:
-                if abs(state['fill_color'][0]) < 0.01:
-                    is_pure_black = True
+                gray_val = state['fill_color'][0]
+                if gray_val <= 0.30:
+                    is_dark_black = True
+                    k_percent = int(round((1.0 - gray_val) * 100))
             elif cs_type == 'DeviceCMYK' and len(state['fill_color']) >= 4:
                 c, m, y, k = state['fill_color'][:4]
-                if c < 0.01 and m < 0.01 and y < 0.01 and k >= 0.99:
-                    is_pure_black = True
+                if c <= 0.05 and m <= 0.05 and y <= 0.05 and k >= 0.70:
+                    is_dark_black = True
+                    k_percent = int(round(k * 100))
 
-            if is_pure_black and is_fill:
+            if is_dark_black and is_fill:
                 if state['op']:
                     overprint_data["black_text_overprint"] += 1
                 else:
@@ -239,8 +243,8 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
                             "type": "BLACK_TEXT_KNOCKOUT",
                             "severity": "WARNING",
                             "category": "Sobreimpresión",
-                            "title": "Texto negro 100% en calado (knockout)",
-                            "message": f"Texto en negro 100% K sin sobreimpresión en pág {page_num}. Debe sobreimprimir para evitar filetes blancos por desajuste de registro."
+                            "title": "Texto negro u oscuro (≥70% K) en calado (knockout)",
+                            "message": f"Texto en negro u oscuro ({k_percent}% K) sin sobreimpresión en pág {page_num}. Debe sobreimprimir para evitar filetes blancos por desajuste de registro."
                         })
 
             if spot_name:
