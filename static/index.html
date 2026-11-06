@@ -1469,12 +1469,16 @@
           }
 
           // ── Actualizar lista de Incidencias Técnicas (findingsList) ──
+          // Buscar por data-rule-id (nuevo) O por texto del título (fallback para cachés)
+          let knockoutResolved = 0;
           document.querySelectorAll('#findingsList > div').forEach(div => {
             const ruleId = div.dataset.ruleId || '';
-            if (ruleId !== 'BLACK_TEXT_KNOCKOUT') return;
+            const titleText = div.querySelector('span.font-bold')?.textContent || '';
+            const isKnockout = ruleId === 'BLACK_TEXT_KNOCKOUT'
+              || titleText.includes('calado') || titleText.includes('knockout')
+              || titleText.includes('80%') || titleText.includes('negro');
+            if (!isKnockout) return;
 
-            // mode='all' resuelve todos; mode='k100' solo el finding de 100% K
-            // (Solo hay un finding por tipo, así que lo marcamos igualmente)
             div.className = 'p-3 rounded-lg border text-xs flex items-start gap-3 bg-emerald-50/70 border-emerald-200 text-emerald-900 transition-all';
             const iconDiv = div.querySelector('div:first-child');
             if (iconDiv) iconDiv.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600"></i>';
@@ -1483,19 +1487,19 @@
               const label = mode === 'all' ? 'Ambos corregidos' : '100% K corregido';
               titleSpan.innerHTML += ` <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-800 font-bold ml-1">✓ Auto-Trapping aplicado (${label})</span>`;
             }
+            knockoutResolved++;
           });
 
-          // Actualizar contador de Incidencias y ocultar banner si se resolvió todo
-          if (mode === 'all') {
-            // Ocultar el banner del aviso de sobreimpresión en Incidencias
+          // Ocultar el banner y actualizar contador de Incidencias
+          if (mode === 'all' || knockoutResolved > 0) {
             const overprintBanner = document.getElementById('findingsOverprintBanner');
             if (overprintBanner) overprintBanner.classList.add('hidden');
-
-            // Restar 1 al contador de incidencias (el finding BLACK_TEXT_KNOCKOUT)
+          }
+          if (mode === 'all' && knockoutResolved > 0) {
             const countEl = document.getElementById('findingsCount');
             if (countEl) {
               const current = parseInt(countEl.textContent) || 0;
-              countEl.textContent = Math.max(0, current - 1);
+              countEl.textContent = Math.max(0, current - knockoutResolved);
             }
           }
 
