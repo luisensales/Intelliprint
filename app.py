@@ -22,6 +22,7 @@ from report_generator import generate_preflight_certificate_pdf
 from color_converter import convert_rgb_images_to_cmyk, extract_embedded_icc_to_tempfile
 from separations_viewer import render_page_separation
 from overprint_fixer import apply_overprint_to_dark_text
+from spot_converter import convert_spot_colors_to_cmyk
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -581,6 +582,102 @@ async def download_cmyk_pdf(job_id: str):
         media_type="application/pdf",
         filename=f"IntelliPrint_CMYK_{clean_name}.pdf",
     )
+
+
+# ---------------------------------------------------------------------------
+# Conversión de Tintas Planas / Directas a CMYK (Cuatricromía)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/convert-spots-to-cmyk/{job_id}")
+async def convert_spots_to_cmyk_endpoint(job_id: str, target_spots: Optional[str] = Form(None)):
+    """
+    Convierte tintas planas / directas (Pantone, directas) a cuatricromía (CMYK de proceso).
+    Preserva intactas las tintas técnicas como barnices, lacas y troqueles.
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    # Fuente acumulativa: overprint_fixed > cmyk_converted > original
+    source_pdf = (
+        job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not source_pdf or not Path(source_pdf).exists():
+        raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
+
+    output_path = JOBS_DIR / f"{safe_id}_cmyk_converted.pdf"
+
+    target_list = None
+    if target_spots:
+        target_list = [s.strip() for s in target_spots.split(",") if s.strip()]
+
+    conv_result = convert_spot_colors_to_cmyk(
+        pdf_path=source_pdf,
+        output_path=output_path,
+        target_spots=target_list,
+        convert_technical=False
+    )
+
+    if not conv_result.get("success"):
+        errors = conv_result.get("errors", [])
+        raise HTTPException(status_code=500, detail=f"Fallo al convertir tintas planas: {'; '.join(errors)}")
+
+    # Guardar paths en job_meta
+    job_data["job_meta"]["cmyk_converted_pdf_path"] = str(output_path)
+    if job_data["job_meta"].get("overprint_fixed_pdf_path"):
+        job_data["job_meta"]["overprint_fixed_pdf_path"] = ""
+
+    converted_names = {s["name"] for s in conv_result.get("spots_converted", [])}
+
+    # Actualizar la lista de spot_colors en el job summary
+    spots_remaining = [
+        s for s in job_data.get("job_summary", {}).get("spot_colors", [])
+        if s.get("name") not in converted_names
+    ]
+    job_data["job_summary"]["spot_colors"] = spots_remaining
+
+    # Eliminar de findings los avisos relacionados con las tintas convertidas (ej. sobreimpresion de Pantone)
+    job_data["findings"] = [
+        f for f in job_data.get("findings", [])
+        if not any(name.lower() in f.get("title", "").lower() or name.lower() in f.get("message", "").lower() for name in converted_names)
+    ]
+
+    # Recalcular resultado técnico
+    all_findings = job_data.get("findings", [])
+    errs = sum(1 for f in all_findings if f.get("severity") == "ERROR")
+    warns = sum(1 for f in all_findings if f.get("severity") == "WARNING")
+    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
+    tech["errors_count"] = errs
+    tech["warnings_count"] = warns
+    tech["status"] = "FAIL" if errs > 0 else ("PASS_WITH_WARNINGS" if warns > 0 else "PASS")
+    tech["label"] = "NO CUMPLE" if errs > 0 else ("CUMPLE CON AVISOS" if warns > 0 else "CUMPLE")
+
+    # Regenerar el certificado oficial en PDF
+    cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
+    try:
+        generate_preflight_certificate_pdf(job_data, cert_path)
+    except Exception as e:
+        print(f"[convert-spots] Aviso: no se pudo regenerar certificado PDF: {e}")
+
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "success",
+        "spots_converted": conv_result.get("spots_converted", []),
+        "pages_modified": conv_result.get("pages_modified", 0),
+        "remaining_spots": spots_remaining,
+        "download_url": f"/api/download-cmyk/{safe_id}",
+        "findings": job_data["findings"],
+        "triple_result": job_data["triple_result"],
+    }
 
 
 # ---------------------------------------------------------------------------

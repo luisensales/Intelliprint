@@ -608,6 +608,13 @@
                   <div id="sepSpotPlatesList" class="space-y-2 bg-white p-3 rounded-lg border border-slate-200 text-xs">
                     <p class="text-slate-400 italic text-[11px] text-center py-1">Sin tintas planas en el documento</p>
                   </div>
+                  <!-- Acción para convertir Tintas Planas a CMYK -->
+                  <div id="convertSpotsBox" class="hidden mt-2 pt-2 border-t border-slate-100 space-y-1.5">
+                    <button id="btnConvertSpots" onclick="convertSpotsToCmyk()" class="w-full flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-xs cursor-pointer" title="Descompone las tintas planas comerciales (Pantone/directas) en cuatricromía CMYK para impresión a 4 tintas">
+                      <i class="fa-solid fa-wand-magic-sparkles"></i> Convertir tintas planas a CMYK
+                    </button>
+                    <div id="convertSpotsStatus" class="hidden text-[11px]"></div>
+                  </div>
                 </div>
 
                 <!-- Quick Presets -->
@@ -980,6 +987,16 @@
       if (signedPanel) signedPanel.classList.add('hidden');
       const doneRow = document.getElementById('metricOverprintDoneRow');
       if (doneRow) doneRow.classList.add('hidden');
+      const convertSpotsBox = document.getElementById('convertSpotsBox');
+      if (convertSpotsBox) convertSpotsBox.classList.add('hidden');
+      const convertSpotsStatus = document.getElementById('convertSpotsStatus');
+      if (convertSpotsStatus) { convertSpotsStatus.classList.add('hidden'); convertSpotsStatus.innerHTML = ''; }
+      const btnSpots = document.getElementById('btnConvertSpots');
+      if (btnSpots) {
+        btnSpots.disabled = false;
+        btnSpots.className = 'w-full flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-xs cursor-pointer';
+        btnSpots.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Convertir tintas planas a CMYK';
+      }
 
       // 7. Resetear pestañas al primer tab (Incidencias)
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
@@ -1877,6 +1894,7 @@
       disabledSpotColors.clear();
       const listEl = document.getElementById('sepSpotPlatesList');
       const countBadge = document.getElementById('sepSpotCountBadge');
+      const convertBox = document.getElementById('convertSpotsBox');
       if (!listEl) return;
 
       if (!spots || spots.length === 0) {
@@ -1885,12 +1903,19 @@
           countBadge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200';
         }
         listEl.innerHTML = '<p class="text-slate-400 italic text-[11px] text-center py-1">Sin tintas planas en el documento</p>';
+        if (convertBox) convertBox.classList.add('hidden');
         return;
       }
 
       if (countBadge) {
         countBadge.textContent = spots.length;
         countBadge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200';
+      }
+
+      // Comprobar si hay tintas convertibles (Pantone / comerciales, no barnices)
+      const hasConvertible = spots.some(s => s.type !== 'BARNIZ' && !s.name.toLowerCase().includes('barniz') && !s.name.toLowerCase().includes('troquel'));
+      if (convertBox) {
+        convertBox.classList.toggle('hidden', !hasConvertible);
       }
 
       listEl.innerHTML = '';
@@ -1910,6 +1935,129 @@
         `;
         listEl.appendChild(label);
       });
+    }
+
+    async function convertSpotsToCmyk() {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo.');
+        return;
+      }
+
+      const btn = document.getElementById('btnConvertSpots');
+      const statusEl = document.getElementById('convertSpotsStatus');
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Descomponiendo en CMYK...';
+      }
+      if (statusEl) {
+        statusEl.classList.remove('hidden');
+        statusEl.innerHTML = '<span class="text-slate-500"><i class="fa-solid fa-spinner fa-spin mr-1 text-indigo-500"></i>Convirtiendo tintas planas a cuatricromía...</span>';
+      }
+
+      try {
+        const res = await fetch(`/api/convert-spots-to-cmyk/${currentJobId}`, { method: 'POST' });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'success') {
+          const nConverted = data.spots_converted.length;
+          const detailsStr = data.spots_converted.map(s => `<strong>${s.name}</strong> (${s.cmyk_str})`).join('<br>');
+
+          if (statusEl) {
+            statusEl.innerHTML = `
+              <div class="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 space-y-1 mt-1">
+                <div class="font-bold flex items-center gap-1.5 text-xs">
+                  <i class="fa-solid fa-circle-check text-emerald-600"></i> ${nConverted} tinta(s) convertida(s) a CMYK
+                </div>
+                <div class="text-[10px] text-emerald-700 leading-tight">${detailsStr}</div>
+                <div class="pt-1 text-[10px] text-slate-500">Planchas directas eliminadas. El documento se imprimirá en 4 tintas CMYK.</div>
+              </div>
+            `;
+          }
+
+          if (btn) {
+            btn.disabled = false;
+            btn.className = btn.className.replace('bg-indigo-600', 'bg-emerald-600').replace('hover:bg-indigo-700', 'hover:bg-emerald-700');
+            btn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Tintas en CMYK (OK)';
+          }
+
+          // Actualizar botón azul principal de descarga para que descargue el PDF con las tintas convertidas
+          const pdfBtn = document.getElementById('downloadPdfBtn');
+          const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+          if (pdfBtn && data.download_url) {
+            pdfBtn.href = data.download_url;
+            pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+          }
+          if (pdfBtnLabel) {
+            pdfBtnLabel.textContent = 'Descargar PDF (CMYK + Tintas OK)';
+          }
+
+          // Actualizar placas restantes en el visor de separaciones
+          renderSpotPlates(data.remaining_spots || []);
+
+          // Refrescar visor de separaciones de inmediato
+          updateSeparationPreview();
+
+          // Sincronizar findings e incidencias si se resolvieron avisos de Pantone
+          if (data.findings) {
+            const countEl = document.getElementById('findingsCount');
+            if (countEl) countEl.textContent = data.findings.length;
+            // Eliminar de la lista de findings los divs asociados
+            data.spots_converted.forEach(spot => {
+              const spotLower = spot.name.toLowerCase();
+              document.querySelectorAll('#findingsList > div').forEach(div => {
+                const txt = (div.textContent || '').toLowerCase();
+                if (txt.includes(spotLower)) div.remove();
+              });
+            });
+            if (data.findings.length === 0) {
+              const findingsListEl = document.getElementById('findingsList');
+              if (findingsListEl) {
+                findingsListEl.innerHTML = '<div class="p-4 bg-emerald-50 text-emerald-800 rounded-lg text-xs font-medium">✅ El documento supera todos los requisitos obligatorios y avisos del perfil. Todas las incidencias han sido resueltas.</div>';
+              }
+            }
+          }
+
+          // Actualizar dictamen técnico general si viene del backend
+          if (data.triple_result && data.triple_result.technical) {
+            const tech = data.triple_result.technical;
+            const techBadge = document.getElementById('badgeTechnical');
+            const descTech = document.getElementById('descTechnical');
+            if (techBadge) {
+              techBadge.textContent = tech.label;
+              if (tech.status === 'PASS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-emerald-100 text-emerald-800 border border-emerald-200';
+              } else if (tech.status === 'PASS_WITH_WARNINGS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-amber-100 text-amber-800 border border-amber-200';
+              } else {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-red-100 text-red-800 border border-red-200';
+              }
+            }
+            if (descTech) {
+              descTech.textContent = `${tech.errors_count} errores críticos, ${tech.warnings_count} advertencias.`;
+            }
+          }
+
+        } else {
+          const errMsg = data.detail || (data.errors && data.errors.join('; ')) || 'Error al procesar la conversión';
+          if (statusEl) {
+            statusEl.innerHTML = `<div class="p-2 rounded bg-red-50 text-red-700 text-xs mt-1 border border-red-200"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${errMsg}</div>`;
+          }
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> Reintentar conversión';
+          }
+        }
+      } catch (err) {
+        if (statusEl) {
+          statusEl.innerHTML = `<div class="p-2 rounded bg-red-50 text-red-700 text-xs mt-1 border border-red-200"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error de red: ${err.message}</div>`;
+        }
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> Reintentar conversión';
+        }
+      }
     }
 
     function toggleSpotPlate(name, isChecked) {
