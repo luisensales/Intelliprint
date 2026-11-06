@@ -167,3 +167,4 @@ def fix_pdf_boxes_and_bleed(
         "bleed_mm": target_bleed_mm,
         "details": pages_detail
     }
+

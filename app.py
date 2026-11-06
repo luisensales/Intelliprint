@@ -25,6 +25,7 @@ from overprint_fixer import apply_overprint_to_dark_text, apply_overprint_to_tec
 from spot_converter import convert_spot_colors_to_cmyk
 from hairline_fixer import fix_hairlines
 from geometry_fixer import fix_pdf_boxes_and_bleed
+from font_vectorizer import outline_fonts_in_pdf
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -449,6 +450,7 @@ async def download_pdf_file(job_id: str):
     meta = job_data.get("job_meta", {})
     pdf_p = (
         meta.get("last_fixed_pdf_path")
+        or meta.get("fonts_outlined_pdf_path")
         or meta.get("bleed_fixed_pdf_path")
         or meta.get("hairline_fixed_pdf_path")
         or meta.get("icc_fixed_pdf_path")
@@ -1193,6 +1195,124 @@ async def download_bleed_pdf(job_id: str):
         path=fixed_path,
         media_type="application/pdf",
         filename=f"IntelliPrint_{clean_name}_Bleed_OK.pdf"
+    )
+
+
+@app.post("/api/outline-fonts/{job_id}")
+async def outline_fonts_endpoint(job_id: str, pages: Optional[str] = None):
+    """
+    Fase 2: Traza tipografías no incrustadas a curvas vectoriales directas (<path>).
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    source_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("fonts_outlined_pdf_path")
+        or job_meta.get("bleed_fixed_pdf_path")
+        or job_meta.get("hairline_fixed_pdf_path")
+        or job_meta.get("icc_fixed_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not source_pdf or not Path(source_pdf).exists():
+        raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
+
+    target_page_list = None
+    if pages:
+        try:
+            target_page_list = [int(p.strip()) for p in pages.split(",") if p.strip().isdigit()]
+        except Exception:
+            target_page_list = None
+
+    output_path = JOBS_DIR / f"{safe_id}_fonts_outlined.pdf"
+    result = outline_fonts_in_pdf(source_pdf, str(output_path), target_pages=target_page_list)
+
+    job_meta["has_fonts_outlined"] = True
+    job_meta["fonts_outlined_pdf_path"] = str(output_path)
+    job_meta["last_fixed_pdf_path"] = str(output_path)
+
+    # Filtrar incidencias de fuentes no incrustadas
+    if target_page_list:
+        job_data["findings"] = [
+            f for f in job_data.get("findings", [])
+            if not (f.get("rule_id") == "USED_FONTS_EMBEDDED" and f.get("page") in target_page_list)
+        ]
+    else:
+        job_data["findings"] = [
+            f for f in job_data.get("findings", [])
+            if f.get("rule_id") != "USED_FONTS_EMBEDDED"
+            and "no incrustada" not in f.get("title", "").lower()
+        ]
+
+    # Recalcular dictamen técnico
+    errs = sum(1 for f in job_data["findings"] if f.get("severity") == "ERROR")
+    warns = sum(1 for f in job_data["findings"] if f.get("severity") == "WARNING")
+    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
+    tech["errors_count"] = errs
+    tech["warnings_count"] = warns
+    if errs > 0:
+        tech["status"] = "FAIL"
+        tech["label"] = "NO CUMPLE"
+    elif warns > 0:
+        tech["status"] = "PASS_WITH_WARNINGS"
+        tech["label"] = "CUMPLE CON AVISOS"
+    else:
+        tech["status"] = "PASS"
+        tech["label"] = "CUMPLE"
+
+    # Regenerar certificado técnico PDF
+    cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
+    try:
+        generate_preflight_certificate_pdf(job_data, cert_path)
+    except Exception as e:
+        print(f"[outline-fonts] Error regenerando certificado: {e}")
+
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "success",
+        "job_id": safe_id,
+        "pages_vectorized": result.get("pages_vectorized", 0),
+        "total_pages": result.get("total_pages", 0),
+        "download_url": f"/api/download-outlined-fonts/{safe_id}",
+        "findings": job_data["findings"],
+        "triple_result": job_data["triple_result"]
+    }
+
+
+@app.get("/api/download-outlined-fonts/{job_id}")
+async def download_outlined_fonts_pdf(job_id: str):
+    """Descarga el PDF con textos trazados a curvas."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    fixed_path = job_data.get("job_meta", {}).get("fonts_outlined_pdf_path")
+    if not fixed_path or not Path(fixed_path).exists():
+        raise HTTPException(
+            status_code=404,
+            detail="PDF con tipografías trazadas no encontrado."
+        )
+
+    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    clean_name = filename.replace(".pdf", "")
+    return FileResponse(
+        path=fixed_path,
+        media_type="application/pdf",
+        filename=f"IntelliPrint_{clean_name}_Curvas_OK.pdf"
     )
 
 

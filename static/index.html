@@ -1164,6 +1164,7 @@
           const isHairline = (f.rule_id === 'HAIRLINE_DETECTED');
           const isIccMissing = (f.rule_id === 'DOCUMENT_OUTPUT_ICC');
           const isBleedMissing = (f.rule_id === 'BLEED_GEOMETRY_3MM');
+          const isFontMissing = (f.rule_id === 'USED_FONTS_EMBEDDED');
 
           let cardStyle = '';
           let iconHtml = '';
@@ -1207,6 +1208,18 @@
                 <span class="text-[11px] text-rose-800 font-medium"><i class="fa-solid fa-ruler-combined text-rose-600 mr-1"></i>Geometría de corte ISO:</span>
                 <button onclick="applyBleedGeometryFix(this)" class="btn-fix-bleed flex items-center gap-1.5 px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer">
                   <i class="fa-solid fa-wand-magic-sparkles text-rose-200"></i> Ajustar Cajas y Sangrado 3 mm
+                </button>
+              </div>
+            `;
+          } else if (isFontMissing) {
+            cardStyle = 'bg-purple-50/80 border-purple-300 text-purple-950 shadow-xs ring-1 ring-purple-400/20';
+            iconHtml = '<i class="fa-solid fa-font text-purple-600 text-sm"></i>';
+            badgeHtml = '<span class="text-[10px] bg-purple-600 text-white px-2 py-0.5 rounded font-bold ml-1 tracking-wide">Fuente no incrustada</span>';
+            actionHtml = `
+              <div class="mt-2.5 pt-2 border-t border-purple-200 flex items-center justify-between gap-2 flex-wrap">
+                <span class="text-[11px] text-purple-800 font-medium"><i class="fa-solid fa-shapes text-purple-600 mr-1"></i>Curvado vectorial de imprenta:</span>
+                <button onclick="applyFontOutlineFix(this, ${f.page})" class="btn-fix-font flex items-center gap-1.5 px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer">
+                  <i class="fa-solid fa-wand-magic-sparkles text-purple-200"></i> Trazar textos a curvas
                 </button>
               </div>
             `;
@@ -2109,6 +2122,89 @@
       } catch (err) {
         console.error(err);
         alert('Error de conexión al ajustar sangrado.');
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Fase 2: Trazador / Curvado Vectorial de Fuentes (USED_FONTS_EMBEDDED)
+    // -----------------------------------------------------------------------
+    async function applyFontOutlineFix(btn, pageNum) {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo.');
+        return;
+      }
+      const card = btn.closest('#findingsList > div');
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Trazando textos a curvas...';
+
+      try {
+        const queryParams = pageNum ? `?pages=${pageNum}` : '';
+        const res = await fetch(`/api/outline-fonts/${currentJobId}${queryParams}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          // Cambiar la tarjeta de la incidencia a estado resuelto
+          if (card) {
+            card.className = 'p-3 rounded-lg border text-xs flex items-center gap-3 bg-emerald-50 border-emerald-300 text-emerald-900 transition-all shadow-xs';
+            card.innerHTML = `
+              <div><i class="fa-solid fa-circle-check text-emerald-600 text-base"></i></div>
+              <div class="flex-1">
+                <span class="font-bold">Tipografías trazadas a curvas con éxito</span>
+                <p class="text-[11px] text-emerald-700">Los textos han sido vectorizados en contornos matemáticos puros (&lt;path&gt;). No existe riesgo de fuentes sustituidas o fuentes no incrustadas.</p>
+              </div>
+              <a href="${data.download_url}" target="_blank" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-semibold transition flex items-center gap-1 shadow-xs">
+                <i class="fa-solid fa-download"></i> PDF Curvado
+              </a>
+            `;
+          }
+
+          // Actualizar contador de incidencias
+          const countEl = document.getElementById('findingsCount');
+          if (data.findings && countEl) {
+            countEl.textContent = data.findings.length;
+          }
+
+          // Actualizar botón de cabecera si procede
+          const pdfBtn = document.getElementById('downloadPdfBtn');
+          const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+          if (pdfBtn && data.download_url) {
+            pdfBtn.href = data.download_url;
+            pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+          }
+          if (pdfBtnLabel) {
+            pdfBtnLabel.textContent = 'Descargar PDF (Curvas OK)';
+          }
+
+          // Actualizar dictamen técnico general si viene en la respuesta
+          if (data.triple_result && data.triple_result.technical) {
+            const tech = data.triple_result.technical;
+            const techBadge = document.getElementById('badgeTechnical');
+            const descTech = document.getElementById('descTechnical');
+            if (techBadge) {
+              techBadge.textContent = tech.label;
+              if (tech.status === 'PASS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-emerald-100 text-emerald-800 border border-emerald-200';
+              } else if (tech.status === 'PASS_WITH_WARNINGS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-amber-100 text-amber-800 border border-amber-200';
+              } else {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-red-100 text-red-800 border border-red-200';
+              }
+            }
+            if (descTech) {
+              descTech.textContent = `${tech.errors_count} errores críticos, ${tech.warnings_count} advertencias.`;
+            }
+          }
+        } else {
+          alert('Error al trazar tipografías: ' + (data.detail || 'Error desconocido'));
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        alert('Error de conexión al trazar tipografías a curvas.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
       }

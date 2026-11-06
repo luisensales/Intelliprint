@@ -794,7 +794,7 @@ class IntelliPrintEngine:
             page = doc[p_idx]
             for f in page.get_fonts():
                 font_name = f[3]
-                is_embedded = (f[1] != "" or f[2] != "")
+                is_embedded = (f[1] not in ("", "n/a", None))
                 fonts_found.append({"name": font_name, "embedded": is_embedded, "page": p_idx + 1})
                 if not is_embedded:
                     findings.append({
