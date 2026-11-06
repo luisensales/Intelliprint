@@ -284,6 +284,47 @@ def _best_suggestion(word_lower, wordset):
     return sorted(candidates, key=score)[0]
 
 
+# ---------------------------------------------------------------------------
+# Detección de fragmentos de palabras partidas con guion tipográfico
+# ---------------------------------------------------------------------------
+
+def _detect_hyphen_fragments(page_text: str) -> set:
+    """
+    Busca en el texto de la página patrones del tipo:
+       monitori-\nzacion
+    y devuelve un set con los fragmentos en minúsculas (antes y después del guion).
+    Así evitamos que el checker reporte 'monitori' o 'zacion' como erratas.
+    """
+    fragments = set()
+    # Patrón: letras (con acentos) seguidas de guion al fin de línea + letras en la siguiente
+    pattern = re.compile(
+        r'([A-Za-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1\u00c1\u00c9\u00cd\u00d3\u00da\u00dc\u00d1]{3,})'
+        r'-\n'
+        r'([A-Za-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1\u00c1\u00c9\u00cd\u00d3\u00da\u00dc\u00d1]{3,})'
+    )
+    for m in pattern.finditer(page_text):
+        fragments.add(m.group(1).lower())
+        fragments.add(m.group(2).lower())
+    return fragments
+
+
+def _is_hyphen_fragment(token: str, page_text: str) -> bool:
+    """
+    True si el token es un fragmento de palabra partida con guion en esta página.
+    Comprueba si aparece como primera o segunda mitad de una ruptura de línea con guion.
+    """
+    if len(token) < 4:
+        return False
+    escaped = re.escape(token)
+    # Primera mitad: 'token-\n' al final de línea
+    if re.search(escaped + r'-\n', page_text, re.IGNORECASE):
+        return True
+    # Segunda mitad: '-\ntoken' al inicio de línea siguiente
+    if re.search(r'-\n' + escaped, page_text, re.IGNORECASE):
+        return True
+    return False
+
+
 # ─── Clase principal ──────────────────────────────────────────────────────────
 
 class PrepressSpellChecker:
@@ -317,6 +358,10 @@ class PrepressSpellChecker:
             words_data = page.get_text("words")
             page_text = page.get_text("text")
 
+            # Pre-calcular fragmentos de palabras partidas con guion en esta página
+            # (ej: "monitori-\nzación" → {'monitori', 'zación'})
+            hyphen_fragments = _detect_hyphen_fragments(page_text)
+
             page_suggestions = 0
 
             for w in words_data:
@@ -324,6 +369,20 @@ class PrepressSpellChecker:
                     break
 
                 raw_word = w[4]
+
+                # ── Descartar tokens que terminan en guion (primera mitad de palabra partida)
+                # PyMuPDF extrae "monitori-" como token; sin el guion sería una falsa errata.
+                if raw_word.endswith('-') or raw_word.endswith('\u00ad'):
+                    continue
+
+                # ── Descartar segunda mitad de palabra partida detectada en el texto de página
+                # Ej: "zación" cuando el texto tiene "monitori-\nzación"
+                raw_stripped = raw_word.strip('-\u00ad')
+                if raw_stripped.lower() in hyphen_fragments:
+                    continue
+                if _is_hyphen_fragment(raw_stripped, page_text):
+                    continue
+
                 # Strip leading/trailing punctuation
                 clean_word = re.sub(
                     r'^[^\wáéíóúüñÁÉÍÓÚÜÑ]+|[^\wáéíóúüñÁÉÍÓÚÜÑ]+$', '',
@@ -360,8 +419,10 @@ class PrepressSpellChecker:
                 if re.search(r'(ck|wh|th(?!m)|gh|dge|tch)', word_lower):
                     continue
 
-                # Skip word fragments / hyphenation artifacts (end without vowel, short)
-                if len(clean_word) <= 5 and word_lower[-1] not in 'aeiouáéíóú':
+                # Skip word fragments / hyphenation artifacts:
+                # Tokens que no acaban en consonante o vocal de final de palabra española válida
+                VALID_ENDINGS = set('aeiouáéíóúnsrldz')
+                if word_lower[-1] not in VALID_ENDINGS:
                     continue
 
                 # Look for a suggestion
