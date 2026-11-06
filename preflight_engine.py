@@ -32,6 +32,100 @@ def resolve_cs(cs_ref, resources):
         return (cs_type, None)
     return (str(cs_ref), None)
 
+def _lab_to_rgb(L, a, b):
+    try:
+        y = (float(L) + 16.0) / 116.0
+        x = float(a) / 500.0 + y
+        z = y - float(b) / 200.0
+        def f_inv(t):
+            return t**3 if t > 0.2068966 else 3.0 * (0.2068966**2) * (t - 4.0/29.0)
+        X = 0.95047 * f_inv(x)
+        Y = 1.00000 * f_inv(y)
+        Z = 1.08883 * f_inv(z)
+        r = 3.2406 * X - 1.5372 * Y - 0.4986 * Z
+        g = -0.9689 * X + 1.8758 * Y + 0.0415 * Z
+        b = 0.0557 * X - 0.2040 * Y + 1.0570 * Z
+        def gamma(v):
+            v = max(0.0, min(1.0, v))
+            return 1.055 * (v ** (1.0/2.4)) - 0.055 if v > 0.0031308 else 12.92 * v
+        R = int(round(gamma(r) * 255))
+        G = int(round(gamma(g) * 255))
+        B = int(round(gamma(b) * 255))
+        return f"#{R:02x}{G:02x}{B:02x}"
+    except Exception:
+        return "#475569"
+
+
+def _cmyk_to_rgb(c, m, y, k):
+    try:
+        r = int(round(255 * (1.0 - float(c)) * (1.0 - float(k))))
+        g = int(round(255 * (1.0 - float(m)) * (1.0 - float(k))))
+        b = int(round(255 * (1.0 - float(y)) * (1.0 - float(k))))
+        return f"#{max(0,min(255,r)):02x}{max(0,min(255,g)):02x}{max(0,min(255,b)):02x}"
+    except Exception:
+        return "#475569"
+
+
+def extract_pdf_spot_colors(pike_doc) -> list[dict]:
+    """
+    Extrae todas las tintas planas / directas (Separation y DeviceN) del documento PDF,
+    identificando su nombre (ej: PANTONE 7545 C, Barniz, Troquel), su tipo y su color
+    aproximado en hexadecimal para la muestra en la interfaz.
+    """
+    spots = {}
+    try:
+        for p_idx, page in enumerate(pike_doc.pages, 1):
+            res = page.obj.get('/Resources')
+            if not res:
+                continue
+            cs_dict = res.get('/ColorSpace', {})
+            for cs_name, cs_val in cs_dict.items():
+                if not isinstance(cs_val, pikepdf.Array) or len(cs_val) < 2:
+                    continue
+                cs_type = str(cs_val[0])
+                names = []
+                if cs_type == '/Separation':
+                    name = str(cs_val[1]).lstrip('/')
+                    if name not in ('All', 'None'):
+                        names.append(name)
+                elif cs_type == '/DeviceN' and len(cs_val) >= 2:
+                    names_arr = cs_val[1]
+                    if isinstance(names_arr, pikepdf.Array):
+                        for n in names_arr:
+                            name = str(n).lstrip('/')
+                            if name not in ('All', 'None', 'Cyan', 'Magenta', 'Yellow', 'Black'):
+                                names.append(name)
+
+                # Aproximar color de muestra para la interfaz
+                hex_color = "#475569"
+                alt_space = str(cs_val[2]) if len(cs_val) > 2 else ""
+                func = cs_val[3] if len(cs_val) > 3 else None
+                if func and hasattr(func, 'get') and '/C1' in func:
+                    try:
+                        c1 = [float(x) for x in func['/C1']]
+                        if 'Lab' in alt_space or len(c1) == 3:
+                            hex_color = _lab_to_rgb(c1[0], c1[1], c1[2])
+                        elif len(c1) >= 4:
+                            hex_color = _cmyk_to_rgb(c1[0], c1[1], c1[2], c1[3])
+                    except Exception:
+                        pass
+
+                for name in names:
+                    if name not in spots:
+                        s_type = "PANTONE" if is_pantone_name(name) else ("BARNIZ" if is_varnish_name(name) else "DIRECTA")
+                        spots[name] = {
+                            "name": name,
+                            "type": s_type,
+                            "color_hex": hex_color,
+                            "pages": []
+                        }
+                    if p_idx not in spots[name]["pages"]:
+                        spots[name]["pages"].append(p_idx)
+    except Exception:
+        pass
+    return list(spots.values())
+
+
 def scan_content_stream(commands, resources, page_num, overprint_data):
     ext_gstates = {}
     if resources and '/ExtGState' in resources:
@@ -571,9 +665,11 @@ class IntelliPrintEngine:
             "incidents": []
         }
 
+        spot_colors_detected = []
         try:
             pike_doc = pikepdf.open(pdf_path)
             output_intent_info = detect_pdf_output_intent(pike_doc)
+            spot_colors_detected = extract_pdf_spot_colors(pike_doc)
             
             # Run overprint & spot check
             for p_idx, p_page in enumerate(pike_doc.pages, 1):
@@ -671,6 +767,7 @@ class IntelliPrintEngine:
                 "icc_detected": output_intent_info,
                 "icc_choice_applied": icc_choice,
                 "selected_icc": selected_icc,
+                "spot_colors": spot_colors_detected,
                 "overprint_stats": {
                     "black_text_overprint": overprint_data["black_text_overprint"],
                     "black_text_knockout": overprint_data["black_text_knockout"],

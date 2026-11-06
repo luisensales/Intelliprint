@@ -488,11 +488,6 @@
                     title="Página siguiente (→)">
                     <i class="fa-solid fa-chevron-right text-[11px]"></i>
                   </button>
-
-                  <select id="sepPageSelect" onchange="onSepPageSelectChange(this.value)"
-                    class="ml-1 text-[11px] border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 outline-none cursor-pointer font-medium">
-                    <option value="1">Pág. 1</option>
-                  </select>
                 </div>
               </div>
             </div>
@@ -553,6 +548,17 @@
                       </span>
                       <span class="w-3.5 h-3.5 rounded bg-slate-900 border border-slate-950"></span>
                     </label>
+                  </div>
+                </div>
+
+                <!-- Placas de Tintas Planas (Spot Colors / Pantone) -->
+                <div>
+                  <h5 class="text-xs font-bold text-slate-800 flex items-center justify-between mb-2">
+                    <span class="flex items-center gap-1.5"><i class="fa-solid fa-fill-drip text-slate-600"></i> Placas de tintas planas</span>
+                    <span id="sepSpotCountBadge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">0</span>
+                  </h5>
+                  <div id="sepSpotPlatesList" class="space-y-2 bg-white p-3 rounded-lg border border-slate-200 text-xs">
+                    <p class="text-slate-400 italic text-[11px] text-center py-1">Sin tintas planas en el documento</p>
                   </div>
                 </div>
 
@@ -1144,6 +1150,21 @@
       // Inicializar Previsualizador de Separaciones de Color
       initSeparations(summ.pages || 1);
 
+      // Renderizar placas de tintas planas (Pantone / Especiales)
+      const spotColors = summ.spot_colors;
+      if (spotColors && spotColors.length > 0) {
+        renderSpotPlates(spotColors);
+      } else if (currentJobId) {
+        fetch(`/api/spot-colors/${currentJobId}`)
+          .then(res => res.json())
+          .then(resData => {
+            renderSpotPlates(resData.spot_colors || []);
+          })
+          .catch(() => renderSpotPlates([]));
+      } else {
+        renderSpotPlates([]);
+      }
+
       // Render Images Inventory Table
       const imagesTbody = document.getElementById('imagesTableBody');
       const imagesSummaryEl = document.getElementById('metricImagesSummary');
@@ -1610,22 +1631,61 @@
     let sepInitialProfileName = 'Perfil del documento';
     let sepCurrentPage = 1;
     let sepTotalPageCount = 1;
+    let currentSpotColors = [];
+    let disabledSpotColors = new Set();
+
+    function renderSpotPlates(spots) {
+      currentSpotColors = spots || [];
+      disabledSpotColors.clear();
+      const listEl = document.getElementById('sepSpotPlatesList');
+      const countBadge = document.getElementById('sepSpotCountBadge');
+      if (!listEl) return;
+
+      if (!spots || spots.length === 0) {
+        if (countBadge) {
+          countBadge.textContent = '0';
+          countBadge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200';
+        }
+        listEl.innerHTML = '<p class="text-slate-400 italic text-[11px] text-center py-1">Sin tintas planas en el documento</p>';
+        return;
+      }
+
+      if (countBadge) {
+        countBadge.textContent = spots.length;
+        countBadge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200';
+      }
+
+      listEl.innerHTML = '';
+      spots.forEach(spot => {
+        const label = document.createElement('label');
+        label.className = 'flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded transition-colors';
+        const spotEscaped = spot.name.replace(/'/g, "\\'");
+        label.innerHTML = `
+          <span class="flex items-center gap-2">
+            <input type="checkbox" checked id="spot_${spotEscaped}" onchange="toggleSpotPlate('${spotEscaped}', this.checked)" class="rounded text-blue-600 focus:ring-blue-500 spot-plate-chk">
+            <span class="font-medium text-slate-800">${spot.name}</span>
+          </span>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[9px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-500 uppercase">${spot.type}</span>
+            <span class="w-3.5 h-3.5 rounded border border-slate-300 shadow-2xs" style="background-color: ${spot.color_hex};" title="${spot.name} (${spot.color_hex})"></span>
+          </div>
+        `;
+        listEl.appendChild(label);
+      });
+    }
+
+    function toggleSpotPlate(name, isChecked) {
+      if (isChecked) {
+        disabledSpotColors.delete(name);
+      } else {
+        disabledSpotColors.add(name);
+      }
+      updateSeparationPreview();
+    }
 
     function initSeparations(pageCount) {
       sepTotalPageCount = Math.max(1, pageCount || 1);
       sepCurrentPage = 1;
-
-      const sel = document.getElementById('sepPageSelect');
-      if (sel) {
-        sel.innerHTML = '';
-        for (let i = 1; i <= sepTotalPageCount; i++) {
-          const opt = document.createElement('option');
-          opt.value = i;
-          opt.textContent = `Pág. ${i}`;
-          sel.appendChild(opt);
-        }
-        sel.value = 1;
-      }
 
       const totalSpan = document.getElementById('sepTotalPages');
       if (totalSpan) totalSpan.textContent = sepTotalPageCount;
@@ -1652,9 +1712,6 @@
 
       const pageInput = document.getElementById('sepPageInput');
       if (pageInput) pageInput.value = sepCurrentPage;
-
-      const sel = document.getElementById('sepPageSelect');
-      if (sel) sel.value = sepCurrentPage;
     }
 
     function changeSepPage(delta) {
@@ -1667,15 +1724,6 @@
     }
 
     function onSepPageInputChange(val) {
-      let pageNum = parseInt(val, 10);
-      if (isNaN(pageNum)) pageNum = 1;
-      pageNum = Math.max(1, Math.min(sepTotalPageCount, pageNum));
-      sepCurrentPage = pageNum;
-      updateSepNavButtons();
-      updateSeparationPreview();
-    }
-
-    function onSepPageSelectChange(val) {
       let pageNum = parseInt(val, 10);
       if (isNaN(pageNum)) pageNum = 1;
       pageNum = Math.max(1, Math.min(sepTotalPageCount, pageNum));
@@ -1707,12 +1755,19 @@
       if (!chC) return;
       if (preset === 'all') {
         chC.checked = true; chM.checked = true; chY.checked = true; chK.checked = true;
+        disabledSpotColors.clear();
+        document.querySelectorAll('.spot-plate-chk').forEach(chk => chk.checked = true);
       } else if (preset === 'no_k') {
         chC.checked = true; chM.checked = true; chY.checked = true; chK.checked = false;
       } else if (preset === 'only_k') {
         chC.checked = false; chM.checked = false; chY.checked = false; chK.checked = true;
+        // En solo plancha K, desactivar también las tintas planas
+        currentSpotColors.forEach(s => disabledSpotColors.add(s.name));
+        document.querySelectorAll('.spot-plate-chk').forEach(chk => chk.checked = false);
       } else if (preset === 'only_c') {
         chC.checked = true; chM.checked = false; chY.checked = false; chK.checked = false;
+        currentSpotColors.forEach(s => disabledSpotColors.add(s.name));
+        document.querySelectorAll('.spot-plate-chk').forEach(chk => chk.checked = false);
       }
       updateSeparationPreview();
     }
@@ -1736,7 +1791,10 @@
         const notice = document.getElementById('sepEmptyNotice');
 
         if (overlay) overlay.classList.remove('hidden');
-        const url = `/api/separations/${currentJobId}?page=${page}&c=${c}&m=${m}&y=${y}&k=${k}&mode=${mode}&dpi=110&icc=${encodeURIComponent(selectedProfile)}&t=${Date.now()}`;
+        let url = `/api/separations/${currentJobId}?page=${page}&c=${c}&m=${m}&y=${y}&k=${k}&mode=${mode}&dpi=110&icc=${encodeURIComponent(selectedProfile)}&t=${Date.now()}`;
+        if (disabledSpotColors && disabledSpotColors.size > 0) {
+          url += `&disabled_spots=${encodeURIComponent(Array.from(disabledSpotColors).join(','))}`;
+        }
 
         const tempImg = new Image();
         tempImg.onload = () => {

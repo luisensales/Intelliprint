@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import pikepdf
 import pymupdf
 from PIL import Image, ImageCms
 
@@ -29,12 +30,13 @@ def render_page_separation(
     show_m: bool = True,
     show_y: bool = True,
     show_k: bool = True,
+    disabled_spots: Optional[list[str]] = None,
     view_mode: str = "color",  # "color" o "grayscale"
     dpi: int = 120,
     icc_cmyk_path: Optional[str | Path] = None,
 ) -> bytes:
     """
-    Renderiza una página PDF simulando la selección de planchas de separación CMYK.
+    Renderiza una página PDF simulando la selección de planchas de separación CMYK y tintas planas.
 
     Devuelve los bytes JPEG de la imagen resultante.
     """
@@ -53,7 +55,38 @@ def render_page_separation(
         except Exception:
             cmyk_profile = DEFAULT_CMYK_ICC
 
-    doc = pymupdf.open(str(pdf_path))
+    # Si hay tintas directas desactivadas, anulamos su función de color en memoria
+    mem_pdf_bytes = None
+    if disabled_spots:
+        try:
+            p_doc = pikepdf.open(str(pdf_path))
+            modified = False
+            for page in p_doc.pages:
+                res = page.obj.get('/Resources')
+                if not res:
+                    continue
+                cs_dict = res.get('/ColorSpace', {})
+                for cs_k, cs_v in cs_dict.items():
+                    if isinstance(cs_v, pikepdf.Array) and len(cs_v) >= 4 and str(cs_v[0]) == '/Separation':
+                        s_name = str(cs_v[1]).lstrip('/')
+                        if s_name in disabled_spots:
+                            func = cs_v[3]
+                            if hasattr(func, 'get') and '/C0' in func:
+                                func['/C1'] = func['/C0']
+                                modified = True
+            if modified:
+                buf = io.BytesIO()
+                p_doc.save(buf)
+                mem_pdf_bytes = buf.getvalue()
+            p_doc.close()
+        except Exception:
+            pass
+
+    if mem_pdf_bytes:
+        doc = pymupdf.open(stream=mem_pdf_bytes, filetype="pdf")
+    else:
+        doc = pymupdf.open(str(pdf_path))
+
     if page_index < 0 or page_index >= len(doc):
         doc.close()
         raise IndexError(f"Página {page_index + 1} fuera de rango (total {len(doc)}).")

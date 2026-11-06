@@ -643,6 +643,40 @@ async def download_overprint_pdf(job_id: str):
     )
 
 
+@app.get("/api/spot-colors/{job_id}")
+async def get_job_spot_colors(job_id: str):
+    """Devuelve las tintas planas detectadas en el documento del trabajo."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    spots = job_data.get("job_summary", {}).get("spot_colors")
+    if spots is not None:
+        return {"spot_colors": spots}
+
+    target_pdf = job_data.get("job_meta", {}).get("pdf_path")
+    if not target_pdf or not Path(target_pdf).exists():
+        return {"spot_colors": []}
+
+    try:
+        import pikepdf
+        from preflight_engine import extract_pdf_spot_colors
+        pdf = pikepdf.open(str(target_pdf))
+        spots = extract_pdf_spot_colors(pdf)
+        pdf.close()
+        job_data.setdefault("job_summary", {})["spot_colors"] = spots
+        with open(job_json_path, "w", encoding="utf-8") as f:
+            json.dump(job_data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        spots = []
+
+    return {"spot_colors": spots}
+
+
 @app.get("/api/separations/{job_id}")
 async def get_page_separation(
     job_id: str,
@@ -651,6 +685,7 @@ async def get_page_separation(
     m: bool = True,
     y: bool = True,
     k: bool = True,
+    disabled_spots: Optional[str] = None,
     mode: str = "color",
     dpi: int = 110,
     use_converted: bool = True,
@@ -728,6 +763,10 @@ async def get_page_separation(
             else:
                 icc_cmyk_path = str(BASE_DIR / "icc_profiles" / "ISOcoated_v2_300_bas.icc")
 
+    disabled_spots_list = None
+    if disabled_spots:
+        disabled_spots_list = [s.strip() for s in disabled_spots.split(",") if s.strip()]
+
     try:
         img_bytes = render_page_separation(
             pdf_path=target_pdf,
@@ -736,6 +775,7 @@ async def get_page_separation(
             show_m=m,
             show_y=y,
             show_k=k,
+            disabled_spots=disabled_spots_list,
             view_mode=mode,
             dpi=min(200, max(60, dpi)),
             icc_cmyk_path=icc_cmyk_path
