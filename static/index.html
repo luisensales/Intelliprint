@@ -28,6 +28,9 @@
               <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               Motor Activo
             </span>
+            <button id="headerNewPdfBtn" onclick="resetToNewAnalysis()" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-xs transition ml-2 cursor-pointer" title="Comenzar desde el principio con otro PDF">
+              <i class="fa-solid fa-plus-circle"></i> Nuevo PDF
+            </button>
           </div>
           <p class="text-xs text-slate-400">Sistema Avanzado de Preflight mediante Redes Neuronales & Análisis PDF</p>
         </div>
@@ -179,6 +182,9 @@
           </div>
 
           <div class="flex flex-wrap items-center gap-2">
+            <button onclick="resetToNewAnalysis()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer" title="Cerrar este reporte y analizar otro PDF desde el principio">
+              <i class="fa-solid fa-arrow-left"></i> Enviar nuevo PDF
+            </button>
             <a id="downloadPdfBtn" href="#" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-file-pdf"></i> <span id="downloadPdfBtnLabel">Descargar PDF con ICC</span>
             </a>
@@ -746,6 +752,17 @@
 
       </div>
 
+      <!-- Action Footer: Comenzar nuevo análisis -->
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-white rounded-xl border border-slate-200 shadow-xs">
+        <div class="flex items-center gap-2.5 text-xs text-slate-600">
+          <i class="fa-solid fa-circle-check text-emerald-600 text-base"></i>
+          <span>¿Deseas verificar otro archivo o reiniciar el proceso?</span>
+        </div>
+        <button onclick="resetToNewAnalysis()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer">
+          <i class="fa-solid fa-cloud-arrow-up"></i> Enviar nuevo PDF y empezar de nuevo
+        </button>
+      </div>
+
     </section>
 
   </main>
@@ -906,6 +923,76 @@
       startCheckBtn.disabled = true;
     });
 
+    // Resetear todo para comenzar un nuevo análisis desde el principio
+    function resetToNewAnalysis() {
+      // 1. Resetear variables de trabajo
+      selectedFile = null;
+      currentJobId = null;
+      currentReport = null;
+
+      // 2. Limpiar input y datos del archivo
+      if (pdfFileInput) pdfFileInput.value = '';
+      if (filePrompt) filePrompt.classList.remove('hidden');
+      if (fileInfo) fileInfo.classList.add('hidden');
+      if (startCheckBtn) startCheckBtn.disabled = true;
+      if (fileName) fileName.textContent = '';
+      const metaSpan = document.getElementById('fileMetaSpan');
+      if (metaSpan) metaSpan.textContent = '';
+      const detectedIccEl = document.getElementById('fileDetectedIcc');
+      if (detectedIccEl) detectedIccEl.innerHTML = '';
+
+      // 3. Resetear selección de perfil y opciones ICC a predeterminados
+      const defaultProfile = document.querySelector('input[name="profile"][value="OFFSET_300"]');
+      if (defaultProfile) defaultProfile.checked = true;
+
+      const defaultIccOption = document.querySelector('input[name="icc_option"][value="preserve"]');
+      if (defaultIccOption) defaultIccOption.checked = true;
+      if (iccCatalogSelect) iccCatalogSelect.disabled = true;
+
+      // 4. Ocultar paneles de resultados y volver a mostrar la sección de subida
+      if (resultsSection) resultsSection.classList.add('hidden');
+      if (loadingState) loadingState.classList.add('hidden');
+      if (setupSection) setupSection.classList.remove('hidden');
+      const headerBtn = document.getElementById('headerNewPdfBtn');
+      if (headerBtn) headerBtn.classList.add('hidden');
+
+      // 5. Resetear visor de separaciones
+      const sepImg = document.getElementById('sepPreviewImg');
+      if (sepImg) {
+        sepImg.src = '';
+        sepImg.classList.add('hidden');
+      }
+      const sepNotice = document.getElementById('sepEmptyNotice');
+      if (sepNotice) sepNotice.classList.remove('hidden');
+      const sepOverlay = document.getElementById('sepLoadingOverlay');
+      if (sepOverlay) sepOverlay.classList.add('hidden');
+      sepCurrentPage = 1;
+      sepTotalPageCount = 1;
+
+      // 6. Limpiar estados y paneles de acción
+      const overprintFixStatus = document.getElementById('overprintFixStatus');
+      if (overprintFixStatus) { overprintFixStatus.classList.add('hidden'); overprintFixStatus.innerHTML = ''; }
+      const sepOverprintStatus = document.getElementById('sepOverprintStatus');
+      if (sepOverprintStatus) { sepOverprintStatus.classList.add('hidden'); sepOverprintStatus.innerHTML = ''; }
+      const cmykStatus = document.getElementById('cmykConversionStatus');
+      if (cmykStatus) { cmykStatus.classList.add('hidden'); cmykStatus.innerHTML = ''; }
+      const signedPanel = document.getElementById('signedConfirmationPanel');
+      if (signedPanel) signedPanel.classList.add('hidden');
+      const doneRow = document.getElementById('metricOverprintDoneRow');
+      if (doneRow) doneRow.classList.add('hidden');
+
+      // 7. Resetear pestañas al primer tab (Incidencias)
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      const firstTabBtn = document.querySelector('.tab-btn[data-tab="tab-findings"]');
+      const firstTabContent = document.getElementById('tab-findings');
+      if (firstTabBtn) firstTabBtn.classList.add('tab-active');
+      if (firstTabContent) firstTabContent.classList.remove('hidden');
+
+      // 8. Desplazamiento suave al inicio de la página
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     // Run Preflight
     startCheckBtn.addEventListener('click', async () => {
       if (!selectedFile) return;
@@ -945,6 +1032,8 @@
 
         loadingState.classList.add('hidden');
         resultsSection.classList.remove('hidden');
+        const headerBtn = document.getElementById('headerNewPdfBtn');
+        if (headerBtn) headerBtn.classList.remove('hidden');
 
       } catch (err) {
         alert('Error de conexión con el servidor: ' + err.message);
