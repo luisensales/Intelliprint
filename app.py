@@ -470,15 +470,16 @@ async def download_pdf_file(job_id: str):
 @app.post("/api/convert-to-cmyk/{job_id}")
 async def convert_images_to_cmyk(
     job_id: str,
-    use_embedded_icc: bool = Form(True),
-    custom_icc: Optional[str] = Form(None),
+    use_embedded_icc: bool = True,
+    custom_icc: Optional[str] = None,
 ):
     """
     Convierte las imágenes RGB del PDF a CMYK usando perfiles ICC.
-    - use_embedded_icc=true  → usa el OutputIntent embebido en el PDF
+    - use_embedded_icc=true  → usa el OutputIntent embebido en el PDF (o fallback FOGRA39)
     - use_embedded_icc=false → usa custom_icc (nombre de archivo en icc_profiles/)
     """
-    job_json_path = JOBS_DIR / f"{job_id}.json"
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -487,18 +488,17 @@ async def convert_images_to_cmyk(
 
     job_meta = job_data.get("job_meta", {})
 
-    # Usar el PDF más reciente como fuente: overprint_fixed > cmyk_converted > original
-    # Así las correcciones son acumulativas independientemente del orden
-    overprint_path_prev = job_meta.get("overprint_fixed_pdf_path")
-    cmyk_path_prev      = job_meta.get("cmyk_converted_pdf_path")
-    pdf_path_orig       = job_meta.get("pdf_path")
-
-    if overprint_path_prev and os.path.exists(overprint_path_prev):
-        pdf_path = overprint_path_prev
-    elif cmyk_path_prev and os.path.exists(cmyk_path_prev):
-        pdf_path = cmyk_path_prev
-    else:
-        pdf_path = pdf_path_orig
+    # Usar el PDF más reciente en la cadena acumulativa
+    pdf_path = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("fonts_outlined_pdf_path")
+        or job_meta.get("bleed_fixed_pdf_path")
+        or job_meta.get("hairline_fixed_pdf_path")
+        or job_meta.get("icc_fixed_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("pdf_path")
+    )
 
     if not pdf_path or not os.path.exists(pdf_path):
         raise HTTPException(status_code=404, detail="PDF de origen no encontrado en el servidor.")
@@ -514,8 +514,11 @@ async def convert_images_to_cmyk(
             dst_icc_path = temp_icc_file
         else:
             # Si no hay ICC embebido, usar el seleccionado en el job o el predeterminado
-            fallback_name = job_data.get("job_meta", {}).get("selected_icc", "ISOcoated_v2_300_bas.icc")
-            dst_icc_path = str(ICC_PROFILES_DIR / fallback_name)
+            fallback_name = job_data.get("job_meta", {}).get("selected_icc", "ISOcoated_v2_eci.icc")
+            fallback_path = ICC_PROFILES_DIR / fallback_name
+            if not fallback_path.exists():
+                fallback_path = ICC_PROFILES_DIR / "ISOcoated_v2_300_bas.icc"
+            dst_icc_path = str(fallback_path)
     else:
         if not custom_icc:
             raise HTTPException(status_code=400, detail="Se requiere un perfil ICC personalizado.")
@@ -525,7 +528,7 @@ async def convert_images_to_cmyk(
         if not os.path.exists(dst_icc_path):
             raise HTTPException(status_code=400, detail=f"Perfil ICC no encontrado: {safe_name}")
 
-    output_path = JOBS_DIR / f"{job_id}_cmyk_converted.pdf"
+    output_path = JOBS_DIR / f"{safe_id}_cmyk_converted.pdf"
 
     try:
         conv_result = convert_rgb_images_to_cmyk(
@@ -547,30 +550,55 @@ async def convert_images_to_cmyk(
         errors = conv_result.get("errors", [])
         raise HTTPException(status_code=500, detail=f"La conversión falló: {'; '.join(errors)}")
 
-    # Guardar la ruta del PDF convertido en el job
-    # Si se aplicó sobre un overprint_fixed anterior, limpiar overprint_fixed_pdf_path
-    # para que el visor y el endpoint de descarga usen el cmyk_converted (más reciente y completo)
-    job_data["job_meta"]["cmyk_converted_pdf_path"] = str(output_path)
-    if job_data["job_meta"].get("overprint_fixed_pdf_path"):
-        # El overprint ya está integrado en el cmyk_converted; dejar de apuntar al anterior
-        job_data["job_meta"]["overprint_fixed_pdf_path"] = ""
+    # Guardar en metadatos del job de forma acumulativa
+    job_meta["has_cmyk_converted"] = True
+    job_meta["cmyk_converted_pdf_path"] = str(output_path)
+    job_meta["last_fixed_pdf_path"] = str(output_path)
+
+    # Filtrar incidencias resueltas de RGB
+    job_data["findings"] = [
+        f for f in job_data.get("findings", [])
+        if f.get("rule_id") != "SOURCE_COLOR_DIAGNOSTIC"
+        and "rgb" not in f.get("title", "").lower()
+        and "rgb" not in f.get("message", "").lower()
+    ]
+
+    # Recalcular dictamen técnico
+    errs = sum(1 for f in job_data["findings"] if f.get("severity") == "ERROR")
+    warns = sum(1 for f in job_data["findings"] if f.get("severity") == "WARNING")
+    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
+    tech["errors_count"] = errs
+    tech["warnings_count"] = warns
+    if errs > 0:
+        tech["status"] = "FAIL"
+        tech["label"] = "NO CUMPLE"
+    elif warns > 0:
+        tech["status"] = "PASS_WITH_WARNINGS"
+        tech["label"] = "CUMPLE CON AVISOS"
+    else:
+        tech["status"] = "PASS"
+        tech["label"] = "CUMPLE"
+
+    # Regenerar el certificado PDF técnico
+    cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
+    try:
+        generate_preflight_certificate_pdf(job_data, cert_path)
+    except Exception as e:
+        print(f"[convert-to-cmyk] Aviso: no se pudo regenerar el certificado: {e}")
+
     with open(job_json_path, "w", encoding="utf-8") as f:
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
-    # Regenerar el certificado PDF si ya existe (para que refleje los avisos RGB resueltos)
-    cert_path = JOBS_DIR / f"{job_id}_ficha_tecnica.pdf"
-    if cert_path.exists():
-        try:
-            generate_preflight_certificate_pdf(job_data, cert_path)
-        except Exception as e:
-            print(f"[convert-to-cmyk] Aviso: no se pudo regenerar el certificado: {e}")
-
     return {
         "status": "success",
+        "job_id": safe_id,
         "images_converted": conv_result["images_converted"],
         "images_skipped": conv_result["images_skipped"],
         "errors": conv_result.get("errors", []),
-        "download_url": f"/api/download-cmyk/{job_id}",
+        "download_url": f"/api/download-cmyk/{safe_id}",
+        "findings": job_data["findings"],
+        "triple_result": job_data["triple_result"],
+        "target_icc": Path(dst_icc_path).name if dst_icc_path else "ISO Coated v2"
     }
 
 

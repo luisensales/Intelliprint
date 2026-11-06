@@ -1165,6 +1165,7 @@
           const isIccMissing = (f.rule_id === 'DOCUMENT_OUTPUT_ICC');
           const isBleedMissing = (f.rule_id === 'BLEED_GEOMETRY_3MM');
           const isFontMissing = (f.rule_id === 'USED_FONTS_EMBEDDED');
+          const isRgbImage = (f.rule_id === 'SOURCE_COLOR_DIAGNOSTIC') || (f.category === 'Color' && f.title.toLowerCase().includes('rgb'));
 
           let cardStyle = '';
           let iconHtml = '';
@@ -1220,6 +1221,18 @@
                 <span class="text-[11px] text-purple-800 font-medium"><i class="fa-solid fa-shapes text-purple-600 mr-1"></i>Curvado vectorial de imprenta:</span>
                 <button onclick="applyFontOutlineFix(this, ${f.page})" class="btn-fix-font flex items-center gap-1.5 px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer">
                   <i class="fa-solid fa-wand-magic-sparkles text-purple-200"></i> Trazar textos a curvas
+                </button>
+              </div>
+            `;
+          } else if (isRgbImage) {
+            cardStyle = 'bg-orange-50/80 border-orange-300 text-orange-950 shadow-xs ring-1 ring-orange-400/20';
+            iconHtml = '<i class="fa-solid fa-image text-orange-600 text-sm"></i>';
+            badgeHtml = '<span class="text-[10px] bg-orange-600 text-white px-2 py-0.5 rounded font-bold ml-1 tracking-wide">Imagen RGB</span>';
+            actionHtml = `
+              <div class="mt-2.5 pt-2 border-t border-orange-200 flex items-center justify-between gap-2 flex-wrap">
+                <span class="text-[11px] text-orange-800 font-medium"><i class="fa-solid fa-sliders text-orange-600 mr-1"></i>Conversión ICC controlada:</span>
+                <button onclick="applyCmykImageConversion(this)" class="btn-fix-cmyk flex items-center gap-1.5 px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer">
+                  <i class="fa-solid fa-wand-magic-sparkles text-orange-200"></i> Convertir a CMYK
                 </button>
               </div>
             `;
@@ -2205,6 +2218,91 @@
       } catch (err) {
         console.error('Error:', err);
         alert('Error de conexión al trazar tipografías a curvas.');
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Fase 2: Conversión Contextual de Imágenes RGB a CMYK (SOURCE_COLOR_DIAGNOSTIC)
+    // -----------------------------------------------------------------------
+    async function applyCmykImageConversion(btn) {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo.');
+        return;
+      }
+      const card = btn.closest('#findingsList > div');
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Convirtiendo a CMYK...';
+
+      try {
+        const res = await fetch(`/api/convert-to-cmyk/${currentJobId}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          // Cambiar todas las tarjetas de imágenes RGB o la tarjeta actual a resuelto
+          const allRgbCards = document.querySelectorAll('#findingsList > div[data-rule-id="SOURCE_COLOR_DIAGNOSTIC"]');
+          const targetCards = allRgbCards.length > 0 ? allRgbCards : (card ? [card] : []);
+
+          targetCards.forEach(c => {
+            c.className = 'p-3 rounded-lg border text-xs flex items-center gap-3 bg-emerald-50 border-emerald-300 text-emerald-900 transition-all shadow-xs';
+            c.innerHTML = `
+              <div><i class="fa-solid fa-circle-check text-emerald-600 text-base"></i></div>
+              <div class="flex-1">
+                <span class="font-bold">Imágenes convertidas a CMYK con éxito</span>
+                <p class="text-[11px] text-emerald-700">Transformación ICC aplicada (${data.target_icc || 'ISO Coated v2 / FOGRA39'}). ${data.images_converted || 1} imagen(es) listas para imprenta.</p>
+              </div>
+              <a href="${data.download_url}" target="_blank" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-semibold transition flex items-center gap-1 shadow-xs">
+                <i class="fa-solid fa-download"></i> PDF CMYK
+              </a>
+            `;
+          });
+
+          // Actualizar contador de incidencias
+          const countEl = document.getElementById('findingsCount');
+          if (data.findings && countEl) {
+            countEl.textContent = data.findings.length;
+          }
+
+          // Actualizar botón de cabecera si procede
+          const pdfBtn = document.getElementById('downloadPdfBtn');
+          const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+          if (pdfBtn && data.download_url) {
+            pdfBtn.href = data.download_url;
+            pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+          }
+          if (pdfBtnLabel) {
+            pdfBtnLabel.textContent = 'Descargar PDF (CMYK OK)';
+          }
+
+          // Actualizar dictamen técnico general si viene en la respuesta
+          if (data.triple_result && data.triple_result.technical) {
+            const tech = data.triple_result.technical;
+            const techBadge = document.getElementById('badgeTechnical');
+            const descTech = document.getElementById('descTechnical');
+            if (techBadge) {
+              techBadge.textContent = tech.label;
+              if (tech.status === 'PASS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-emerald-100 text-emerald-800 border border-emerald-200';
+              } else if (tech.status === 'PASS_WITH_WARNINGS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-amber-100 text-amber-800 border border-amber-200';
+              } else {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-red-100 text-red-800 border border-red-200';
+              }
+            }
+            if (descTech) {
+              descTech.textContent = `${tech.errors_count} errores críticos, ${tech.warnings_count} advertencias.`;
+            }
+          }
+        } else {
+          alert('Error al convertir imágenes a CMYK: ' + (data.detail || 'Error desconocido'));
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        alert('Error de conexión al convertir imágenes a CMYK.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
       }

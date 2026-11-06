@@ -159,7 +159,8 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     findings = list(all_findings)
     if meta.get("has_cmyk_converted") or meta.get("cmyk_converted_pdf_path"):
         findings = [f for f in findings
-                    if "rgb" not in f.get("title", "").lower()
+                    if f.get("rule_id") != "SOURCE_COLOR_DIAGNOSTIC"
+                    and "rgb" not in f.get("title", "").lower()
                     and "rgb" not in f.get("message", "").lower()]
 
     if meta.get("has_overprint_fixed") or meta.get("overprint_fixed_pdf_path"):

@@ -95,3 +95,4 @@ def outline_fonts_in_pdf(
         "total_pages": total_pages,
         "pages_vectorized": pages_vectorized
     }
+
