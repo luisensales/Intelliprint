@@ -1162,6 +1162,7 @@
           const isErr = f.severity === 'ERROR';
           const is100KO = (f.rule_id === 'BLACK_TEXT_KNOCKOUT_100') || (f.rule_id === 'BLACK_TEXT_KNOCKOUT');
           const isHairline = (f.rule_id === 'HAIRLINE_DETECTED');
+          const isIccMissing = (f.rule_id === 'DOCUMENT_OUTPUT_ICC');
 
           let cardStyle = '';
           let iconHtml = '';
@@ -1181,6 +1182,18 @@
                 <span class="text-[11px] text-amber-800 font-medium"><i class="fa-solid fa-shield-halved text-amber-600 mr-1"></i>Ajuste seguro de imprenta:</span>
                 <button onclick="applyHairlineFix(this)" class="btn-fix-hairline flex items-center gap-1.5 px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer">
                   <i class="fa-solid fa-wand-magic-sparkles text-amber-200"></i> Engrosar a 0,3 pt
+                </button>
+              </div>
+            `;
+          } else if (isIccMissing) {
+            cardStyle = 'bg-blue-50/80 border-blue-300 text-blue-950 shadow-xs ring-1 ring-blue-400/20';
+            iconHtml = '<i class="fa-solid fa-palette text-blue-600 text-sm"></i>';
+            badgeHtml = '<span class="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold ml-1 tracking-wide">Falta ICC</span>';
+            actionHtml = `
+              <div class="mt-2.5 pt-2 border-t border-blue-200 flex items-center justify-between gap-2 flex-wrap">
+                <span class="text-[11px] text-blue-800 font-medium"><i class="fa-solid fa-stamp text-blue-600 mr-1"></i>Condición de impresión recomendada:</span>
+                <button onclick="applyOutputIntentFix(this)" class="btn-fix-icc flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer">
+                  <i class="fa-solid fa-wand-magic-sparkles text-blue-200"></i> Incrustar FOGRA39 (ISO Coated v2)
                 </button>
               </div>
             `;
@@ -1902,6 +1915,99 @@
       } catch (err) {
         console.error(err);
         alert('Error de conexión al engrosar líneas finas.');
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Fase 2: Corrección Contextual de OutputIntent ICC
+    // -----------------------------------------------------------------------
+    async function applyOutputIntentFix(btn) {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo.');
+        return;
+      }
+      const card = btn.closest('#findingsList > div');
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Incrustando OutputIntent...';
+
+      try {
+        const res = await fetch(`/api/fix-output-intent/${currentJobId}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          // Cambiar la tarjeta de la incidencia a estado resuelto
+          if (card) {
+            const iccName = (data.applied_icc && data.applied_icc.identifier) || 'ISO Coated v2 ECI (FOGRA39)';
+            card.className = 'p-3 rounded-lg border text-xs flex items-center gap-3 bg-emerald-50 border-emerald-300 text-emerald-900 transition-all shadow-xs';
+            card.innerHTML = `
+              <div><i class="fa-solid fa-circle-check text-emerald-600 text-base"></i></div>
+              <div class="flex-1">
+                <span class="font-bold">OutputIntent incrustado con éxito</span>
+                <p class="text-[11px] text-emerald-700">Se ha declarado formalmente la condición de impresión <strong>${iccName}</strong> en el catálogo del PDF. El RIP ya conoce el estándar de salida.</p>
+              </div>
+              <a href="${data.download_url}" target="_blank" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-semibold transition flex items-center gap-1 shadow-xs">
+                <i class="fa-solid fa-download"></i> PDF Certificado
+              </a>
+            `;
+          }
+
+          // Actualizar badge visual de ICC detectado si existe
+          const badgeEl = document.getElementById('resDetectedIccBadge');
+          if (badgeEl && data.applied_icc) {
+            badgeEl.innerHTML = `
+              <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                <i class="fa-solid fa-palette text-blue-500"></i> Perfil origen PDF: <strong>${data.applied_icc.identifier || 'ISO Coated v2 (FOGRA39)'}</strong>
+              </span>
+            `;
+          }
+
+          // Actualizar contador de incidencias
+          const countEl = document.getElementById('findingsCount');
+          if (data.findings && countEl) {
+            countEl.textContent = data.findings.length;
+          }
+
+          // Actualizar botón de cabecera si procede
+          const pdfBtn = document.getElementById('downloadPdfBtn');
+          const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+          if (pdfBtn && data.download_url) {
+            pdfBtn.href = data.download_url;
+            pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+          }
+          if (pdfBtnLabel) {
+            pdfBtnLabel.textContent = 'Descargar PDF (ICC OK)';
+          }
+
+          // Actualizar dictamen técnico general si viene en la respuesta
+          if (data.triple_result && data.triple_result.technical) {
+            const tech = data.triple_result.technical;
+            const techBadge = document.getElementById('badgeTechnical');
+            const descTech = document.getElementById('descTechnical');
+            if (techBadge) {
+              techBadge.textContent = tech.label;
+              if (tech.status === 'PASS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-emerald-100 text-emerald-800 border border-emerald-200';
+              } else if (tech.status === 'PASS_WITH_WARNINGS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-amber-100 text-amber-800 border border-amber-200';
+              } else {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-red-100 text-red-800 border border-red-200';
+              }
+            }
+            if (descTech) {
+              descTech.textContent = `${tech.errors_count} errores críticos, ${tech.warnings_count} advertencias.`;
+            }
+          }
+        } else {
+          alert('Error: ' + (data.detail || 'No se pudo incrustar el OutputIntent.'));
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de conexión al incrustar OutputIntent.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
       }

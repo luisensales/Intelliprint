@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import pymupdf
 
 from preflight_engine import IntelliPrintEngine
-from icc_manager import get_available_icc_profiles, detect_pdf_output_intent
+from icc_manager import get_available_icc_profiles, detect_pdf_output_intent, apply_icc_to_pdf
 from spellcheck_engine import save_word_to_glossary
 from report_generator import generate_preflight_certificate_pdf
 from color_converter import convert_rgb_images_to_cmyk, extract_embedded_icc_to_tempfile
@@ -445,8 +445,16 @@ async def download_pdf_file(job_id: str):
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
-    pdf_p = job_data.get("job_meta", {}).get("pdf_path")
-    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    meta = job_data.get("job_meta", {})
+    pdf_p = (
+        meta.get("last_fixed_pdf_path")
+        or meta.get("hairline_fixed_pdf_path")
+        or meta.get("icc_fixed_pdf_path")
+        or meta.get("overprint_fixed_pdf_path")
+        or meta.get("cmyk_converted_pdf_path")
+        or meta.get("pdf_path")
+    )
+    filename = meta.get("filename", "documento.pdf")
     if not pdf_p or not os.path.exists(pdf_p):
         raise HTTPException(status_code=404, detail="Archivo PDF no encontrado en el servidor.")
     return FileResponse(
@@ -947,6 +955,132 @@ async def download_hairline_pdf(job_id: str):
         path=fixed_path,
         media_type="application/pdf",
         filename=f"IntelliPrint_{clean_name}_Hairline_OK.pdf"
+    )
+
+
+@app.post("/api/fix-output-intent/{job_id}")
+async def fix_output_intent_endpoint(job_id: str, icc_profile: Optional[str] = None):
+    """
+    Fase 2: Incrusta un OutputIntent estándar (FOGRA39 / ISO Coated v2) para certificar la condición de impresión.
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    # Cadena acumulativa de PDFs: tomar el más reciente
+    source_pdf = (
+        job_meta.get("hairline_fixed_pdf_path")
+        or job_meta.get("icc_fixed_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not source_pdf or not Path(source_pdf).exists():
+        raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
+
+    output_path = JOBS_DIR / f"{safe_id}_icc_fixed.pdf"
+    # Copiar source_pdf a output_path para no pisar el anterior
+    import shutil
+    shutil.copyfile(source_pdf, output_path)
+
+    # Determinar el perfil según el perfil del trabajo si no se especificó
+    target_icc = icc_profile or "ISOcoated_v2_eci.icc"
+    profile_id = job_meta.get("profile_id", "OFFSET_300")
+    if not icc_profile:
+        if profile_id == "DIGITAL_200":
+            target_icc = "PSOcoated_v3.icc" if (ICC_DIR / "PSOcoated_v3.icc").exists() else "ISOcoated_v2_300_bas.icc"
+        elif profile_id == "SCREEN_RGB":
+            target_icc = "sRGB2014.icc"
+        else:
+            target_icc = "ISOcoated_v2_eci.icc" if (ICC_DIR / "ISOcoated_v2_eci.icc").exists() else "ISOcoated_v2_300_bas.icc"
+
+    applied_info = apply_icc_to_pdf(output_path, target_icc)
+    if not applied_info:
+        raise HTTPException(status_code=500, detail="Fallo al incrustar el OutputIntent en el PDF.")
+
+    # Guardar ruta acumulada
+    job_data["job_meta"]["icc_fixed_pdf_path"] = str(output_path)
+    job_data["job_meta"]["has_icc_fixed"] = True
+    job_data["job_meta"]["last_fixed_pdf_path"] = str(output_path)
+    job_data["job_meta"]["applied_icc_info"] = applied_info
+
+    # Actualizar información del ICC detectado en el job_summary
+    job_summary = job_data.setdefault("job_summary", {})
+    job_summary["icc_detected"] = applied_info
+
+    # Limpiar incidencias de DOCUMENT_OUTPUT_ICC
+    job_data["findings"] = [
+        f for f in job_data.get("findings", [])
+        if f.get("rule_id") != "DOCUMENT_OUTPUT_ICC"
+    ]
+
+    # Recalcular dictamen técnico
+    all_findings = job_data.get("findings", [])
+    errs = sum(1 for f in all_findings if f.get("severity") == "ERROR")
+    warns = sum(1 for f in all_findings if f.get("severity") == "WARNING")
+    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
+    tech["errors_count"] = errs
+    tech["warnings_count"] = warns
+    if errs > 0:
+        tech["status"] = "FAIL"
+        tech["label"] = "NO CUMPLE"
+    elif warns > 0:
+        tech["status"] = "PASS_WITH_WARNINGS"
+        tech["label"] = "CUMPLE CON AVISOS"
+    else:
+        tech["status"] = "PASS"
+        tech["label"] = "CUMPLE"
+
+    # Regenerar certificado
+    cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
+    try:
+        generate_preflight_certificate_pdf(job_data, cert_path)
+    except Exception as e:
+        print(f"[fix-output-intent] Error regenerando certificado: {e}")
+
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "success",
+        "job_id": safe_id,
+        "applied_icc": applied_info,
+        "download_url": f"/api/download-icc/{safe_id}",
+        "findings": job_data["findings"],
+        "triple_result": job_data["triple_result"],
+        "icc_detected": applied_info
+    }
+
+
+@app.get("/api/download-icc/{job_id}")
+async def download_icc_pdf(job_id: str):
+    """Descarga el PDF con OutputIntent formal incrustado."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    fixed_path = job_data.get("job_meta", {}).get("icc_fixed_pdf_path")
+    if not fixed_path or not Path(fixed_path).exists():
+        raise HTTPException(
+            status_code=404,
+            detail="PDF con OutputIntent no encontrado."
+        )
+
+    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    clean_name = filename.replace(".pdf", "")
+    return FileResponse(
+        path=fixed_path,
+        media_type="application/pdf",
+        filename=f"IntelliPrint_{clean_name}_ICC_OK.pdf"
     )
 
 
