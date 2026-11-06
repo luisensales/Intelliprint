@@ -39,9 +39,10 @@ def _build_transform(src_icc: Path, dst_icc: Path) -> ImageCms.ImageCmsTransform
     )
 
 
-def _image_to_cmyk_bytes(raw_bytes: bytes, transform: ImageCms.ImageCmsTransform) -> bytes:
-    """Aplica el transform ICC y devuelve la imagen CMYK como JPEG bytes."""
+def _image_to_cmyk_bytes(raw_bytes: bytes, transform: ImageCms.ImageCmsTransform) -> tuple[bytes, int, int]:
+    """Aplica el transform ICC y devuelve la imagen CMYK como JPEG bytes y sus dimensiones (w, h)."""
     img = Image.open(io.BytesIO(raw_bytes))
+    w, h = img.size
 
     # Asegurar modo RGB antes de transformar
     if img.mode == "RGBA":
@@ -55,7 +56,7 @@ def _image_to_cmyk_bytes(raw_bytes: bytes, transform: ImageCms.ImageCmsTransform
 
     buf = io.BytesIO()
     img_cmyk.save(buf, format="JPEG", quality=95, subsampling=0)
-    return buf.getvalue()
+    return buf.getvalue(), w, h
 
 
 # ---------------------------------------------------------------------------
@@ -155,15 +156,17 @@ def convert_rgb_images_to_cmyk(
                 result["images_skipped"] += 1
                 continue
 
-            cmyk_bytes = _image_to_cmyk_bytes(raw_bytes, transform)
+            cmyk_bytes, w, h = _image_to_cmyk_bytes(raw_bytes, transform)
 
             obj = pike_doc.get_object(xref, 0)
-            obj.stream_data = cmyk_bytes
-            obj["/Filter"] = pikepdf.Name("/DCTDecode")
+            obj.write(cmyk_bytes, filter=pikepdf.Name("/DCTDecode"))
+            obj["/Width"] = w
+            obj["/Height"] = h
             obj["/ColorSpace"] = pikepdf.Name("/DeviceCMYK")
             obj["/BitsPerComponent"] = 8
+            obj["/Decode"] = pikepdf.Array([1, 0, 1, 0, 1, 0, 1, 0])
 
-            for key in ["/SMask", "/Mask", "/Intent", "/Alternates"]:
+            for key in ["/DecodeParms", "/SMask", "/Mask", "/Intent", "/Alternates"]:
                 try:
                     del obj[key]
                 except KeyError:
