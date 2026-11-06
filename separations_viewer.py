@@ -73,14 +73,23 @@ def render_page_separation(
 
     page = doc[page_index]
 
-    # Renderizar la página en DeviceCMYK nativo con sobreimpresión activa
-    pix = page.get_pixmap(colorspace=pymupdf.csCMYK, dpi=dpi, alpha=False)
+    # Renderizar la página directamente con el draw device nativo de MuPDF
+    # (evita DisplayList, que descarta los estados de sobreimpresión /OP True /op True)
+    zoom = dpi / 72.0
+    mat = pymupdf.Matrix(zoom, zoom)
+    try:
+        pix = page._makePixmap(doc, mat, pymupdf.csCMYK, 0, 1, None)
+    except Exception:
+        pix = page.get_pixmap(matrix=mat, colorspace=pymupdf.csCMYK, alpha=False)
+
     w, h = pix.width, pix.height
+    num_channels = pix.n
     doc.close()
 
     # Convertir muestras a array NumPy de forma (H, W, 4)
     # Canales: 0=Cyan, 1=Magenta, 2=Yellow, 3=Black (valores 0..255)
-    arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape((h, w, 4)).copy()
+    raw = np.frombuffer(pix.samples, dtype=np.uint8).reshape((h, w, num_channels))
+    arr = raw[:, :, :4].copy()
 
     # Si se pide visualización de plancha individual en escala de grises (película RIP)
     active_channels = [c for c, active in enumerate([show_c, show_m, show_y, show_k]) if active]
