@@ -1469,14 +1469,14 @@
           }
 
           // ── Actualizar lista de Incidencias Técnicas (findingsList) ──
-          // Buscar por data-rule-id (nuevo) O por texto del título (fallback para cachés)
+          // Buscar por data-rule-id O por texto del título (doble búsqueda para robustez)
           let knockoutResolved = 0;
           document.querySelectorAll('#findingsList > div').forEach(div => {
             const ruleId = div.dataset.ruleId || '';
-            const titleText = div.querySelector('span.font-bold')?.textContent || '';
+            const allText = div.textContent || '';
             const isKnockout = ruleId === 'BLACK_TEXT_KNOCKOUT'
-              || titleText.includes('calado') || titleText.includes('knockout')
-              || titleText.includes('80%') || titleText.includes('negro');
+              || (allText.includes('calado') && allText.includes('K'))
+              || allText.includes('knockout');
             if (!isKnockout) return;
 
             div.className = 'p-3 rounded-lg border text-xs flex items-start gap-3 bg-emerald-50/70 border-emerald-200 text-emerald-900 transition-all';
@@ -1490,16 +1490,17 @@
             knockoutResolved++;
           });
 
-          // Ocultar el banner y actualizar contador de Incidencias
-          if (mode === 'all' || knockoutResolved > 0) {
+          // Si mode='all', ocultar siempre el banner (el fix fue exitoso aunque el div ya estuviera resuelto)
+          if (mode === 'all') {
             const overprintBanner = document.getElementById('findingsOverprintBanner');
             if (overprintBanner) overprintBanner.classList.add('hidden');
-          }
-          if (mode === 'all' && knockoutResolved > 0) {
-            const countEl = document.getElementById('findingsCount');
-            if (countEl) {
-              const current = parseInt(countEl.textContent) || 0;
-              countEl.textContent = Math.max(0, current - knockoutResolved);
+            // Restar del contador solo si había findings que marcar
+            if (knockoutResolved > 0) {
+              const countEl = document.getElementById('findingsCount');
+              if (countEl) {
+                const current = parseInt(countEl.textContent) || 0;
+                countEl.textContent = Math.max(0, current - knockoutResolved);
+              }
             }
           }
 

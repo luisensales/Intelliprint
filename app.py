@@ -471,9 +471,23 @@ async def convert_images_to_cmyk(
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
 
-    pdf_path = job_data.get("job_meta", {}).get("pdf_path")
+    job_meta = job_data.get("job_meta", {})
+
+    # Usar el PDF más reciente como fuente: overprint_fixed > cmyk_converted > original
+    # Así las correcciones son acumulativas independientemente del orden
+    overprint_path_prev = job_meta.get("overprint_fixed_pdf_path")
+    cmyk_path_prev      = job_meta.get("cmyk_converted_pdf_path")
+    pdf_path_orig       = job_meta.get("pdf_path")
+
+    if overprint_path_prev and os.path.exists(overprint_path_prev):
+        pdf_path = overprint_path_prev
+    elif cmyk_path_prev and os.path.exists(cmyk_path_prev):
+        pdf_path = cmyk_path_prev
+    else:
+        pdf_path = pdf_path_orig
+
     if not pdf_path or not os.path.exists(pdf_path):
-        raise HTTPException(status_code=404, detail="PDF original no encontrado en el servidor.")
+        raise HTTPException(status_code=404, detail="PDF de origen no encontrado en el servidor.")
 
     ICC_PROFILES_DIR = BASE_DIR / "icc_profiles"
     dst_icc_path = None
@@ -520,7 +534,12 @@ async def convert_images_to_cmyk(
         raise HTTPException(status_code=500, detail=f"La conversión falló: {'; '.join(errors)}")
 
     # Guardar la ruta del PDF convertido en el job
+    # Si se aplicó sobre un overprint_fixed anterior, limpiar overprint_fixed_pdf_path
+    # para que el visor y el endpoint de descarga usen el cmyk_converted (más reciente y completo)
     job_data["job_meta"]["cmyk_converted_pdf_path"] = str(output_path)
+    if job_data["job_meta"].get("overprint_fixed_pdf_path"):
+        # El overprint ya está integrado en el cmyk_converted; dejar de apuntar al anterior
+        job_data["job_meta"]["overprint_fixed_pdf_path"] = ""
     with open(job_json_path, "w", encoding="utf-8") as f:
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
@@ -585,7 +604,9 @@ async def apply_overprint_fix(job_id: str, mode: str = "all"):
 
     job_meta = job_data.get("job_meta", {})
 
-    # Usar el PDF convertido a CMYK si existe, si no el original
+    # Usar el PDF más reciente como fuente: cmyk_converted > original
+    # (El overprint_fixed ya apunta al resultado final acumulado, no lo usamos como fuente
+    #  para evitar re-aplicar overprint sobre overprint; siempre partimos del CMYK o el original)
     source_pdf = job_meta.get("cmyk_converted_pdf_path") or job_meta.get("pdf_path")
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(
