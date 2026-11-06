@@ -1161,15 +1161,29 @@
           const div = document.createElement('div');
           const isErr = f.severity === 'ERROR';
           const is100KO = (f.rule_id === 'BLACK_TEXT_KNOCKOUT_100') || (f.rule_id === 'BLACK_TEXT_KNOCKOUT');
+          const isHairline = (f.rule_id === 'HAIRLINE_DETECTED');
 
           let cardStyle = '';
           let iconHtml = '';
           let badgeHtml = '';
+          let actionHtml = '';
 
           if (is100KO) {
             cardStyle = 'bg-slate-900/5 border-slate-700 text-slate-950 ring-1 ring-slate-800/20';
             iconHtml = '<span class="inline-flex items-center justify-center w-5 h-5 rounded bg-slate-900 text-white font-mono font-bold text-[10px] shadow-xs" title="Texto 100% K">K</span>';
             badgeHtml = '<span class="text-[10px] bg-slate-900 text-white px-2 py-0.5 rounded font-bold ml-1 tracking-wide">100% K · Calado</span>';
+          } else if (isHairline) {
+            cardStyle = 'bg-amber-50/80 border-amber-300 text-amber-950 shadow-xs ring-1 ring-amber-400/20';
+            iconHtml = '<i class="fa-solid fa-pen-nib text-amber-600 text-sm"></i>';
+            badgeHtml = '<span class="text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded font-bold ml-1 tracking-wide">&lt; 0,25 pt</span>';
+            actionHtml = `
+              <div class="mt-2.5 pt-2 border-t border-amber-200 flex items-center justify-between gap-2 flex-wrap">
+                <span class="text-[11px] text-amber-800 font-medium"><i class="fa-solid fa-shield-halved text-amber-600 mr-1"></i>Ajuste seguro de imprenta:</span>
+                <button onclick="applyHairlineFix(this)" class="btn-fix-hairline flex items-center gap-1.5 px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer">
+                  <i class="fa-solid fa-wand-magic-sparkles text-amber-200"></i> Engrosar a 0,3 pt
+                </button>
+              </div>
+            `;
           } else if (isErr) {
             cardStyle = 'bg-red-50/50 border-red-200 text-red-900';
             iconHtml = '<i class="fa-solid fa-circle-xmark text-red-600 text-sm"></i>';
@@ -1189,6 +1203,7 @@
                 <span class="text-[10px] px-1.5 py-0.2 rounded bg-white/80 border border-slate-300 font-mono text-slate-700">Pág ${f.page}</span>
               </div>
               <p class="mt-0.5 text-slate-700">${f.message}</p>
+              ${actionHtml}
             </div>
           `;
           findingsList.appendChild(div);
@@ -1807,6 +1822,88 @@
           b.disabled = false;
           b.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Reintentar Auto-Trapping';
         });
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Fase 2: Corrección Contextual de Filetes Finos (Hairline Fixer)
+    // -----------------------------------------------------------------------
+    async function applyHairlineFix(btn) {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo.');
+        return;
+      }
+      const card = btn.closest('#findingsList > div');
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Engrosando a 0,3 pt...';
+
+      try {
+        const res = await fetch(`/api/fix-hairlines/${currentJobId}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          // Cambiar la tarjeta de la incidencia a estado resuelto
+          if (card) {
+            card.className = 'p-3 rounded-lg border text-xs flex items-center gap-3 bg-emerald-50 border-emerald-300 text-emerald-900 transition-all shadow-xs';
+            card.innerHTML = `
+              <div><i class="fa-solid fa-circle-check text-emerald-600 text-base"></i></div>
+              <div class="flex-1">
+                <span class="font-bold">Líneas finas engrosadas con éxito</span>
+                <p class="text-[11px] text-emerald-700">Se han ajustado <strong>${data.lines_fixed}</strong> trazo(s) a <strong>0,3 pt</strong> en ${data.pages_modified} página(s). Los filetes ya son seguros para plancha CTP e imprenta.</p>
+              </div>
+              <a href="${data.download_url}" target="_blank" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-semibold transition flex items-center gap-1 shadow-xs">
+                <i class="fa-solid fa-download"></i> PDF Corregido
+              </a>
+            `;
+          }
+
+          // Actualizar contador de incidencias
+          const countEl = document.getElementById('findingsCount');
+          if (data.findings && countEl) {
+            countEl.textContent = data.findings.length;
+          }
+
+          // Actualizar botón de cabecera si procede
+          const pdfBtn = document.getElementById('downloadPdfBtn');
+          const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+          if (pdfBtn && data.download_url) {
+            pdfBtn.href = data.download_url;
+            pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+          }
+          if (pdfBtnLabel) {
+            pdfBtnLabel.textContent = 'Descargar PDF (Líneas OK)';
+          }
+
+          // Actualizar dictamen técnico general si viene en la respuesta
+          if (data.triple_result && data.triple_result.technical) {
+            const tech = data.triple_result.technical;
+            const techBadge = document.getElementById('badgeTechnical');
+            const descTech = document.getElementById('descTechnical');
+            if (techBadge) {
+              techBadge.textContent = tech.label;
+              if (tech.status === 'PASS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-emerald-100 text-emerald-800 border border-emerald-200';
+              } else if (tech.status === 'PASS_WITH_WARNINGS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-amber-100 text-amber-800 border border-amber-200';
+              } else {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-red-100 text-red-800 border border-red-200';
+              }
+            }
+            if (descTech) {
+              descTech.textContent = `${tech.errors_count} errores críticos, ${tech.warnings_count} advertencias.`;
+            }
+          }
+        } else {
+          alert('Error: ' + (data.detail || 'No se pudieron engrosar las líneas finas.'));
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de conexión al engrosar líneas finas.');
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
       }
     }
 

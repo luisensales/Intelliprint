@@ -187,6 +187,7 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
         'text_render_mode': 0,
         'font_size': 0.0,          # tamaño de fuente actual (pt)
         'ctm_scale': 1.0,          # escala del CTM para calcular tamaño real
+        'line_width': 1.0,         # grosor de línea en pt (por defecto 1.0 en spec PDF)
     }
 
     for operands, operator in commands:
@@ -226,6 +227,13 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
                     import math
                     a, b = float(operands[0]), float(operands[1])
                     state['ctm_scale'] = math.sqrt(a*a + b*b)
+                except Exception:
+                    pass
+        elif op_str == 'w':
+            # w line_width — grosor de trazo en espacio de usuario
+            if operands:
+                try:
+                    state['line_width'] = float(operands[0])
                 except Exception:
                     pass
         elif op_str == 'g':
@@ -384,6 +392,23 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
                         "category": "Sobreimpresión",
                         "title": "Trazo blanco en sobreimpresión (desaparecerá en plancha)",
                         "message": f"Línea o trazo blanco con sobreimpresión activa en pág {page_num}. Desaparecerá en la impresión."
+                    })
+
+            # Comprobar filetes demasiado finos (< 0.25 pt / hairline)
+            lw = state.get('line_width', 1.0)
+            ctm = state.get('ctm_scale', 1.0)
+            effective_lw = lw * ctm if ctm > 0 else lw
+            if 0.0 <= effective_lw < 0.25:
+                overprint_data["hairlines_count"] = overprint_data.get("hairlines_count", 0) + 1
+                if not any(inc["page"] == page_num and inc["type"] == "HAIRLINE_DETECTED" for inc in overprint_data["incidents"]):
+                    overprint_data["incidents"].append({
+                        "page": page_num,
+                        "type": "HAIRLINE_DETECTED",
+                        "severity": "WARNING",
+                        "category": "Trazos y Geometría",
+                        "title": "Filetes demasiado finos (< 0,25 pt)",
+                        "message": f"Se detectan trazos con grosor inferior a 0,25 pt ({effective_lw:.2f} pt) en pág {page_num}. En plancha CTP o imprenta pueden romperse o no imprimirse.",
+                        "can_autofix": True,
                     })
 
 def check_spot(spot_name, is_overprinting, page_num, overprint_data, context="objeto"):
@@ -796,6 +821,7 @@ class IntelliPrintEngine:
             "varnish_knockout": 0,
             "pantone_overprint": 0,
             "pantone_knockout": 0,
+            "hairlines_count": 0,
             "incidents": []
         }
 
@@ -839,16 +865,19 @@ class IntelliPrintEngine:
                     "message": "Se recomienda declarar un perfil sRGB para garantizar reproducción uniforme en pantalla."
                 })
 
-        # Merge overprint incidents
+        # Merge overprint & geometry incidents
         for inc in overprint_data["incidents"]:
-            findings.append({
+            finding_dict = {
                 "page": inc["page"],
                 "rule_id": inc["type"],
                 "severity": inc["severity"],
                 "category": inc["category"],
                 "title": inc["title"],
                 "message": inc["message"]
-            })
+            }
+            if inc.get("can_autofix"):
+                finding_dict["can_autofix"] = True
+            findings.append(finding_dict)
 
         # Run Spellchecker
         spell_suggestions = self.spellchecker.check_pdf_text(doc)

@@ -173,6 +173,11 @@ def generate_preflight_certificate_pdf(job_data, output_path):
                     if f.get("rule_id") != "VARNISH_KNOCKOUT"
                     and "barniz" not in f.get("title", "").lower()]
 
+    if meta.get("has_hairline_fixed") or meta.get("hairline_fixed_pdf_path"):
+        findings = [f for f in findings
+                    if f.get("rule_id") != "HAIRLINE_DETECTED"
+                    and "filete" not in f.get("title", "").lower()]
+
     adj_errors   = sum(1 for f in findings if f.get("severity") == "ERROR")
     adj_warnings = sum(1 for f in findings if f.get("severity") == "WARNING")
 

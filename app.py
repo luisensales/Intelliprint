@@ -23,6 +23,7 @@ from color_converter import convert_rgb_images_to_cmyk, extract_embedded_icc_to_
 from separations_viewer import render_page_separation
 from overprint_fixer import apply_overprint_to_dark_text, apply_overprint_to_technical_inks, fix_white_overprint, fix_rich_black_small_text
 from spot_converter import convert_spot_colors_to_cmyk
+from hairline_fixer import fix_hairlines
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -835,6 +836,118 @@ async def apply_overprint_fix(job_id: str, mode: str = "k100"):
         "findings": job_data["findings"],
         "triple_result": job_data["triple_result"],
     }
+
+
+@app.post("/api/fix-hairlines/{job_id}")
+async def fix_hairlines_endpoint(job_id: str, target_width: float = 0.30):
+    """
+    Fase 2: Engrosa trazos finos (< 0.25 pt / hairline) a un grosor seguro (0.30 pt).
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    # Cadena acumulativa de PDFs: tomar el más reciente
+    source_pdf = (
+        job_meta.get("hairline_fixed_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not source_pdf or not Path(source_pdf).exists():
+        raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
+
+    output_path = JOBS_DIR / f"{safe_id}_hairline_fixed.pdf"
+
+    result = fix_hairlines(
+        pdf_path=source_pdf,
+        output_path=output_path,
+        target_width=target_width
+    )
+
+    if not result.get("success"):
+        errors = result.get("errors", [])
+        raise HTTPException(status_code=500, detail=f"Fallo al engrosar líneas finas: {'; '.join(errors)}")
+
+    # Guardar ruta acumulada
+    job_data["job_meta"]["hairline_fixed_pdf_path"] = str(output_path)
+    job_data["job_meta"]["has_hairline_fixed"] = True
+    job_data["job_meta"]["last_fixed_pdf_path"] = str(output_path)
+
+    # Limpiar incidencias de HAIRLINE_DETECTED
+    job_data["findings"] = [
+        f for f in job_data.get("findings", [])
+        if f.get("rule_id") != "HAIRLINE_DETECTED"
+    ]
+
+    # Recalcular dictamen técnico
+    all_findings = job_data.get("findings", [])
+    errs = sum(1 for f in all_findings if f.get("severity") == "ERROR")
+    warns = sum(1 for f in all_findings if f.get("severity") == "WARNING")
+    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
+    tech["errors_count"] = errs
+    tech["warnings_count"] = warns
+    if errs > 0:
+        tech["status"] = "FAIL"
+        tech["label"] = "NO CUMPLE"
+    elif warns > 0:
+        tech["status"] = "PASS_WITH_WARNINGS"
+        tech["label"] = "CUMPLE CON AVISOS"
+    else:
+        tech["status"] = "PASS"
+        tech["label"] = "CUMPLE"
+
+    # Regenerar certificado
+    cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
+    try:
+        generate_preflight_certificate_pdf(job_data, cert_path)
+    except Exception as e:
+        print(f"[fix-hairlines] Error regenerando certificado: {e}")
+
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "success",
+        "job_id": safe_id,
+        "lines_fixed": result.get("lines_fixed", 0),
+        "pages_modified": result.get("pages_modified", 0),
+        "download_url": f"/api/download-hairline/{safe_id}",
+        "findings": job_data["findings"],
+        "triple_result": job_data["triple_result"],
+    }
+
+
+@app.get("/api/download-hairline/{job_id}")
+async def download_hairline_pdf(job_id: str):
+    """Descarga el PDF con líneas finas engrosadas."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    fixed_path = job_data.get("job_meta", {}).get("hairline_fixed_pdf_path")
+    if not fixed_path or not Path(fixed_path).exists():
+        raise HTTPException(
+            status_code=404,
+            detail="PDF con líneas corregidas no encontrado."
+        )
+
+    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    clean_name = filename.replace(".pdf", "")
+    return FileResponse(
+        path=fixed_path,
+        media_type="application/pdf",
+        filename=f"IntelliPrint_{clean_name}_Hairline_OK.pdf"
+    )
 
 
 @app.get("/api/download-overprint/{job_id}")
