@@ -183,6 +183,11 @@ def generate_preflight_certificate_pdf(job_data, output_path):
                     if f.get("rule_id") != "DOCUMENT_OUTPUT_ICC"
                     and "icc" not in f.get("title", "").lower()]
 
+    if meta.get("has_bleed_fixed") or meta.get("bleed_fixed_pdf_path"):
+        findings = [f for f in findings
+                    if f.get("rule_id") != "BLEED_GEOMETRY_3MM"
+                    and "sangrado" not in f.get("title", "").lower()]
+
     adj_errors   = sum(1 for f in findings if f.get("severity") == "ERROR")
     adj_warnings = sum(1 for f in findings if f.get("severity") == "WARNING")
 

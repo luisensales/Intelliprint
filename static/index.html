@@ -1163,6 +1163,7 @@
           const is100KO = (f.rule_id === 'BLACK_TEXT_KNOCKOUT_100') || (f.rule_id === 'BLACK_TEXT_KNOCKOUT');
           const isHairline = (f.rule_id === 'HAIRLINE_DETECTED');
           const isIccMissing = (f.rule_id === 'DOCUMENT_OUTPUT_ICC');
+          const isBleedMissing = (f.rule_id === 'BLEED_GEOMETRY_3MM');
 
           let cardStyle = '';
           let iconHtml = '';
@@ -1194,6 +1195,18 @@
                 <span class="text-[11px] text-blue-800 font-medium"><i class="fa-solid fa-stamp text-blue-600 mr-1"></i>Condición de impresión recomendada:</span>
                 <button onclick="applyOutputIntentFix(this)" class="btn-fix-icc flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer">
                   <i class="fa-solid fa-wand-magic-sparkles text-blue-200"></i> Incrustar OutputIntent ISO Coated v2 (FOGRA39)
+                </button>
+              </div>
+            `;
+          } else if (isBleedMissing) {
+            cardStyle = 'bg-rose-50/80 border-rose-300 text-rose-950 shadow-xs ring-1 ring-rose-400/20';
+            iconHtml = '<i class="fa-solid fa-crop-simple text-rose-600 text-sm"></i>';
+            badgeHtml = '<span class="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded font-bold ml-1 tracking-wide">Sangrado &lt; 3 mm</span>';
+            actionHtml = `
+              <div class="mt-2.5 pt-2 border-t border-rose-200 flex items-center justify-between gap-2 flex-wrap">
+                <span class="text-[11px] text-rose-800 font-medium"><i class="fa-solid fa-ruler-combined text-rose-600 mr-1"></i>Geometría de corte ISO:</span>
+                <button onclick="applyBleedGeometryFix(this)" class="btn-fix-bleed flex items-center gap-1.5 px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer">
+                  <i class="fa-solid fa-wand-magic-sparkles text-rose-200"></i> Ajustar Cajas y Sangrado 3 mm
                 </button>
               </div>
             `;
@@ -2008,6 +2021,94 @@
       } catch (err) {
         console.error(err);
         alert('Error de conexión al incrustar OutputIntent.');
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Fase 2: Corrección Contextual de Cajas y Sangrado (BLEED_GEOMETRY_3MM)
+    // -----------------------------------------------------------------------
+    async function applyBleedGeometryFix(btn) {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo.');
+        return;
+      }
+      const card = btn.closest('#findingsList > div');
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Ajustando cajas y sangrado...';
+
+      try {
+        const res = await fetch(`/api/fix-bleed-geometry/${currentJobId}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          // Cambiar la tarjeta de la incidencia a estado resuelto
+          if (card) {
+            card.className = 'p-3 rounded-lg border text-xs flex items-center gap-3 bg-emerald-50 border-emerald-300 text-emerald-900 transition-all shadow-xs';
+            card.innerHTML = `
+              <div><i class="fa-solid fa-circle-check text-emerald-600 text-base"></i></div>
+              <div class="flex-1">
+                <span class="font-bold">TrimBox y BleedBox a 3,0 mm ajustados con éxito</span>
+                <p class="text-[11px] text-emerald-700">Se han normalizado las cajas de corte y sangrado reglamentario (+3 mm) según norma ISO 12647 / PDF/X.</p>
+              </div>
+              <a href="${data.download_url}" target="_blank" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-semibold transition flex items-center gap-1 shadow-xs">
+                <i class="fa-solid fa-download"></i> PDF Corregido
+              </a>
+            `;
+          }
+
+          // Actualizar métrica visual de sangrado en el panel
+          const metricBleedEl = document.getElementById('metricBleed');
+          if (metricBleedEl) {
+            metricBleedEl.innerHTML = '<span class="text-emerald-700 font-bold">3.0 mm (Ajustado)</span>';
+          }
+
+          // Actualizar contador de incidencias
+          const countEl = document.getElementById('findingsCount');
+          if (data.findings && countEl) {
+            countEl.textContent = data.findings.length;
+          }
+
+          // Actualizar botón de cabecera si procede
+          const pdfBtn = document.getElementById('downloadPdfBtn');
+          const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+          if (pdfBtn && data.download_url) {
+            pdfBtn.href = data.download_url;
+            pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+          }
+          if (pdfBtnLabel) {
+            pdfBtnLabel.textContent = 'Descargar PDF (Sangrado OK)';
+          }
+
+          // Actualizar dictamen técnico general si viene en la respuesta
+          if (data.triple_result && data.triple_result.technical) {
+            const tech = data.triple_result.technical;
+            const techBadge = document.getElementById('badgeTechnical');
+            const descTech = document.getElementById('descTechnical');
+            if (techBadge) {
+              techBadge.textContent = tech.label;
+              if (tech.status === 'PASS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-emerald-100 text-emerald-800 border border-emerald-200';
+              } else if (tech.status === 'PASS_WITH_WARNINGS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-amber-100 text-amber-800 border border-amber-200';
+              } else {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-red-100 text-red-800 border border-red-200';
+              }
+            }
+            if (descTech) {
+              descTech.textContent = `${tech.errors_count} errores críticos, ${tech.warnings_count} advertencias.`;
+            }
+          }
+        } else {
+          alert('Error: ' + (data.detail || 'No se pudo ajustar el sangrado.'));
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de conexión al ajustar sangrado.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
       }
