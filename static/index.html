@@ -984,6 +984,7 @@
           const div = document.createElement('div');
           const isErr = f.severity === 'ERROR';
           div.className = `p-3 rounded-lg border text-xs flex items-start gap-3 ${isErr ? 'bg-red-50/50 border-red-200 text-red-900' : 'bg-amber-50/50 border-amber-200 text-amber-900'}`;
+          div.dataset.ruleId = f.rule_id || '';
           div.innerHTML = `
             <div class="mt-0.5"><i class="fa-solid ${isErr ? 'fa-circle-xmark text-red-600' : 'fa-triangle-exclamation text-amber-600'}"></i></div>
             <div class="flex-1">
@@ -1465,6 +1466,37 @@
           // Refrescar automáticamente la previsualización de separaciones
           if (typeof updateSeparationPreview === 'function') {
             updateSeparationPreview();
+          }
+
+          // ── Actualizar lista de Incidencias Técnicas (findingsList) ──
+          document.querySelectorAll('#findingsList > div').forEach(div => {
+            const ruleId = div.dataset.ruleId || '';
+            if (ruleId !== 'BLACK_TEXT_KNOCKOUT') return;
+
+            // mode='all' resuelve todos; mode='k100' solo el finding de 100% K
+            // (Solo hay un finding por tipo, así que lo marcamos igualmente)
+            div.className = 'p-3 rounded-lg border text-xs flex items-start gap-3 bg-emerald-50/70 border-emerald-200 text-emerald-900 transition-all';
+            const iconDiv = div.querySelector('div:first-child');
+            if (iconDiv) iconDiv.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600"></i>';
+            const titleSpan = div.querySelector('span.font-bold');
+            if (titleSpan && !titleSpan.innerHTML.includes('Auto-Trapping')) {
+              const label = mode === 'all' ? 'Ambos corregidos' : '100% K corregido';
+              titleSpan.innerHTML += ` <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-800 font-bold ml-1">✓ Auto-Trapping aplicado (${label})</span>`;
+            }
+          });
+
+          // Actualizar contador de Incidencias y ocultar banner si se resolvió todo
+          if (mode === 'all') {
+            // Ocultar el banner del aviso de sobreimpresión en Incidencias
+            const overprintBanner = document.getElementById('findingsOverprintBanner');
+            if (overprintBanner) overprintBanner.classList.add('hidden');
+
+            // Restar 1 al contador de incidencias (el finding BLACK_TEXT_KNOCKOUT)
+            const countEl = document.getElementById('findingsCount');
+            if (countEl) {
+              const current = parseInt(countEl.textContent) || 0;
+              countEl.textContent = Math.max(0, current - 1);
+            }
           }
 
         } else {
