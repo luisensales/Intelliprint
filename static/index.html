@@ -406,10 +406,33 @@
                   <span class="text-slate-500 font-medium">Perfil de simulación:</span>
                   <span id="sepActiveProfileBadge" class="font-bold text-slate-900">Determinando...</span>
                 </div>
-                <div class="flex items-center gap-2">
-                  <label class="text-[11px] font-semibold text-slate-600">Página:</label>
-                  <select id="sepPageSelect" onchange="updateSeparationPreview()" class="text-xs border border-slate-200 rounded-lg px-2.5 py-1 bg-slate-50 outline-none font-semibold">
-                    <option value="1">Página 1</option>
+
+                <!-- Selector de páginas estilo Acrobat con flechas -->
+                <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs shadow-2xs">
+                  <button id="sepPrevPageBtn" type="button" onclick="changeSepPage(-1)"
+                    class="w-7 h-7 flex items-center justify-center rounded-md bg-white hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-200 transition"
+                    title="Página anterior (←)">
+                    <i class="fa-solid fa-chevron-left text-[11px]"></i>
+                  </button>
+
+                  <div class="flex items-center gap-1 px-1 text-xs">
+                    <span class="text-slate-500 font-medium">Pág.</span>
+                    <input type="number" id="sepPageInput" min="1" max="1" value="1"
+                      onchange="onSepPageInputChange(this.value)"
+                      onkeydown="if(event.key==='Enter') onSepPageInputChange(this.value)"
+                      class="w-12 text-center bg-white border border-slate-300 rounded px-1 py-0.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none">
+                    <span class="text-slate-500 font-medium">de <span id="sepTotalPages" class="font-bold text-slate-700">1</span></span>
+                  </div>
+
+                  <button id="sepNextPageBtn" type="button" onclick="changeSepPage(1)"
+                    class="w-7 h-7 flex items-center justify-center rounded-md bg-white hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-200 transition"
+                    title="Página siguiente (→)">
+                    <i class="fa-solid fa-chevron-right text-[11px]"></i>
+                  </button>
+
+                  <select id="sepPageSelect" onchange="onSepPageSelectChange(this.value)"
+                    class="ml-1 text-[11px] border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 outline-none cursor-pointer font-medium">
+                    <option value="1">Pág. 1</option>
                   </select>
                 </div>
               </div>
@@ -1256,19 +1279,79 @@
     // Previsualizador de Separaciones de Color (Acrobat Output Preview)
     // -----------------------------------------------------------------------
     let sepInitialProfileName = 'Perfil del documento';
+    let sepCurrentPage = 1;
+    let sepTotalPageCount = 1;
 
     function initSeparations(pageCount) {
+      sepTotalPageCount = Math.max(1, pageCount || 1);
+      sepCurrentPage = 1;
+
       const sel = document.getElementById('sepPageSelect');
-      if (!sel) return;
-      sel.innerHTML = '';
-      for (let i = 1; i <= pageCount; i++) {
-        const opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = `Página ${i}`;
-        sel.appendChild(opt);
+      if (sel) {
+        sel.innerHTML = '';
+        for (let i = 1; i <= sepTotalPageCount; i++) {
+          const opt = document.createElement('option');
+          opt.value = i;
+          opt.textContent = `Pág. ${i}`;
+          sel.appendChild(opt);
+        }
+        sel.value = 1;
       }
+
+      const totalSpan = document.getElementById('sepTotalPages');
+      if (totalSpan) totalSpan.textContent = sepTotalPageCount;
+
+      const pageInput = document.getElementById('sepPageInput');
+      if (pageInput) {
+        pageInput.min = 1;
+        pageInput.max = sepTotalPageCount;
+        pageInput.value = 1;
+      }
+
       const profSel = document.getElementById('sepSimProfileSelect');
       if (profSel) profSel.value = 'default';
+
+      updateSepNavButtons();
+      updateSeparationPreview();
+    }
+
+    function updateSepNavButtons() {
+      const prevBtn = document.getElementById('sepPrevPageBtn');
+      const nextBtn = document.getElementById('sepNextPageBtn');
+      if (prevBtn) prevBtn.disabled = (sepCurrentPage <= 1);
+      if (nextBtn) nextBtn.disabled = (sepCurrentPage >= sepTotalPageCount);
+
+      const pageInput = document.getElementById('sepPageInput');
+      if (pageInput) pageInput.value = sepCurrentPage;
+
+      const sel = document.getElementById('sepPageSelect');
+      if (sel) sel.value = sepCurrentPage;
+    }
+
+    function changeSepPage(delta) {
+      const newPage = sepCurrentPage + delta;
+      if (newPage >= 1 && newPage <= sepTotalPageCount) {
+        sepCurrentPage = newPage;
+        updateSepNavButtons();
+        updateSeparationPreview();
+      }
+    }
+
+    function onSepPageInputChange(val) {
+      let pageNum = parseInt(val, 10);
+      if (isNaN(pageNum)) pageNum = 1;
+      pageNum = Math.max(1, Math.min(sepTotalPageCount, pageNum));
+      sepCurrentPage = pageNum;
+      updateSepNavButtons();
+      updateSeparationPreview();
+    }
+
+    function onSepPageSelectChange(val) {
+      let pageNum = parseInt(val, 10);
+      if (isNaN(pageNum)) pageNum = 1;
+      pageNum = Math.max(1, Math.min(sepTotalPageCount, pageNum));
+      sepCurrentPage = pageNum;
+      updateSepNavButtons();
       updateSeparationPreview();
     }
 
@@ -1310,7 +1393,7 @@
       if (!currentJobId) return;
       clearTimeout(sepDebounce);
       sepDebounce = setTimeout(() => {
-        const page = document.getElementById('sepPageSelect')?.value || 1;
+        const page = sepCurrentPage || 1;
         const c = document.getElementById('sepChanC')?.checked ?? true;
         const m = document.getElementById('sepChanM')?.checked ?? true;
         const y = document.getElementById('sepChanY')?.checked ?? true;
