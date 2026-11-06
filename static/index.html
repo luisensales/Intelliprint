@@ -280,6 +280,18 @@
             </div>
           </div>
 
+          <!-- Banner Negro Enriquecido en Texto Pequeño (Aviso) -->
+          <div id="findingsRichBlackBanner" class="hidden p-3.5 bg-amber-50 border border-amber-400 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
+            <div class="flex items-start gap-2.5">
+              <i class="fa-solid fa-font text-amber-600 mt-0.5 text-sm shrink-0"></i>
+              <div>
+                <p class="font-bold text-amber-900">⚠️ Aviso: Texto pequeño en Negro Enriquecido (Rich Black)</p>
+                <p class="text-[11px] text-amber-700 mt-0.5">Se ha detectado texto de <strong>cuerpo menor de 12 pt</strong> compuesto en negro enriquecido (C+M+Y+K). En imprenta offset esto produce halos de color visibles por desajuste de registro entre los cuerpos impresores.</p>
+                <p class="text-[11px] text-amber-500 mt-0.5 font-medium">✅ Se convertirá automáticamente a Negro Puro (0/0/0/100) al aplicar el Auto-Trapping.</p>
+              </div>
+            </div>
+          </div>
+
           <!-- Banner Auto-Trapping en Incidencias -->
           <div id="findingsOverprintBanner" class="hidden p-3.5 bg-amber-50 border border-amber-300 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
             <div class="flex items-start gap-2.5">
@@ -403,6 +415,14 @@
                     <span class="text-[10px] bg-red-100 text-red-700 px-1 py-0.5 rounded font-semibold">CRÍTICO</span>
                   </span>
                   <span id="metricWhiteOverprint" class="font-bold text-red-600">0</span>
+                </li>
+                <!-- Negro enriquecido en texto pequeño -->
+                <li class="flex justify-between items-center py-1 border-b border-slate-100">
+                  <span class="flex items-center gap-1">
+                    Negro enriquecido &lt;12 pt
+                    <span class="text-[10px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded font-semibold">AVISO</span>
+                  </span>
+                  <span id="metricRichBlackSmall" class="font-bold text-amber-600">0</span>
                 </li>
                 <li class="flex justify-between py-1">
                   <span>Pantones sobreimprimiendo (aviso):</span>
@@ -1033,6 +1053,10 @@
       if (findingsWhiteBanner) findingsWhiteBanner.classList.add('hidden');
       const metricWhiteReset = document.getElementById('metricWhiteOverprint');
       if (metricWhiteReset) { metricWhiteReset.textContent = '0'; metricWhiteReset.className = 'font-bold text-emerald-600'; }
+      const findingsRichBlackBanner = document.getElementById('findingsRichBlackBanner');
+      if (findingsRichBlackBanner) findingsRichBlackBanner.classList.add('hidden');
+      const metricRichReset = document.getElementById('metricRichBlackSmall');
+      if (metricRichReset) { metricRichReset.textContent = '0'; metricRichReset.className = 'font-bold text-emerald-600'; }
       const convertSpotsBox = document.getElementById('convertSpotsBox');
       if (convertSpotsBox) convertSpotsBox.classList.add('hidden');
       const convertSpotsStatus = document.getElementById('convertSpotsStatus');
@@ -1259,6 +1283,16 @@
       }
       const whiteBanner = document.getElementById('findingsWhiteBanner');
       if (whiteBanner) whiteBanner.classList.toggle('hidden', whiteOP === 0);
+
+      // Rich Black pequeño – métrica y banner
+      const richBlack = over.rich_black_small_text || 0;
+      const metricRich = document.getElementById('metricRichBlackSmall');
+      if (metricRich) {
+        metricRich.textContent = richBlack;
+        metricRich.className = richBlack > 0 ? 'font-bold text-amber-600' : 'font-bold text-emerald-600';
+      }
+      const richBanner = document.getElementById('findingsRichBlackBanner');
+      if (richBanner) richBanner.classList.toggle('hidden', richBlack === 0);
 
       // Sincronizar aviso y botón de barnices en calado (error crítico)
       const hasVarnishKO = (over.varnish_knockout || 0) > 0;
@@ -1643,6 +1677,9 @@
             if (data.white_objects_fixed > 0) {
               detail += ` + ${data.white_objects_fixed} objeto(s) blanco(s) en sobreimpresión corregidos`;
             }
+            if (data.rich_texts_fixed > 0) {
+              detail += ` + ${data.rich_texts_fixed} texto(s) de negro enriquecido convertidos a 100% K`;
+            }
             doneCount.textContent = detail;
           }
 
@@ -1653,6 +1690,16 @@
             const metricWhite = document.getElementById('metricWhiteOverprint');
             if (metricWhite) {
               metricWhite.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
+            }
+          }
+
+          // Ocultar banner de negro enriquecido si se corrigieron
+          if ((data.rich_texts_fixed || 0) > 0) {
+            const richBanner = document.getElementById('findingsRichBlackBanner');
+            if (richBanner) richBanner.classList.add('hidden');
+            const metricRich = document.getElementById('metricRichBlackSmall');
+            if (metricRich) {
+              metricRich.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
             }
           }
 

@@ -21,7 +21,7 @@ from spellcheck_engine import save_word_to_glossary
 from report_generator import generate_preflight_certificate_pdf
 from color_converter import convert_rgb_images_to_cmyk, extract_embedded_icc_to_tempfile
 from separations_viewer import render_page_separation
-from overprint_fixer import apply_overprint_to_dark_text, apply_overprint_to_technical_inks, fix_white_overprint
+from overprint_fixer import apply_overprint_to_dark_text, apply_overprint_to_technical_inks, fix_white_overprint, fix_rich_black_small_text
 from spot_converter import convert_spot_colors_to_cmyk
 
 BASE_DIR = Path(__file__).parent
@@ -743,13 +743,34 @@ async def apply_overprint_fix(job_id: str, mode: str = "all"):
         if white_fix_tmp.exists():
             white_fix_tmp.unlink(missing_ok=True)
 
-    # ── PASO 2: Auto-trapping de textos negros/oscuros ───────────────────────
+    # ── PASO 2 (silencioso): Rich Black Killer ───────────────────────────────
+    # Convierte negro enriquecido en texto < 12 pt a negro puro 0/0/0/100.
+    rich_fix_tmp = JOBS_DIR / f"{safe_id}_rich_black_tmp.pdf"
+    rich_result = fix_rich_black_small_text(overprint_source, str(rich_fix_tmp))
+    rich_texts_fixed = 0
+    if rich_result.get("success") and rich_result.get("texts_fixed", 0) > 0:
+        rich_texts_fixed = rich_result["texts_fixed"]
+        overprint_source = str(rich_fix_tmp)
+        # Limpiar incidencias RICH_BLACK_SMALL_TEXT de findings
+        job_data["findings"] = [
+            f for f in job_data.get("findings", [])
+            if f.get("rule_id") != "RICH_BLACK_SMALL_TEXT"
+        ]
+        stats = job_data.get("job_summary", {}).get("overprint_stats", {})
+        stats["rich_black_small_text"] = 0
+    else:
+        if rich_fix_tmp.exists():
+            rich_fix_tmp.unlink(missing_ok=True)
+
+    # ── PASO 3: Auto-trapping de textos negros/oscuros ───────────────────────
     k_threshold = 0.99 if mode == "k100" else 0.80
     result = apply_overprint_to_dark_text(overprint_source, str(output_path), dark_k_threshold=k_threshold)
 
-    # Limpiar tmp intermedio si existe
+    # Limpiar tmps intermedios
     if white_fix_tmp.exists():
         white_fix_tmp.unlink(missing_ok=True)
+    if rich_fix_tmp.exists():
+        rich_fix_tmp.unlink(missing_ok=True)
 
     if not result.get("success"):
         errors = result.get("errors", [])
@@ -823,6 +844,7 @@ async def apply_overprint_fix(job_id: str, mode: str = "all"):
         "text_100_fixed": result.get("text_100_fixed", 0),
         "text_80_fixed": result.get("text_80_fixed", 0),
         "white_objects_fixed": white_objects_fixed,
+        "rich_texts_fixed": rich_texts_fixed,
         "errors": result.get("errors", []),
         "download_url": f"/api/download-overprint/{safe_id}",
         "overprint_stats": stats,

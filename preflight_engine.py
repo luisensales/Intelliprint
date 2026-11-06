@@ -184,7 +184,9 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
         'stroke_cs': ('DeviceGray', None),
         'fill_color': (0,),
         'stroke_color': (0,),
-        'text_render_mode': 0
+        'text_render_mode': 0,
+        'font_size': 0.0,          # tamaño de fuente actual (pt)
+        'ctm_scale': 1.0,          # escala del CTM para calcular tamaño real
     }
 
     for operands, operator in commands:
@@ -208,6 +210,22 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
             if operands:
                 try:
                     state['text_render_mode'] = int(operands[0])
+                except Exception:
+                    pass
+        elif op_str == 'Tf':
+            # Tf fontname fontsize — rastrear tamaño de fuente actual
+            if len(operands) >= 2:
+                try:
+                    state['font_size'] = float(operands[1])
+                except Exception:
+                    pass
+        elif op_str == 'cm':
+            # cm a b c d e f — actualizar escala aproximada del CTM
+            if len(operands) >= 6:
+                try:
+                    import math
+                    a, b = float(operands[0]), float(operands[1])
+                    state['ctm_scale'] = math.sqrt(a*a + b*b)
                 except Exception:
                     pass
         elif op_str == 'g':
@@ -321,6 +339,28 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
 
             if spot_name:
                 check_spot(spot_name, state['op'] if is_fill else state['OP'], page_num, overprint_data, "texto")
+
+            # Comprobar negro enriquecido en texto pequeño (< 12 pt)
+            # En imprenta offset el negro enriquecido en cuerpo pequeño provoca halos por desajuste de registro
+            if is_fill and not spot_name and _has_visible_text(op_str, operands):
+                font_pt = state.get('font_size', 0.0) * state.get('ctm_scale', 1.0)
+                is_small = 0 < font_pt < 12.0
+                cs_type_f, _ = state['fill_cs']
+                if is_small and cs_type_f == 'DeviceCMYK' and len(state['fill_color']) >= 4:
+                    fc, fm, fy, fk = state['fill_color'][:4]
+                    # Negro enriquecido = K > 0 pero también hay CMY significativo (> 5%)
+                    is_rich_black = fk > 0.3 and (fc > 0.05 or fm > 0.05 or fy > 0.05)
+                    if is_rich_black:
+                        overprint_data["rich_black_small_text"] += 1
+                        if not any(inc["page"] == page_num and inc["type"] == "RICH_BLACK_SMALL_TEXT" for inc in overprint_data["incidents"]):
+                            overprint_data["incidents"].append({
+                                "page": page_num,
+                                "type": "RICH_BLACK_SMALL_TEXT",
+                                "severity": "WARNING",
+                                "category": "Color",
+                                "title": f"Texto pequeño ({font_pt:.1f} pt) en negro enriquecido",
+                                "message": f"Texto de {font_pt:.1f} pt con negro enriquecido (C:{int(fc*100)}% M:{int(fm*100)}% Y:{int(fy*100)}% K:{int(fk*100)}%) en pág {page_num}. En texto < 12 pt el negro enriquecido provoca halos de color por desajuste de registro. Debe usarse negro puro 0/0/0/100."
+                            })
 
         # Vector fills
         elif op_str in ['f', 'F', 'f*', 'b', 'b*', 'B', 'B*']:
@@ -761,6 +801,7 @@ class IntelliPrintEngine:
             "black_text_overprint": 0,
             "black_text_knockout": 0,
             "white_overprint": 0,
+            "rich_black_small_text": 0,
             "varnish_overprint": 0,
             "varnish_knockout": 0,
             "pantone_overprint": 0,
@@ -879,6 +920,7 @@ class IntelliPrintEngine:
                     "black_text_overprint": overprint_data["black_text_overprint"],
                     "black_text_knockout": overprint_data["black_text_knockout"],
                     "white_overprint": overprint_data.get("white_overprint", 0),
+                    "rich_black_small_text": overprint_data.get("rich_black_small_text", 0),
                     "varnish_overprint": overprint_data["varnish_overprint"],
                     "varnish_knockout": overprint_data["varnish_knockout"],
                     "pantone_overprint": overprint_data["pantone_overprint"],
