@@ -573,12 +573,14 @@ async def get_page_separation(
     k: bool = True,
     mode: str = "color",
     dpi: int = 110,
-    use_converted: bool = True
+    use_converted: bool = True,
+    icc: Optional[str] = None
 ):
     """
     Renderiza la simulación de separaciones de color CMYK para la página seleccionada.
     Permite activar/desactivar individualmente planchas de Cian, Magenta, Amarillo y Negro
     para verificar visualmente sobreimpresiones y calados como en Adobe Acrobat Output Preview.
+    Aplica el perfil de simulación ICC escogido en la página inicial o el indicado en el visor.
     """
     job_json_path = JOBS_DIR / f"{job_id}.json"
     if not job_json_path.exists():
@@ -599,8 +601,49 @@ async def get_page_separation(
     if not target_pdf:
         raise HTTPException(status_code=404, detail="Archivo PDF no encontrado en el servidor.")
 
-    selected_icc = job_data.get("job_meta", {}).get("selected_icc")
-    icc_cmyk_path = (BASE_DIR / "icc_profiles" / selected_icc) if selected_icc else None
+    temp_extracted_icc = None
+    icc_cmyk_path = None
+
+    # 1. Si se especificó un perfil en la llamada al endpoint (distinto de 'default'/'job_initial')
+    if icc and icc not in ("default", "job_initial"):
+        safe_name = Path(icc).name
+        custom_path = BASE_DIR / "icc_profiles" / safe_name
+        if custom_path.exists():
+            icc_cmyk_path = str(custom_path)
+
+    # 2. Si no se especificó, usar la selección realizada en la página inicial
+    if not icc_cmyk_path:
+        icc_option = job_data.get("job_meta", {}).get("icc_option", "preserve")
+        selected_icc = job_data.get("job_meta", {}).get("selected_icc")
+
+        if icc_option == "custom_selection" and selected_icc:
+            safe_name = Path(selected_icc).name
+            custom_path = BASE_DIR / "icc_profiles" / safe_name
+            if custom_path.exists():
+                icc_cmyk_path = str(custom_path)
+
+    # 3. Si la opción era conservar perfil o no se resolvió arriba, extraer el ICC embebido del PDF
+    if not icc_cmyk_path:
+        temp_extracted_icc = extract_embedded_icc_to_tempfile(target_pdf)
+        if temp_extracted_icc:
+            icc_cmyk_path = temp_extracted_icc
+        else:
+            # Fallback inteligente según el OutputIntent detectado
+            orig_info = (
+                job_data.get("job_summary", {}).get("original_icc_detected", {})
+                or job_data.get("job_summary", {}).get("icc_detected", {})
+            )
+            orig_id = str(orig_info.get("identifier", "")).lower()
+            orig_desc = str(orig_info.get("friendly_description", "")).lower()
+            combined = orig_id + " " + orig_desc
+            if "fogra52" in combined or "uncoated" in combined:
+                icc_cmyk_path = str(BASE_DIR / "icc_profiles" / "PSOuncoated_v3_FOGRA52.icc")
+            elif "fogra51" in combined or "psocoated" in combined:
+                icc_cmyk_path = str(BASE_DIR / "icc_profiles" / "PSOcoated_v3.icc")
+            elif "eci" in combined:
+                icc_cmyk_path = str(BASE_DIR / "icc_profiles" / "ISOcoated_v2_eci.icc")
+            else:
+                icc_cmyk_path = str(BASE_DIR / "icc_profiles" / "ISOcoated_v2_300_bas.icc")
 
     try:
         img_bytes = render_page_separation(
@@ -617,6 +660,12 @@ async def get_page_separation(
         return Response(content=img_bytes, media_type="image/jpeg")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error renderizando separación: {e}")
+    finally:
+        if temp_extracted_icc and os.path.exists(temp_extracted_icc):
+            try:
+                os.unlink(temp_extracted_icc)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

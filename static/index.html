@@ -236,6 +236,9 @@
           <button class="py-3 px-4 tab-btn text-slate-500 hover:text-slate-800" data-tab="tab-metrics">
             <i class="fa-solid fa-chart-simple mr-1.5"></i> Métricas & Sobreimpresión
           </button>
+          <button class="py-3 px-4 tab-btn text-slate-500 hover:text-slate-800" data-tab="tab-separations">
+            <i class="fa-solid fa-layer-group mr-1.5"></i> Previsualización de Separaciones
+          </button>
           <button class="py-3 px-4 tab-btn text-slate-500 hover:text-slate-800" data-tab="tab-release">
             <i class="fa-solid fa-stamp mr-1.5"></i> Autorización de Salida
           </button>
@@ -383,126 +386,153 @@
               </div>
             </div>
 
-            <!-- Metrics Card 4: Previsualización de Separaciones de Color (Estilo Acrobat Pro) -->
-            <div class="col-span-1 md:col-span-2 border border-slate-200 rounded-xl p-5 bg-white space-y-4 shadow-sm">
-              <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-100 pb-2.5">
-                <div>
-                  <h4 class="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <i class="fa-solid fa-layer-group text-blue-600"></i> Previsualizador de Separaciones de Color (Acrobat Output Preview)
-                  </h4>
-                  <p class="text-[11px] text-slate-500 mt-0.5">
-                    Inspecciona planchas individuales o desactiva el <strong>Proceso Negro</strong> para comprobar si el texto sobreimprime o cala (knockout) sobre la imagen de fondo.
-                  </p>
+          </div>
+        </div>
+
+        <!-- Tab 4: Previsualización de Separaciones -->
+        <div id="tab-separations" class="tab-content hidden p-6 space-y-5">
+          <div class="border border-slate-200 rounded-xl p-5 bg-white space-y-4 shadow-sm">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h4 class="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <i class="fa-solid fa-layer-group text-blue-600"></i> Previsualizador de Separaciones de Color (Acrobat Output Preview)
+                </h4>
+                <p class="text-[11px] text-slate-500 mt-0.5">
+                  Inspecciona planchas individuales o desactiva el <strong>Proceso Negro</strong> para comprobar si el texto sobreimprime o cala (knockout) sobre la imagen de fondo.
+                </p>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <div class="flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs">
+                  <span class="text-slate-500 font-medium">Perfil de simulación:</span>
+                  <span id="sepActiveProfileBadge" class="font-bold text-slate-900">Determinando...</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <label class="text-[11px] font-semibold text-slate-600">Página:</label>
-                  <select id="sepPageSelect" onchange="updateSeparationPreview()" class="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-slate-50 outline-none font-semibold">
+                  <select id="sepPageSelect" onchange="updateSeparationPreview()" class="text-xs border border-slate-200 rounded-lg px-2.5 py-1 bg-slate-50 outline-none font-semibold">
                     <option value="1">Página 1</option>
                   </select>
                 </div>
               </div>
+            </div>
 
-              <!-- Toolbar & Separations Dialog -->
-              <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <!-- Controls Column (like Acrobat Output Preview dialog) -->
-                <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-4">
-                  <div>
-                    <h5 class="text-xs font-bold text-slate-800 flex items-center gap-1.5 mb-2">
-                      <i class="fa-solid fa-sliders text-slate-600"></i> Placas de Proceso CMYK
-                    </h5>
-                    <div class="space-y-2 bg-white p-3 rounded-lg border border-slate-200 text-xs">
-                      <label class="flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded">
-                        <span class="flex items-center gap-2">
-                          <input type="checkbox" id="sepChanC" checked onchange="updateSeparationPreview()" class="rounded text-cyan-600 focus:ring-cyan-500">
-                          <span class="font-medium text-slate-700">Proceso Cian</span>
-                        </span>
-                        <span class="w-3.5 h-3.5 rounded bg-cyan-400 border border-cyan-500"></span>
-                      </label>
-                      <label class="flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded">
-                        <span class="flex items-center gap-2">
-                          <input type="checkbox" id="sepChanM" checked onchange="updateSeparationPreview()" class="rounded text-pink-600 focus:ring-pink-500">
-                          <span class="font-medium text-slate-700">Proceso Magenta</span>
-                        </span>
-                        <span class="w-3.5 h-3.5 rounded bg-pink-500 border border-pink-600"></span>
-                      </label>
-                      <label class="flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded">
-                        <span class="flex items-center gap-2">
-                          <input type="checkbox" id="sepChanY" checked onchange="updateSeparationPreview()" class="rounded text-yellow-500 focus:ring-yellow-400">
-                          <span class="font-medium text-slate-700">Proceso Amarillo</span>
-                        </span>
-                        <span class="w-3.5 h-3.5 rounded bg-yellow-300 border border-yellow-400"></span>
-                      </label>
-                      <label class="flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded">
-                        <span class="flex items-center gap-2">
-                          <input type="checkbox" id="sepChanK" checked onchange="updateSeparationPreview()" class="rounded text-slate-900 focus:ring-slate-900">
-                          <span class="font-bold text-slate-900">Proceso Negro</span>
-                        </span>
-                        <span class="w-3.5 h-3.5 rounded bg-slate-900 border border-slate-950"></span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <!-- Quick Presets -->
-                  <div>
-                    <h5 class="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Vistas Rápidas</h5>
-                    <div class="grid grid-cols-2 gap-1.5 text-xs">
-                      <button type="button" onclick="setSepPreset('all')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-semibold transition text-[11px] text-center">
-                        <i class="fa-solid fa-palette text-blue-600 mr-1"></i> Todas (CMYK)
-                      </button>
-                      <button type="button" onclick="setSepPreset('no_k')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg text-amber-900 font-bold transition text-[11px] text-center" title="Desactiva el canal Negro para verificar si el texto cala sobre el fondo">
-                        <i class="fa-solid fa-eye-slash text-amber-600 mr-1"></i> Sin Negro (CMY)
-                      </button>
-                      <button type="button" onclick="setSepPreset('only_k')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-semibold transition text-[11px] text-center">
-                        <i class="fa-solid fa-file text-slate-700 mr-1"></i> Sólo Plancha K
-                      </button>
-                      <button type="button" onclick="setSepPreset('only_c')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-semibold transition text-[11px] text-center">
-                        <i class="fa-solid fa-droplet text-cyan-500 mr-1"></i> Sólo Cian
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Mode & Options -->
-                  <div class="space-y-2 pt-1 border-t border-slate-200 text-xs">
-                    <div class="flex items-center justify-between">
-                      <span class="text-slate-600 font-medium">Modo de visor:</span>
-                      <select id="sepViewMode" onchange="updateSeparationPreview()" class="text-[11px] border border-slate-200 rounded px-2 py-1 bg-white outline-none">
-                        <option value="color">Simulación Color</option>
-                        <option value="grayscale">Película RIP (Gris)</option>
-                      </select>
-                    </div>
-                    <div class="p-2.5 bg-blue-50 border border-blue-100 rounded-lg text-[11px] text-blue-900 space-y-1">
-                      <p class="font-bold flex items-center gap-1">
-                        <i class="fa-solid fa-circle-info text-blue-600"></i> ¿Cómo interpretar?
-                      </p>
-                      <p>
-                        Al pulsar <strong>"Sin Negro (CMY)"</strong>, si el texto tiene calado (knockout), verás su silueta en blanco perforando la imagen. Si sobreimprime, la imagen de fondo se verá continua.
-                      </p>
-                    </div>
+            <!-- Toolbar & Separations Dialog -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <!-- Controls Column (like Acrobat Output Preview dialog) -->
+              <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-4">
+                <!-- Simulación de Salida (Perfil ICC) -->
+                <div>
+                  <h5 class="text-xs font-bold text-slate-800 flex items-center justify-between mb-2">
+                    <span class="flex items-center gap-1.5"><i class="fa-solid fa-palette text-blue-600"></i> Perfil de Simulación</span>
+                    <span class="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">ICC Activo</span>
+                  </h5>
+                  <div class="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1.5 text-xs">
+                    <select id="sepSimProfileSelect" onchange="onSepProfileChange()" class="w-full text-xs border border-slate-200 rounded-md p-1.5 bg-slate-50 text-slate-800 font-medium outline-none focus:ring-2 focus:ring-blue-500">
+                      <option id="sepOptInitial" value="default">★ Según selección inicial (predeterminado)</option>
+                      <option value="PSOuncoated_v3_FOGRA52.icc">PSO Uncoated v3 (FOGRA52 - No estucado)</option>
+                      <option value="PSOcoated_v3.icc">PSO Coated v3 (FOGRA51 - Estucado)</option>
+                      <option value="ISOcoated_v2_300_bas.icc">ISO Coated v2 300% (FOGRA39 - Estucado)</option>
+                      <option value="ISOcoated_v2_eci.icc">ISO Coated v2 ECI (FOGRA39)</option>
+                    </select>
+                    <p id="sepSimProfileNote" class="text-[11px] text-slate-500">Simulación basada en el perfil configurado al subir el PDF.</p>
                   </div>
                 </div>
 
-                <!-- Preview Canvas Column -->
-                <div class="lg:col-span-2 border border-slate-200 rounded-xl p-3 bg-slate-900 flex flex-col items-center justify-center min-h-[400px] relative overflow-hidden">
-                  <!-- Loading overlay -->
-                  <div id="sepLoadingOverlay" class="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center text-white text-xs gap-2 hidden z-10">
-                    <i class="fa-solid fa-spinner fa-spin text-blue-400 text-lg"></i>
-                    <span>Generando separación CMYK...</span>
+                <!-- Placas de Proceso CMYK -->
+                <div>
+                  <h5 class="text-xs font-bold text-slate-800 flex items-center gap-1.5 mb-2">
+                    <i class="fa-solid fa-sliders text-slate-600"></i> Placas de Proceso CMYK
+                  </h5>
+                  <div class="space-y-2 bg-white p-3 rounded-lg border border-slate-200 text-xs">
+                    <label class="flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded">
+                      <span class="flex items-center gap-2">
+                        <input type="checkbox" id="sepChanC" checked onchange="updateSeparationPreview()" class="rounded text-cyan-600 focus:ring-cyan-500">
+                        <span class="font-medium text-slate-700">Proceso Cian</span>
+                      </span>
+                      <span class="w-3.5 h-3.5 rounded bg-cyan-400 border border-cyan-500"></span>
+                    </label>
+                    <label class="flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded">
+                      <span class="flex items-center gap-2">
+                        <input type="checkbox" id="sepChanM" checked onchange="updateSeparationPreview()" class="rounded text-pink-600 focus:ring-pink-500">
+                        <span class="font-medium text-slate-700">Proceso Magenta</span>
+                      </span>
+                      <span class="w-3.5 h-3.5 rounded bg-pink-500 border border-pink-600"></span>
+                    </label>
+                    <label class="flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded">
+                      <span class="flex items-center gap-2">
+                        <input type="checkbox" id="sepChanY" checked onchange="updateSeparationPreview()" class="rounded text-yellow-500 focus:ring-yellow-400">
+                        <span class="font-medium text-slate-700">Proceso Amarillo</span>
+                      </span>
+                      <span class="w-3.5 h-3.5 rounded bg-yellow-300 border border-yellow-400"></span>
+                    </label>
+                    <label class="flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded">
+                      <span class="flex items-center gap-2">
+                        <input type="checkbox" id="sepChanK" checked onchange="updateSeparationPreview()" class="rounded text-slate-900 focus:ring-slate-900">
+                        <span class="font-bold text-slate-900">Proceso Negro</span>
+                      </span>
+                      <span class="w-3.5 h-3.5 rounded bg-slate-900 border border-slate-950"></span>
+                    </label>
                   </div>
+                </div>
 
-                  <!-- Separation image -->
-                  <img id="sepPreviewImg" src="" alt="Previsualización de separación" class="max-h-[500px] w-auto object-contain rounded shadow-lg transition-opacity duration-200 hidden">
-                  <div id="sepEmptyNotice" class="text-slate-400 text-xs text-center py-12">
-                    <i class="fa-solid fa-layer-group text-3xl mb-2 text-slate-600 block"></i>
-                    Sube un PDF para inspeccionar sus separaciones de color.
+                <!-- Quick Presets -->
+                <div>
+                  <h5 class="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Vistas Rápidas</h5>
+                  <div class="grid grid-cols-2 gap-1.5 text-xs">
+                    <button type="button" onclick="setSepPreset('all')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-semibold transition text-[11px] text-center">
+                      <i class="fa-solid fa-palette text-blue-600 mr-1"></i> Todas (CMYK)
+                    </button>
+                    <button type="button" onclick="setSepPreset('no_k')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg text-amber-900 font-bold transition text-[11px] text-center" title="Desactiva el canal Negro para verificar si el texto cala sobre el fondo">
+                      <i class="fa-solid fa-eye-slash text-amber-600 mr-1"></i> Sin Negro (CMY)
+                    </button>
+                    <button type="button" onclick="setSepPreset('only_k')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-semibold transition text-[11px] text-center">
+                      <i class="fa-solid fa-file text-slate-700 mr-1"></i> Sólo Plancha K
+                    </button>
+                    <button type="button" onclick="setSepPreset('only_c')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-semibold transition text-[11px] text-center">
+                      <i class="fa-solid fa-droplet text-cyan-500 mr-1"></i> Sólo Cian
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Mode & Options -->
+                <div class="space-y-2 pt-1 border-t border-slate-200 text-xs">
+                  <div class="flex items-center justify-between">
+                    <span class="text-slate-600 font-medium">Modo de visor:</span>
+                    <select id="sepViewMode" onchange="updateSeparationPreview()" class="text-[11px] border border-slate-200 rounded px-2 py-1 bg-white outline-none">
+                      <option value="color">Simulación Color</option>
+                      <option value="grayscale">Película RIP (Gris)</option>
+                    </select>
+                  </div>
+                  <div class="p-2.5 bg-blue-50 border border-blue-100 rounded-lg text-[11px] text-blue-900 space-y-1">
+                    <p class="font-bold flex items-center gap-1">
+                      <i class="fa-solid fa-circle-info text-blue-600"></i> ¿Cómo interpretar?
+                    </p>
+                    <p>
+                      Al pulsar <strong>"Sin Negro (CMY)"</strong>, si el texto tiene calado (knockout), verás su silueta en blanco perforando la imagen. Si sobreimprime, la imagen de fondo se verá continua sin calado blanco.
+                    </p>
                   </div>
                 </div>
               </div>
-            </div>
 
+              <!-- Preview Canvas Column -->
+              <div class="lg:col-span-2 border border-slate-200 rounded-xl p-3 bg-slate-900 flex flex-col items-center justify-center min-h-[480px] relative overflow-hidden">
+                <!-- Loading overlay -->
+                <div id="sepLoadingOverlay" class="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center text-white text-xs gap-2 hidden z-10">
+                  <i class="fa-solid fa-spinner fa-spin text-blue-400 text-lg"></i>
+                  <span>Generando separación CMYK...</span>
+                </div>
+
+                <!-- Separation image -->
+                <img id="sepPreviewImg" src="" alt="Previsualización de separación" class="max-h-[560px] w-auto object-contain rounded shadow-lg transition-opacity duration-200 hidden">
+                <div id="sepEmptyNotice" class="text-slate-400 text-xs text-center py-12">
+                  <i class="fa-solid fa-layer-group text-3xl mb-2 text-slate-600 block"></i>
+                  Sube un PDF para inspeccionar sus separaciones de color.
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Tab 4: Release Authorization -->
+        <!-- Tab 5: Release Authorization -->
         <div id="tab-release" class="tab-content hidden p-6 space-y-5">
           <div class="max-w-xl space-y-4">
             <h4 class="text-sm font-bold text-slate-900">Autorización Final para Producción</h4>
@@ -890,11 +920,8 @@
       document.getElementById('metricVarnishKnockout').textContent = over.varnish_knockout;
       document.getElementById('metricPantoneOverprint').textContent = over.pantone_overprint;
 
-      // Inicializar Previsualizador de Separaciones de Color
-      initSeparations(summ.pages || 1);
-
       // Res Detected ICC Badge
-      const origIcc = summ.original_icc_detected || {};
+      const origIcc = summ.original_icc_detected || summ.icc_detected || {};
       const hasOrigIcc = origIcc.has_output_intent;
       const origDesc = hasOrigIcc ? (origIcc.friendly_description || origIcc.identifier) : 'Sin perfil incrustado (DeviceCMYK genérico)';
       const badgeEl = document.getElementById('resDetectedIccBadge');
@@ -905,6 +932,48 @@
           </span>
         `;
       }
+
+      // Configurar perfil de simulación inicial para el Previsualizador de Separaciones
+      const iccChoice = data.job_meta?.icc_option || 'preserve';
+      const selectedIccFile = data.job_meta?.selected_icc;
+      const iccMap = {
+        'PSOcoated_v3.icc': 'PSO Coated v3 (FOGRA51 - Estucado)',
+        'PSOuncoated_v3_FOGRA52.icc': 'PSO Uncoated v3 (FOGRA52 - No estucado)',
+        'ISOcoated_v2_300_bas.icc': 'ISO Coated v2 300% (FOGRA39 - Estucado)',
+        'ISOcoated_v2_eci.icc': 'ISO Coated v2 ECI (FOGRA39)',
+        'sRGB2014.icc': 'sRGB IEC61966-2.1',
+        'AdobeRGB1998.icc': 'Adobe RGB 1998'
+      };
+
+      if (iccChoice === 'custom_selection' && selectedIccFile) {
+        sepInitialProfileName = iccMap[selectedIccFile] || selectedIccFile;
+      } else {
+        if (hasOrigIcc && (origIcc.friendly_description || origIcc.identifier)) {
+          sepInitialProfileName = origIcc.friendly_description || origIcc.identifier;
+        } else {
+          sepInitialProfileName = 'Perfil del documento (OutputIntent)';
+        }
+      }
+
+      const sepActiveBadge = document.getElementById('sepActiveProfileBadge');
+      if (sepActiveBadge) {
+        sepActiveBadge.textContent = sepInitialProfileName;
+      }
+      const sepOptInit = document.getElementById('sepOptInitial');
+      if (sepOptInit) {
+        sepOptInit.textContent = `★ Según selección inicial (${sepInitialProfileName})`;
+      }
+      const sepProfileSelect = document.getElementById('sepSimProfileSelect');
+      if (sepProfileSelect) {
+        sepProfileSelect.value = 'default';
+      }
+      const sepSimProfileNote = document.getElementById('sepSimProfileNote');
+      if (sepSimProfileNote) {
+        sepSimProfileNote.textContent = `Simulación sincronizada con la opción de color elegida al subir el PDF: ${sepInitialProfileName}`;
+      }
+
+      // Inicializar Previsualizador de Separaciones de Color
+      initSeparations(summ.pages || 1);
 
       // Render Images Inventory Table
       const imagesTbody = document.getElementById('imagesTableBody');
@@ -1186,6 +1255,8 @@
     // -----------------------------------------------------------------------
     // Previsualizador de Separaciones de Color (Acrobat Output Preview)
     // -----------------------------------------------------------------------
+    let sepInitialProfileName = 'Perfil del documento';
+
     function initSeparations(pageCount) {
       const sel = document.getElementById('sepPageSelect');
       if (!sel) return;
@@ -1195,6 +1266,23 @@
         opt.value = i;
         opt.textContent = `Página ${i}`;
         sel.appendChild(opt);
+      }
+      const profSel = document.getElementById('sepSimProfileSelect');
+      if (profSel) profSel.value = 'default';
+      updateSeparationPreview();
+    }
+
+    function onSepProfileChange() {
+      const sel = document.getElementById('sepSimProfileSelect');
+      const badge = document.getElementById('sepActiveProfileBadge');
+      const note = document.getElementById('sepSimProfileNote');
+      if (sel && sel.value !== 'default') {
+        const text = sel.options[sel.selectedIndex].text;
+        if (badge) badge.textContent = text;
+        if (note) note.textContent = `Simulación personalizada para verificar condición de impresión: ${text}`;
+      } else {
+        if (badge) badge.textContent = sepInitialProfileName;
+        if (note) note.textContent = `Simulación sincronizada con la opción de color elegida al subir el PDF: ${sepInitialProfileName}`;
       }
       updateSeparationPreview();
     }
@@ -1228,13 +1316,15 @@
         const y = document.getElementById('sepChanY')?.checked ?? true;
         const k = document.getElementById('sepChanK')?.checked ?? true;
         const mode = document.getElementById('sepViewMode')?.value || 'color';
+        const profileSelect = document.getElementById('sepSimProfileSelect');
+        const selectedProfile = profileSelect ? profileSelect.value : 'default';
 
         const overlay = document.getElementById('sepLoadingOverlay');
         const imgEl = document.getElementById('sepPreviewImg');
         const notice = document.getElementById('sepEmptyNotice');
 
         if (overlay) overlay.classList.remove('hidden');
-        const url = `/api/separations/${currentJobId}?page=${page}&c=${c}&m=${m}&y=${y}&k=${k}&mode=${mode}&dpi=110&t=${Date.now()}`;
+        const url = `/api/separations/${currentJobId}?page=${page}&c=${c}&m=${m}&y=${y}&k=${k}&mode=${mode}&dpi=110&icc=${encodeURIComponent(selectedProfile)}&t=${Date.now()}`;
 
         const tempImg = new Image();
         tempImg.onload = () => {

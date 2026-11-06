@@ -45,6 +45,13 @@ def render_page_separation(
     cmyk_profile = Path(icc_cmyk_path) if icc_cmyk_path else DEFAULT_CMYK_ICC
     if not cmyk_profile.exists():
         cmyk_profile = DEFAULT_CMYK_ICC
+    else:
+        try:
+            prof = ImageCms.ImageCmsProfile(str(cmyk_profile))
+            if str(prof.profile.xcolor_space).strip().upper() != "CMYK":
+                cmyk_profile = DEFAULT_CMYK_ICC
+        except Exception:
+            cmyk_profile = DEFAULT_CMYK_ICC
 
     doc = pymupdf.open(str(pdf_path))
     if page_index < 0 or page_index >= len(doc):
@@ -101,3 +108,4 @@ def render_page_separation(
     buf = io.BytesIO()
     rgb_img.save(buf, format="JPEG", quality=85)
     return buf.getvalue()
+
