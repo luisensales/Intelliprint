@@ -217,6 +217,7 @@ def detect_page_edge_elements(page, tol_pt=2.83):
     Detects whether a PDF page contains images or non-white vector fills/backgrounds
     that touch or extend beyond the TrimBox edges (a ras de página / bleeding).
     tol_pt = 2.83 pt corresponds to ~1 mm tolerance.
+    Calculates extension (mm) beyond TrimBox on each touching edge.
     """
     trim = page.trimbox
     if trim.width <= 0 or trim.height <= 0:
@@ -230,14 +231,32 @@ def detect_page_edge_elements(page, tol_pt=2.83):
         for r in page.get_image_rects(xref):
             if r.width < 5 or r.height < 5:
                 continue
-            touches_left = (r.x0 <= trim.x0 + tol_pt)
-            touches_top = (r.y0 <= trim.y0 + tol_pt)
-            touches_right = (r.x1 >= trim.x1 - tol_pt)
-            touches_bottom = (r.y1 >= trim.y1 - tol_pt)
+            touches_left = (r.x0 <= trim.x0 + tol_pt and r.x1 > trim.x0)
+            touches_top = (r.y0 <= trim.y0 + tol_pt and r.y1 > trim.y0)
+            touches_right = (r.x1 >= trim.x1 - tol_pt and r.x0 < trim.x1)
+            touches_bottom = (r.y1 >= trim.y1 - tol_pt and r.y0 < trim.y1)
             if touches_left or touches_top or touches_right or touches_bottom:
+                exts = []
+                if touches_left:
+                    exts.append((trim.x0 - r.x0) * 25.4 / 72.0)
+                if touches_top:
+                    exts.append((trim.y0 - r.y0) * 25.4 / 72.0)
+                if touches_right:
+                    exts.append((r.x1 - trim.x1) * 25.4 / 72.0)
+                if touches_bottom:
+                    exts.append((r.y1 - trim.y1) * 25.4 / 72.0)
+                min_ext = min(exts) if exts else 0.0
                 edge_elements.append({
                     "type": "image",
-                    "rect": [round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1)]
+                    "xref": xref,
+                    "rect": [round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1)],
+                    "min_ext": max(0.0, min_ext),
+                    "touches": {
+                        "left": touches_left,
+                        "top": touches_top,
+                        "right": touches_right,
+                        "bottom": touches_bottom
+                    }
                 })
 
     # 2. Vector drawings / fills / backgrounds
@@ -253,15 +272,32 @@ def detect_page_edge_elements(page, tol_pt=2.83):
         r = d.get("rect")
         if not r or r.width < 5 or r.height < 5:
             continue
-        touches_left = (r.x0 <= trim.x0 + tol_pt)
-        touches_top = (r.y0 <= trim.y0 + tol_pt)
-        touches_right = (r.x1 >= trim.x1 - tol_pt)
-        touches_bottom = (r.y1 >= trim.y1 - tol_pt)
+        touches_left = (r.x0 <= trim.x0 + tol_pt and r.x1 > trim.x0)
+        touches_top = (r.y0 <= trim.y0 + tol_pt and r.y1 > trim.y0)
+        touches_right = (r.x1 >= trim.x1 - tol_pt and r.x0 < trim.x1)
+        touches_bottom = (r.y1 >= trim.y1 - tol_pt and r.y0 < trim.y1)
         if touches_left or touches_top or touches_right or touches_bottom:
+            exts = []
+            if touches_left:
+                exts.append((trim.x0 - r.x0) * 25.4 / 72.0)
+            if touches_top:
+                exts.append((trim.y0 - r.y0) * 25.4 / 72.0)
+            if touches_right:
+                exts.append((r.x1 - trim.x1) * 25.4 / 72.0)
+            if touches_bottom:
+                exts.append((r.y1 - trim.y1) * 25.4 / 72.0)
+            min_ext = min(exts) if exts else 0.0
             edge_elements.append({
                 "type": "vector_fill",
                 "color": fill_color,
-                "rect": [round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1)]
+                "rect": [round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1)],
+                "min_ext": max(0.0, min_ext),
+                "touches": {
+                    "left": touches_left,
+                    "top": touches_top,
+                    "right": touches_right,
+                    "bottom": touches_bottom
+                }
             })
 
     return edge_elements
@@ -315,31 +351,61 @@ class IntelliPrintEngine:
         # Boxes, Bleed and Edge-content inspection (per page)
         pages_requiring_bleed = 0
         pages_failing_bleed = 0
-        max_detected_bleed = 0.0
+        min_detected_bleed = 999.0
+        has_any_bleed_req = False
 
         for p_idx in range(page_count):
             page = doc[p_idx]
             trimbox = page.trimbox
             mediabox = page.mediabox
+            bleedbox = page.bleedbox
+
             if trimbox.width <= 0 or trimbox.height <= 0:
                 trimbox = mediabox
 
+            # Has explicit trim distinct from mediabox (e.g. crop marks or PDF/X trim)
             has_explicit_trim = (trimbox != mediabox and trimbox.width > 0 and trimbox.height > 0)
-            bleed_top = round((trimbox.y0 - mediabox.y0) * 25.4 / 72.0, 1)
-            bleed_bottom = round((mediabox.y1 - trimbox.y1) * 25.4 / 72.0, 1)
-            bleed_left = round((trimbox.x0 - mediabox.x0) * 25.4 / 72.0, 1)
-            bleed_right = round((mediabox.x1 - trimbox.x1) * 25.4 / 72.0, 1)
-            page_bleed_mm = max(0, min(bleed_top, bleed_bottom, bleed_left, bleed_right))
-            if page_bleed_mm > max_detected_bleed:
-                max_detected_bleed = page_bleed_mm
+            # Has explicit bleedbox distinct from trimbox
+            has_explicit_bleedbox = (bleedbox != trimbox and bleedbox.width > 0 and bleedbox.height > 0)
+
+            # Box Bleed measurement (between TrimBox and BleedBox)
+            if has_explicit_trim and has_explicit_bleedbox:
+                b_top = max(0.0, (trimbox.y0 - bleedbox.y0) * 25.4 / 72.0)
+                b_bottom = max(0.0, (bleedbox.y1 - trimbox.y1) * 25.4 / 72.0)
+                b_left = max(0.0, (trimbox.x0 - bleedbox.x0) * 25.4 / 72.0)
+                b_right = max(0.0, (bleedbox.x1 - trimbox.x1) * 25.4 / 72.0)
+                box_bleed_mm = round(min(b_top, b_bottom, b_left, b_right), 1)
+            else:
+                box_bleed_mm = 0.0
 
             edge_elements = detect_page_edge_elements(page)
             page_needs_bleed = (len(edge_elements) > 0)
 
             if requires_bleed:
                 if page_needs_bleed:
+                    has_any_bleed_req = True
                     pages_requiring_bleed += 1
-                    if not has_explicit_trim or page_bleed_mm < 2.99:
+
+                    # Element artwork extension
+                    min_element_ext = 999.0
+                    for elem in edge_elements:
+                        ext = elem.get("min_ext", 0.0)
+                        if ext < min_element_ext:
+                            min_element_ext = ext
+
+                    # What is the effective bleed on this page?
+                    if box_bleed_mm >= 2.8:
+                        page_bleed_mm = box_bleed_mm
+                    elif min_element_ext >= 2.8:
+                        page_bleed_mm = round(min_element_ext, 1)
+                    else:
+                        page_bleed_mm = max(box_bleed_mm, round(min_element_ext if min_element_ext < 990 else 0.0, 1))
+
+                    if page_bleed_mm < min_detected_bleed:
+                        min_detected_bleed = page_bleed_mm
+
+                    # Prepress standard: 3 mm bleed required (allow 2.8 mm for rounding)
+                    if page_bleed_mm < 2.8:
                         pages_failing_bleed += 1
                         elem_types = []
                         if any(e["type"] == "image" for e in edge_elements):
@@ -347,18 +413,30 @@ class IntelliPrintEngine:
                         if any(e["type"] == "vector_fill" for e in edge_elements):
                             elem_types.append("fondos")
                         types_desc = " y ".join(elem_types) if elem_types else "elementos"
+
+                        if has_explicit_trim and not has_explicit_bleedbox:
+                            reason = f"El PDF incluye marcas de corte pero carece de BleedBox (0.0 mm). Las {types_desc} terminan en la línea de corte sin el sangrado obligatorio de 3 mm (extensión detectada: {page_bleed_mm} mm)."
+                        elif not has_explicit_trim:
+                            reason = f"El documento no define TrimBox ni sangrado exterior (0.0 mm). Las {types_desc} terminan al borde de página."
+                        else:
+                            reason = f"El sangrado detectado es de solo {page_bleed_mm} mm (se exige un mínimo de 3.0 mm por lado)."
+
                         findings.append({
                             "page": p_idx + 1,
                             "rule_id": "BLEED_GEOMETRY_3MM",
                             "severity": "ERROR",
                             "category": "Geometría",
-                            "title": f"Sangrado insuficiente en pág {p_idx+1}",
-                            "message": f"La página {p_idx+1} contiene {types_desc} a ras de página que requieren al menos 3 mm de sangre por lado. Se detectó ~{page_bleed_mm} mm."
+                            "title": f"Sangrado insuficiente en pág {p_idx+1} ({page_bleed_mm} mm)",
+                            "message": f"La página {p_idx+1} contiene {types_desc} a ras de corte que requieren al menos 3 mm de sangre. {reason}"
                         })
 
         if requires_bleed:
-            if pages_failing_bleed == 0:
+            if pages_failing_bleed == 0 and has_any_bleed_req:
                 rules_evaluated["BLEED_GEOMETRY_3MM"] = "PASS"
+            elif not has_any_bleed_req:
+                rules_evaluated["BLEED_GEOMETRY_3MM"] = "NOT_APPLICABLE"
+            else:
+                rules_evaluated["BLEED_GEOMETRY_3MM"] = "FAIL"
 
         # Images & Resolution inspection
         images_inventory = []
@@ -548,10 +626,13 @@ class IntelliPrintEngine:
         bleed_status = "NOT_REQUIRED" if pages_requiring_bleed == 0 else ("PASS" if pages_failing_bleed == 0 else "FAIL")
         if pages_requiring_bleed == 0:
             bleed_note = "No requerida (márgenes blancos, sin elementos al corte)"
+            detected_bleed_val = 0.0
         elif pages_failing_bleed == 0:
-            bleed_note = f"{pages_requiring_bleed} pág(s) con elementos al corte: 3 mm OK"
+            detected_bleed_val = round(min_detected_bleed if min_detected_bleed < 990 else 3.0, 1)
+            bleed_note = f"{pages_requiring_bleed} pág(s) con elementos al corte: {detected_bleed_val} mm OK"
         else:
-            bleed_note = f"{pages_failing_bleed} pág(s) con elementos al corte sin 3 mm de sangre"
+            detected_bleed_val = round(min_detected_bleed if min_detected_bleed < 990 else 0.0, 1)
+            bleed_note = f"{pages_failing_bleed} pág(s) con elementos al corte sin 3 mm de sangre ({detected_bleed_val} mm)"
 
         return {
             "job_summary": {
@@ -562,7 +643,7 @@ class IntelliPrintEngine:
                 "non_cmyk_images": non_cmyk_images,
                 "images_inventory": images_inventory,
                 "fonts_count": len(fonts_found),
-                "bleed_detected_mm": max_detected_bleed,
+                "bleed_detected_mm": detected_bleed_val,
                 "pages_requiring_bleed": pages_requiring_bleed,
                 "pages_failing_bleed": pages_failing_bleed,
                 "bleed_status": bleed_status,
