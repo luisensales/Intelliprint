@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
@@ -402,6 +402,16 @@
                     <i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping
                   </button>
                   <span class="text-[10px] text-amber-600 italic">El PDF original no se modifica; se genera un nuevo archivo para descargar.</span>
+                </div>
+                <!-- Aviso específico para impresión digital -->
+                <div id="overprintDigitalWarning" class="hidden flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5 text-[11px] text-blue-800">
+                  <i class="fa-solid fa-circle-info text-blue-500 mt-0.5 shrink-0"></i>
+                  <span>
+                    <strong>Perfil Digital 200:</strong> La sobreimpresión se inyecta correctamente en el PDF,
+                    pero su efecto en impresión digital depende del <strong>RIP de la impresora</strong>.
+                    Algunos RIPs de impresoras digitales (tóner, inkjet) no respetan el overprint del PDF.
+                    Consulta con tu proveedor de impresión digital antes de usar este archivo.
+                  </span>
                 </div>
                 <div id="overprintFixStatus" class="hidden"></div>
               </div>
@@ -977,6 +987,12 @@
         const statusOP = document.getElementById('overprintFixStatus');
         if (btnOP) { btnOP.disabled = false; btnOP.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping'; }
         if (statusOP) { statusOP.classList.add('hidden'); statusOP.innerHTML = ''; }
+        // Aviso especifico si el perfil es Digital 200
+        const digitalWarning = document.getElementById('overprintDigitalWarning');
+        if (digitalWarning) {
+          const isDigital = (data.job_meta && data.job_meta.profile_id === 'DIGITAL_200');
+          digitalWarning.classList.toggle('hidden', !isDigital || !hasKnockout);
+        }
       }
 
       // Res Detected ICC Badge
