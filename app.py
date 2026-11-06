@@ -21,6 +21,7 @@ from spellcheck_engine import save_word_to_glossary
 from report_generator import generate_preflight_certificate_pdf
 from color_converter import convert_rgb_images_to_cmyk, extract_embedded_icc_to_tempfile
 from separations_viewer import render_page_separation
+from overprint_fixer import apply_overprint_to_dark_text
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -560,6 +561,85 @@ async def download_cmyk_pdf(job_id: str):
         path=str(converted_path),
         media_type="application/pdf",
         filename=f"IntelliPrint_CMYK_{clean_name}.pdf",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Auto-Trapping: Corrección automática de sobreimpresión en textos negros
+# ---------------------------------------------------------------------------
+
+@app.post("/api/apply-overprint/{job_id}")
+async def apply_overprint_fix(job_id: str):
+    """Aplica sobreimpresión automática a textos negros oscuros en calado."""
+    # Validar job_id para evitar path traversal
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+
+    # Usar el PDF convertido a CMYK si existe, si no el original
+    source_pdf = job_meta.get("cmyk_converted_pdf_path") or job_meta.get("pdf_path")
+    if not source_pdf or not Path(source_pdf).exists():
+        raise HTTPException(
+            status_code=400,
+            detail="PDF de origen no encontrado. Sube el archivo o ejecuta la conversión CMYK primero."
+        )
+
+    output_path = JOBS_DIR / f"{safe_id}_overprint_fixed.pdf"
+
+    result = apply_overprint_to_dark_text(str(source_pdf), str(output_path))
+
+    if not result.get("success"):
+        errors = result.get("errors", [])
+        raise HTTPException(
+            status_code=500,
+            detail=f"La corrección de sobreimpresión falló: {'; '.join(errors)}"
+        )
+
+    # Guardar la ruta en el job para el endpoint de descarga
+    job_data["job_meta"]["overprint_fixed_pdf_path"] = str(output_path)
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "success",
+        "pages_modified": result["pages_modified"],
+        "text_ops_fixed": result["text_ops_fixed"],
+        "errors": result.get("errors", []),
+        "download_url": f"/api/download-overprint/{safe_id}",
+    }
+
+
+@app.get("/api/download-overprint/{job_id}")
+async def download_overprint_pdf(job_id: str):
+    """Descarga el PDF con sobreimpresión corregida automáticamente."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    fixed_path = job_data.get("job_meta", {}).get("overprint_fixed_pdf_path")
+    if not fixed_path or not Path(fixed_path).exists():
+        raise HTTPException(
+            status_code=404,
+            detail="PDF corregido no encontrado. Aplica la corrección primero."
+        )
+
+    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    clean_name = filename.replace(".pdf", "")
+
+    return FileResponse(
+        path=str(fixed_path),
+        media_type="application/pdf",
+        filename=f"IntelliPrint_Overprint_{clean_name}.pdf",
     )
 
 

@@ -384,10 +384,34 @@
                 <!-- Estado de la conversión -->
                 <div id="cmykConversionStatus" class="hidden"></div>
               </div>
+
+              <!-- Panel: Auto-Trapping / Corrección Sobreimpresión -->
+              <div id="overprintFixPanel" class="hidden mt-4 pt-4 border-t border-amber-200 bg-amber-50 rounded-xl p-4 space-y-3">
+                <h5 class="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                  <i class="fa-solid fa-wand-magic-sparkles text-amber-500"></i>
+                  Corrección Automática de Calados (Auto-Trapping)
+                </h5>
+                <p class="text-[11px] text-amber-700">
+                  Se han detectado textos negros oscuros en <strong>calado (knockout)</strong>. Al imprimir,
+                  el mínimo desajuste de registro puede dejar <em>filetes blancos</em> alrededor de las letras.
+                  Esta función inyecta sobreimpresión preventiva en dichos textos para evitarlo.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                  <button id="btnApplyOverprint" onclick="applyOverprintFix()"
+                    class="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-sm whitespace-nowrap">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping
+                  </button>
+                  <span class="text-[10px] text-amber-600 italic">El PDF original no se modifica; se genera un nuevo archivo para descargar.</span>
+                </div>
+                <div id="overprintFixStatus" class="hidden"></div>
+              </div>
             </div>
 
           </div>
         </div>
+
+        <!-- Tab 4: Panel Auto-Trapping (Corrección Sobreimpresión) - Dentro de Incidencias -->
+        <!-- NOTA: el panel se inyecta dinámicamente en JS dentro del tab-findings -->
 
         <!-- Tab 4: Previsualización de Separaciones -->
         <div id="tab-separations" class="tab-content hidden p-6 space-y-5">
@@ -943,6 +967,18 @@
       document.getElementById('metricVarnishKnockout').textContent = over.varnish_knockout;
       document.getElementById('metricPantoneOverprint').textContent = over.pantone_overprint;
 
+      // Mostrar/ocultar panel de auto-trapping según calados detectados
+      const overprintPanel = document.getElementById('overprintFixPanel');
+      if (overprintPanel) {
+        const hasKnockout = (over.black_text_knockout || 0) > 0;
+        overprintPanel.classList.toggle('hidden', !hasKnockout);
+        // Resetear estado del botón al cargar nuevo resultado
+        const btnOP = document.getElementById('btnApplyOverprint');
+        const statusOP = document.getElementById('overprintFixStatus');
+        if (btnOP) { btnOP.disabled = false; btnOP.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping'; }
+        if (statusOP) { statusOP.classList.add('hidden'); statusOP.innerHTML = ''; }
+      }
+
       // Res Detected ICC Badge
       const origIcc = summ.original_icc_detected || summ.icc_detected || {};
       const hasOrigIcc = origIcc.has_output_intent;
@@ -1185,8 +1221,49 @@
       panel.classList.toggle('hidden');
     }
 
-    async function convertImagesToCmyk() {
+    async function applyOverprintFix() {
       if (!currentJobId) {
+        alert('No hay ningún trabajo activo. Sube un PDF primero.');
+        return;
+      }
+      const btn = document.getElementById('btnApplyOverprint');
+      const statusEl = document.getElementById('overprintFixStatus');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Aplicando...';
+      statusEl.classList.remove('hidden');
+      statusEl.innerHTML = '<span class="text-xs text-amber-700"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Procesando corrección de sobreimpresión automática...</span>';
+      try {
+        const res = await fetch(`/api/apply-overprint/${currentJobId}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          statusEl.innerHTML = `
+            <div class="flex flex-wrap items-center gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5">
+              <i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i>
+              <span>Sobreimpresión aplicada en <strong>${data.pages_modified}</strong> página(s), <strong>${data.text_ops_fixed}</strong> operación(es) de texto corregidas.</span>
+              <a href="${data.download_url}" target="_blank"
+                class="ml-auto flex items-center gap-1 font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg transition-all shadow-sm">
+                <i class="fa-solid fa-download"></i> Descargar PDF corregido
+              </a>
+            </div>`;
+          // Ofrecer también recargar la previsualización de separaciones con el PDF corregido
+          statusEl.innerHTML += `
+            <p class="text-[10px] text-amber-600 mt-1 italic">
+              <i class="fa-solid fa-circle-info mr-1"></i>
+              Para verificar el resultado, ve a "Previsualización de Separaciones" y pulsa "Sin Negro (CMY)": no deberían verse siluetas blancas alrededor del texto.
+            </p>`;
+        } else {
+          const errMsg = data.detail || (data.errors && data.errors.join('; ')) || 'Error desconocido';
+          statusEl.innerHTML = `<div class="text-xs text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-lg"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error: ${errMsg}</div>`;
+        }
+      } catch (err) {
+        statusEl.innerHTML = `<div class="text-xs text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-lg"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error de red: ${err.message}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping';
+      }
+    }
+
+    async function convertImagesToCmyk() {      if (!currentJobId) {
         alert('No hay ningún trabajo activo. Sube un PDF primero.');
         return;
       }
