@@ -21,9 +21,8 @@ from spellcheck_engine import save_word_to_glossary
 from report_generator import generate_preflight_certificate_pdf
 from color_converter import convert_rgb_images_to_cmyk, extract_embedded_icc_to_tempfile
 from separations_viewer import render_page_separation
-from overprint_fixer import apply_overprint_to_dark_text
+from overprint_fixer import apply_overprint_to_dark_text, apply_overprint_to_technical_inks, fix_white_overprint
 from spot_converter import convert_spot_colors_to_cmyk
-from technical_ink_fixer import apply_overprint_to_technical_inks
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -365,10 +364,8 @@ async def download_certificate_pdf(job_id: str):
         job_data = json.load(f)
     
     cert_path = JOBS_DIR / f"{job_id}_ficha_tecnica.pdf"
-    try:
+    if not cert_path.exists():
         generate_preflight_certificate_pdf(job_data, cert_path)
-    except Exception as e:
-        print(f"[download-certificate] Error regenerando certificado: {e}")
 
     filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
     clean_name = filename.replace(".pdf", "")
@@ -477,16 +474,20 @@ async def convert_images_to_cmyk(
 
     job_meta = job_data.get("job_meta", {})
 
-    # Usar el PDF más reciente como fuente para que todas las correcciones sean 100% acumulativas
-    source_candidates = [
-        job_meta.get("last_fixed_pdf_path"),
-        job_meta.get("overprint_fixed_pdf_path"),
-        job_meta.get("cmyk_converted_pdf_path"),
-        job_meta.get("pdf_path")
-    ]
-    pdf_path = next((p for p in source_candidates if p and os.path.exists(p)), None)
+    # Usar el PDF más reciente como fuente: overprint_fixed > cmyk_converted > original
+    # Así las correcciones son acumulativas independientemente del orden
+    overprint_path_prev = job_meta.get("overprint_fixed_pdf_path")
+    cmyk_path_prev      = job_meta.get("cmyk_converted_pdf_path")
+    pdf_path_orig       = job_meta.get("pdf_path")
 
-    if not pdf_path:
+    if overprint_path_prev and os.path.exists(overprint_path_prev):
+        pdf_path = overprint_path_prev
+    elif cmyk_path_prev and os.path.exists(cmyk_path_prev):
+        pdf_path = cmyk_path_prev
+    else:
+        pdf_path = pdf_path_orig
+
+    if not pdf_path or not os.path.exists(pdf_path):
         raise HTTPException(status_code=404, detail="PDF de origen no encontrado en el servidor.")
 
     ICC_PROFILES_DIR = BASE_DIR / "icc_profiles"
@@ -533,39 +534,23 @@ async def convert_images_to_cmyk(
         errors = conv_result.get("errors", [])
         raise HTTPException(status_code=500, detail=f"La conversión falló: {'; '.join(errors)}")
 
-    # Guardar estado acumulativo en job_meta
+    # Guardar la ruta del PDF convertido en el job
+    # Si se aplicó sobre un overprint_fixed anterior, limpiar overprint_fixed_pdf_path
+    # para que el visor y el endpoint de descarga usen el cmyk_converted (más reciente y completo)
     job_data["job_meta"]["cmyk_converted_pdf_path"] = str(output_path)
-    job_data["job_meta"]["last_fixed_pdf_path"] = str(output_path)
-    job_data["job_meta"]["has_cmyk_converted"] = True
-
-    # Eliminar incidencias de imágenes RGB
-    job_data["findings"] = [
-        f for f in job_data.get("findings", [])
-        if "rgb" not in f.get("title", "").lower()
-        and "rgb" not in f.get("message", "").lower()
-    ]
-    if "job_summary" in job_data:
-        job_data["job_summary"]["non_cmyk_images"] = 0
-
-    # Recalcular dictamen técnico
-    all_findings = job_data.get("findings", [])
-    errs = sum(1 for f in all_findings if f.get("severity") == "ERROR")
-    warns = sum(1 for f in all_findings if f.get("severity") == "WARNING")
-    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
-    tech["errors_count"] = errs
-    tech["warnings_count"] = warns
-    tech["status"] = "FAIL" if errs > 0 else ("PASS_WITH_WARNINGS" if warns > 0 else "PASS")
-    tech["label"] = "NO CUMPLE" if errs > 0 else ("CUMPLE CON AVISOS" if warns > 0 else "CUMPLE")
-
-    # Regenerar el certificado oficial en PDF
-    cert_path = JOBS_DIR / f"{job_id}_ficha_tecnica.pdf"
-    try:
-        generate_preflight_certificate_pdf(job_data, cert_path)
-    except Exception as e:
-        print(f"[convert-to-cmyk] Aviso: no se pudo regenerar el certificado: {e}")
-
+    if job_data["job_meta"].get("overprint_fixed_pdf_path"):
+        # El overprint ya está integrado en el cmyk_converted; dejar de apuntar al anterior
+        job_data["job_meta"]["overprint_fixed_pdf_path"] = ""
     with open(job_json_path, "w", encoding="utf-8") as f:
         json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    # Regenerar el certificado PDF si ya existe (para que refleje los avisos RGB resueltos)
+    cert_path = JOBS_DIR / f"{job_id}_ficha_tecnica.pdf"
+    if cert_path.exists():
+        try:
+            generate_preflight_certificate_pdf(job_data, cert_path)
+        except Exception as e:
+            print(f"[convert-to-cmyk] Aviso: no se pudo regenerar el certificado: {e}")
 
     return {
         "status": "success",
@@ -578,22 +563,17 @@ async def convert_images_to_cmyk(
 
 @app.get("/api/download-cmyk/{job_id}")
 async def download_cmyk_pdf(job_id: str):
-    """Descarga el PDF con imágenes convertidas a CMYK (incluye correcciones previas o posteriores acumuladas)."""
+    """Descarga el PDF con imágenes convertidas a CMYK."""
     job_json_path = JOBS_DIR / f"{job_id}.json"
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
-    with open(job_json_path, "r", encoding="utf-8") as f:
-        job_data = json.load(f)
-
-    converted_path = (
-        job_data.get("job_meta", {}).get("cmyk_converted_pdf_path")
-        or job_data.get("job_meta", {}).get("last_fixed_pdf_path")
-        or str(JOBS_DIR / f"{job_id}_cmyk_converted.pdf")
-    )
-    if not converted_path or not Path(converted_path).exists():
+    converted_path = JOBS_DIR / f"{job_id}_cmyk_converted.pdf"
+    if not converted_path.exists():
         raise HTTPException(status_code=404, detail="PDF convertido no encontrado. Ejecuta la conversión primero.")
 
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
     filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
     clean_name = filename.replace(".pdf", "")
 
@@ -623,15 +603,13 @@ async def convert_spots_to_cmyk_endpoint(job_id: str, target_spots: Optional[str
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    # Fuente acumulativa: usar el PDF más reciente modificado
-    source_candidates = [
-        job_meta.get("last_fixed_pdf_path"),
-        job_meta.get("overprint_fixed_pdf_path"),
-        job_meta.get("cmyk_converted_pdf_path"),
-        job_meta.get("pdf_path")
-    ]
-    source_pdf = next((p for p in source_candidates if p and Path(p).exists()), None)
-    if not source_pdf:
+    # Fuente acumulativa: overprint_fixed > cmyk_converted > original
+    source_pdf = (
+        job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
 
     output_path = JOBS_DIR / f"{safe_id}_cmyk_converted.pdf"
@@ -651,10 +629,10 @@ async def convert_spots_to_cmyk_endpoint(job_id: str, target_spots: Optional[str
         errors = conv_result.get("errors", [])
         raise HTTPException(status_code=500, detail=f"Fallo al convertir tintas planas: {'; '.join(errors)}")
 
-    # Guardar paths y banderas en job_meta sin borrar estados previos
+    # Guardar paths en job_meta
     job_data["job_meta"]["cmyk_converted_pdf_path"] = str(output_path)
-    job_data["job_meta"]["last_fixed_pdf_path"] = str(output_path)
-    job_data["job_meta"]["has_spot_converted"] = True
+    if job_data["job_meta"].get("overprint_fixed_pdf_path"):
+        job_data["job_meta"]["overprint_fixed_pdf_path"] = ""
 
     converted_names = {s["name"] for s in conv_result.get("spots_converted", [])}
 
@@ -723,24 +701,55 @@ async def apply_overprint_fix(job_id: str, mode: str = "all"):
 
     job_meta = job_data.get("job_meta", {})
 
-    # Usar el PDF más reciente modificado como fuente acumulativa
-    source_candidates = [
-        job_meta.get("last_fixed_pdf_path"),
-        job_meta.get("overprint_fixed_pdf_path"),
-        job_meta.get("cmyk_converted_pdf_path"),
-        job_meta.get("pdf_path")
-    ]
-    source_pdf = next((p for p in source_candidates if p and Path(p).exists()), None)
-    if not source_pdf:
+    # Usar el PDF más reciente como fuente: cmyk_converted > original
+    # (El overprint_fixed ya apunta al resultado final acumulado, no lo usamos como fuente
+    #  para evitar re-aplicar overprint sobre overprint; siempre partimos del CMYK o el original)
+    source_pdf = job_meta.get("cmyk_converted_pdf_path") or job_meta.get("pdf_path")
+    if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(
             status_code=400,
-            detail="PDF de origen no encontrado. Sube el archivo primero."
+            detail="PDF de origen no encontrado. Sube el archivo o ejecuta la conversión CMYK primero."
         )
 
     output_path = JOBS_DIR / f"{safe_id}_overprint_fixed.pdf"
 
+    # ── PASO 1 (silencioso): White Overprint Killer ──────────────────────────
+    # Corregir blanco en sobreimpresión ANTES del auto-trapping de negros.
+    # Si hay blancos que sobreimprimen los forzamos a calado; si no hay, el PDF
+    # pasa sin modificar. Usamos un fichero temporal intermedio para no pisar source_pdf.
+    white_fix_tmp = JOBS_DIR / f"{safe_id}_white_fixed_tmp.pdf"
+    white_result = fix_white_overprint(str(source_pdf), str(white_fix_tmp))
+    white_objects_fixed = 0
+    if white_result.get("success"):
+        white_objects_fixed = white_result.get("objects_fixed", 0)
+        if white_objects_fixed > 0:
+            # Usar el PDF con blancos ya corregidos como fuente del auto-trapping
+            overprint_source = str(white_fix_tmp)
+            # Limpiar la incidencia WHITE_OVERPRINT de findings
+            job_data["findings"] = [
+                f for f in job_data.get("findings", [])
+                if f.get("rule_id") != "WHITE_OVERPRINT"
+                and "blanco" not in f.get("title", "").lower()
+            ]
+            stats = job_data.get("job_summary", {}).get("overprint_stats", {})
+            stats["white_overprint"] = 0
+        else:
+            overprint_source = str(source_pdf)
+            # Limpiar tmp si no se modificó nada
+            if white_fix_tmp.exists():
+                white_fix_tmp.unlink(missing_ok=True)
+    else:
+        overprint_source = str(source_pdf)
+        if white_fix_tmp.exists():
+            white_fix_tmp.unlink(missing_ok=True)
+
+    # ── PASO 2: Auto-trapping de textos negros/oscuros ───────────────────────
     k_threshold = 0.99 if mode == "k100" else 0.80
-    result = apply_overprint_to_dark_text(str(source_pdf), str(output_path), dark_k_threshold=k_threshold)
+    result = apply_overprint_to_dark_text(overprint_source, str(output_path), dark_k_threshold=k_threshold)
+
+    # Limpiar tmp intermedio si existe
+    if white_fix_tmp.exists():
+        white_fix_tmp.unlink(missing_ok=True)
 
     if not result.get("success"):
         errors = result.get("errors", [])
@@ -749,21 +758,17 @@ async def apply_overprint_fix(job_id: str, mode: str = "all"):
             detail=f"La corrección de sobreimpresión falló: {'; '.join(errors)}"
         )
 
-    # Guardar la ruta y banderas de estado acumulativo
+    # Guardar la ruta en el job para el endpoint de descarga
     job_data["job_meta"]["overprint_fixed_pdf_path"] = str(output_path)
-    job_data["job_meta"]["last_fixed_pdf_path"] = str(output_path)
-    job_data["job_meta"]["has_overprint_fixed"] = True
-    job_data["job_meta"]["overprint_mode"] = mode
 
     # Actualizar estadisticas y limpiar incidencias resueltas de la ficha tecnica
     stats = job_data.get("job_summary", {}).get("overprint_stats", {})
     if mode == "all":
-        # Resolver todas las incidencias de texto en calado (100% y 80%), preservando barnices
+        # Resolver todas las incidencias de texto en calado (100% y 80%)
         job_data["findings"] = [
             f for f in job_data.get("findings", [])
             if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "DARK_80_TEXT_KNOCKOUT")
-            and not (("calado" in f.get("title", "").lower() or "knockout" in f.get("title", "").lower())
-                     and "barniz" not in f.get("title", "").lower())
+            and "calado" not in f.get("title", "").lower()
         ]
         stats["black_100_overprint"] = stats.get("black_100_overprint", 0) + stats.get("black_100_knockout", 0)
         stats["black_100_knockout"] = 0
@@ -775,8 +780,8 @@ async def apply_overprint_fix(job_id: str, mode: str = "all"):
         # Resolver unicamente las incidencias de negro puro 100% K
         job_data["findings"] = [
             f for f in job_data.get("findings", [])
-            if f.get("rule_id") != "BLACK_TEXT_KNOCKOUT_100"
-            and not ("100% k" in f.get("title", "").lower() and "calado" in f.get("title", "").lower())
+            if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT_100",)
+            and "100% k" not in f.get("title", "").lower()
         ]
         stats["black_100_overprint"] = stats.get("black_100_overprint", 0) + stats.get("black_100_knockout", 0)
         stats["black_100_knockout"] = 0
@@ -817,94 +822,8 @@ async def apply_overprint_fix(job_id: str, mode: str = "all"):
         "text_ops_fixed": result["text_ops_fixed"],
         "text_100_fixed": result.get("text_100_fixed", 0),
         "text_80_fixed": result.get("text_80_fixed", 0),
+        "white_objects_fixed": white_objects_fixed,
         "errors": result.get("errors", []),
-        "download_url": f"/api/download-overprint/{safe_id}",
-        "overprint_stats": stats,
-        "findings": job_data["findings"],
-        "triple_result": job_data["triple_result"],
-    }
-
-
-# ---------------------------------------------------------------------------
-# Corrección de Sobreimpresión Obligatoria en Tintas Técnicas (Barnices / Troqueles)
-# ---------------------------------------------------------------------------
-
-@app.post("/api/apply-varnish-overprint/{job_id}")
-async def apply_varnish_overprint_endpoint(job_id: str):
-    """
-    Fuerza la sobreimpresión obligatoria en todas las tintas técnicas
-    (barnices UV, brillos, mates, troqueles/dieline) para evitar que
-    perforen o borren la impresión cuatricromía inferior (knockout).
-    """
-    safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
-    if not job_json_path.exists():
-        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
-
-    with open(job_json_path, "r", encoding="utf-8") as f:
-        job_data = json.load(f)
-
-    job_meta = job_data.get("job_meta", {})
-    # Fuente acumulativa: usar el PDF más reciente disponible
-    source_candidates = [
-        job_meta.get("last_fixed_pdf_path"),
-        job_meta.get("overprint_fixed_pdf_path"),
-        job_meta.get("cmyk_converted_pdf_path"),
-        job_meta.get("pdf_path")
-    ]
-    source_pdf = next((p for p in source_candidates if p and Path(p).exists()), None)
-    if not source_pdf:
-        raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
-
-    output_path = JOBS_DIR / f"{safe_id}_overprint_fixed.pdf"
-
-    result = apply_overprint_to_technical_inks(str(source_pdf), str(output_path))
-    if not result.get("success"):
-        errors = result.get("errors", [])
-        raise HTTPException(status_code=500, detail=f"Fallo al sobreimprimir tintas técnicas: {'; '.join(errors)}")
-
-    # Guardar en job_meta estado acumulativo
-    job_data["job_meta"]["overprint_fixed_pdf_path"] = str(output_path)
-    job_data["job_meta"]["last_fixed_pdf_path"] = str(output_path)
-    job_data["job_meta"]["has_varnish_overprint_fixed"] = True
-
-    # Actualizar estadísticas de barnices
-    stats = job_data.get("job_summary", {}).get("overprint_stats", {})
-    ko_varnish = stats.get("varnish_knockout", 0)
-    stats["varnish_overprint"] = stats.get("varnish_overprint", 0) + ko_varnish
-    stats["varnish_knockout"] = 0
-
-    # Eliminar errores críticos de VARNISH_KNOCKOUT
-    job_data["findings"] = [
-        f for f in job_data.get("findings", [])
-        if f.get("rule_id") != "VARNISH_KNOCKOUT" and "barniz" not in f.get("title", "").lower()
-    ]
-
-    # Recalcular dictamen técnico
-    all_findings = job_data.get("findings", [])
-    errs = sum(1 for f in all_findings if f.get("severity") == "ERROR")
-    warns = sum(1 for f in all_findings if f.get("severity") == "WARNING")
-    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
-    tech["errors_count"] = errs
-    tech["warnings_count"] = warns
-    tech["status"] = "FAIL" if errs > 0 else ("PASS_WITH_WARNINGS" if warns > 0 else "PASS")
-    tech["label"] = "NO CUMPLE" if errs > 0 else ("CUMPLE CON AVISOS" if warns > 0 else "CUMPLE")
-
-    # Regenerar el certificado PDF oficial de preflight
-    cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
-    try:
-        generate_preflight_certificate_pdf(job_data, cert_path)
-    except Exception as e:
-        print(f"[apply-varnish-overprint] Aviso: no se pudo regenerar certificado PDF: {e}")
-
-    with open(job_json_path, "w", encoding="utf-8") as f:
-        json.dump(job_data, f, ensure_ascii=False, indent=2)
-
-    return {
-        "status": "success",
-        "pages_modified": result.get("pages_modified", 0),
-        "objects_fixed": result.get("objects_fixed", 0),
-        "technical_spots_fixed": result.get("technical_spots_fixed", []),
         "download_url": f"/api/download-overprint/{safe_id}",
         "overprint_stats": stats,
         "findings": job_data["findings"],
@@ -923,11 +842,7 @@ async def download_overprint_pdf(job_id: str):
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
 
-    fixed_path = (
-        job_data.get("job_meta", {}).get("overprint_fixed_pdf_path")
-        or job_data.get("job_meta", {}).get("last_fixed_pdf_path")
-        or str(JOBS_DIR / f"{safe_id}_overprint_fixed.pdf")
-    )
+    fixed_path = job_data.get("job_meta", {}).get("overprint_fixed_pdf_path")
     if not fixed_path or not Path(fixed_path).exists():
         raise HTTPException(
             status_code=404,
@@ -942,6 +857,97 @@ async def download_overprint_pdf(job_id: str):
         media_type="application/pdf",
         filename=f"IntelliPrint_Overprint_{clean_name}.pdf",
     )
+
+
+# ---------------------------------------------------------------------------
+# Sobreimpresión de Tintas Técnicas (Barnices, Troqueles, UV)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/apply-varnish-overprint/{job_id}")
+async def apply_varnish_overprint_endpoint(job_id: str, target_spots: Optional[str] = Form(None)):
+    """
+    Aplica sobreimpresión obligatoria (/IP_OP) a las capas técnicas (barnices UV,
+    brillos, troqueles) que se encuentren en calado (knockout).
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    # Fuente acumulativa: overprint_fixed > cmyk_converted > original
+    source_pdf = (
+        job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not source_pdf or not Path(source_pdf).exists():
+        raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
+
+    output_path = JOBS_DIR / f"{safe_id}_overprint_fixed.pdf"
+
+    target_list = None
+    if target_spots:
+        target_list = [s.strip() for s in target_spots.split(",") if s.strip()]
+
+    result = apply_overprint_to_technical_inks(
+        pdf_path=source_pdf,
+        output_path=output_path,
+        target_spots=target_list
+    )
+
+    if not result.get("success"):
+        errors = result.get("errors", [])
+        raise HTTPException(status_code=500, detail=f"Fallo al sobreimprimir tintas técnicas: {'; '.join(errors)}")
+
+    # Guardar ruta en job_meta
+    job_data["job_meta"]["overprint_fixed_pdf_path"] = str(output_path)
+
+    # Actualizar estadísticas de sobreimpresión
+    stats = job_data.get("job_summary", {}).get("overprint_stats", {})
+    ko_count = stats.get("varnish_knockout", 0)
+    stats["varnish_overprint"] = stats.get("varnish_overprint", 0) + ko_count
+    stats["varnish_knockout"] = 0
+
+    # Eliminar incidencias de calado de barniz de findings
+    job_data["findings"] = [
+        f for f in job_data.get("findings", [])
+        if f.get("rule_id") != "VARNISH_KNOCKOUT" and "barniz" not in f.get("title", "").lower()
+    ]
+
+    # Recalcular resultado técnico general (puede pasar de FAIL a PASS/PASS_WITH_WARNINGS)
+    all_findings = job_data.get("findings", [])
+    errs = sum(1 for f in all_findings if f.get("severity") == "ERROR")
+    warns = sum(1 for f in all_findings if f.get("severity") == "WARNING")
+    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
+    tech["errors_count"] = errs
+    tech["warnings_count"] = warns
+    tech["status"] = "FAIL" if errs > 0 else ("PASS_WITH_WARNINGS" if warns > 0 else "PASS")
+    tech["label"] = "NO CUMPLE" if errs > 0 else ("CUMPLE CON AVISOS" if warns > 0 else "CUMPLE")
+
+    # Regenerar el certificado oficial en PDF
+    cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
+    try:
+        generate_preflight_certificate_pdf(job_data, cert_path)
+    except Exception as e:
+        print(f"[apply-varnish-overprint] Aviso: no se pudo regenerar certificado PDF: {e}")
+
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "success",
+        "pages_modified": result.get("pages_modified", 0),
+        "ops_fixed": result.get("ops_fixed", 0),
+        "technical_spots_fixed": result.get("technical_spots_fixed", []),
+        "overprint_stats": stats,
+        "findings": job_data["findings"],
+        "triple_result": job_data["triple_result"],
+        "download_url": f"/api/download-overprint/{safe_id}",
+    }
 
 
 @app.get("/api/spot-colors/{job_id}")

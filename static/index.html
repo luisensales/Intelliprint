@@ -252,6 +252,18 @@
 
         <!-- Tab 1: Findings List -->
         <div id="tab-findings" class="tab-content p-6 space-y-3">
+          <!-- Banner White Overprint Killer (Error Crítico) -->
+          <div id="findingsWhiteBanner" class="hidden p-3.5 bg-red-50 border border-red-400 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
+            <div class="flex items-start gap-2.5">
+              <i class="fa-solid fa-eye-slash text-red-600 mt-0.5 text-sm shrink-0"></i>
+              <div>
+                <p class="font-bold text-red-900">⚠️ Error Crítico: Objeto Blanco en Sobreimpresión</p>
+                <p class="text-[11px] text-red-700 mt-0.5">Un objeto o texto blanco tiene sobreimpresión activa. <strong>En plancha se borrará por completo</strong>, dejando el color de fondo impreso en su lugar.</p>
+                <p class="text-[11px] text-red-500 mt-0.5 font-medium">✅ Se corregirá automáticamente al aplicar el Auto-Trapping.</p>
+              </div>
+            </div>
+          </div>
+
           <!-- Banner Sobreimpresión de Barnices / Tintas Técnicas (Error Crítico) -->
           <div id="findingsVarnishBanner" class="hidden p-3.5 bg-red-50 border border-red-300 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
             <div class="flex items-start gap-2.5">
@@ -383,6 +395,14 @@
                       <i class="fa-solid fa-wand-magic-sparkles"></i> Sobreimprimir
                     </button>
                   </div>
+                </li>
+                <!-- White Overprint -->
+                <li class="flex justify-between items-center py-1 border-b border-slate-100">
+                  <span class="flex items-center gap-1">
+                    Blancos en sobreimpresión
+                    <span class="text-[10px] bg-red-100 text-red-700 px-1 py-0.5 rounded font-semibold">CRÍTICO</span>
+                  </span>
+                  <span id="metricWhiteOverprint" class="font-bold text-red-600">0</span>
                 </li>
                 <li class="flex justify-between py-1">
                   <span>Pantones sobreimprimiendo (aviso):</span>
@@ -1009,6 +1029,10 @@
       if (signedPanel) signedPanel.classList.add('hidden');
       const doneRow = document.getElementById('metricOverprintDoneRow');
       if (doneRow) doneRow.classList.add('hidden');
+      const findingsWhiteBanner = document.getElementById('findingsWhiteBanner');
+      if (findingsWhiteBanner) findingsWhiteBanner.classList.add('hidden');
+      const metricWhiteReset = document.getElementById('metricWhiteOverprint');
+      if (metricWhiteReset) { metricWhiteReset.textContent = '0'; metricWhiteReset.className = 'font-bold text-emerald-600'; }
       const convertSpotsBox = document.getElementById('convertSpotsBox');
       if (convertSpotsBox) convertSpotsBox.classList.add('hidden');
       const convertSpotsStatus = document.getElementById('convertSpotsStatus');
@@ -1223,6 +1247,18 @@
       document.getElementById('metricVarnishOverprint').textContent = over.varnish_overprint || 0;
       document.getElementById('metricVarnishKnockout').textContent = over.varnish_knockout || 0;
       document.getElementById('metricPantoneOverprint').textContent = over.pantone_overprint || 0;
+
+      // White Overprint Killer – métrica y banner
+      const whiteOP = over.white_overprint || 0;
+      const metricWhite = document.getElementById('metricWhiteOverprint');
+      if (metricWhite) {
+        metricWhite.textContent = whiteOP;
+        metricWhite.className = whiteOP > 0
+          ? 'font-bold text-red-600'
+          : 'font-bold text-emerald-600';
+      }
+      const whiteBanner = document.getElementById('findingsWhiteBanner');
+      if (whiteBanner) whiteBanner.classList.toggle('hidden', whiteOP === 0);
 
       // Sincronizar aviso y botón de barnices en calado (error crítico)
       const hasVarnishKO = (over.varnish_knockout || 0) > 0;
@@ -1604,7 +1640,20 @@
             } else if (data.text_80_fixed > 0) {
               detail += ` (80% K)`;
             }
+            if (data.white_objects_fixed > 0) {
+              detail += ` + ${data.white_objects_fixed} objeto(s) blanco(s) en sobreimpresión corregidos`;
+            }
             doneCount.textContent = detail;
+          }
+
+          // Ocultar banner de blancos en sobreimpresión si se corrigieron
+          if ((data.white_objects_fixed || 0) > 0) {
+            const whiteBanner = document.getElementById('findingsWhiteBanner');
+            if (whiteBanner) whiteBanner.classList.add('hidden');
+            const metricWhite = document.getElementById('metricWhiteOverprint');
+            if (metricWhite) {
+              metricWhite.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
+            }
           }
 
           const knockoutEl = document.getElementById('metricBlackKnockout');

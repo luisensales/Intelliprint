@@ -140,6 +140,30 @@ def _has_visible_text(op_str: str, operands: list) -> bool:
     return bool(''.join(txt).strip())
 
 
+def is_fill_color_white(cs_type, fill_color):
+    """Retorna True si el color de relleno es blanco (0% tinta en CMYK/Gray o 100% RGB)."""
+    if not fill_color:
+        return False
+    if cs_type == 'DeviceGray' and len(fill_color) >= 1:
+        return fill_color[0] >= 0.99
+    elif cs_type == 'DeviceRGB' and len(fill_color) >= 3:
+        return all(c >= 0.98 for c in fill_color[:3])
+    elif cs_type == 'DeviceCMYK' and len(fill_color) >= 4:
+        return all(c <= 0.01 for c in fill_color[:4])
+    return False
+
+def is_stroke_color_white(cs_type, stroke_color):
+    """Retorna True si el color de trazo es blanco (0% tinta en CMYK/Gray o 100% RGB)."""
+    if not stroke_color:
+        return False
+    if cs_type == 'DeviceGray' and len(stroke_color) >= 1:
+        return stroke_color[0] >= 0.99
+    elif cs_type == 'DeviceRGB' and len(stroke_color) >= 3:
+        return all(c >= 0.98 for c in stroke_color[:3])
+    elif cs_type == 'DeviceCMYK' and len(stroke_color) >= 4:
+        return all(c <= 0.01 for c in stroke_color[:4])
+    return False
+
 def scan_content_stream(commands, resources, page_num, overprint_data):
     ext_gstates = {}
     if resources and '/ExtGState' in resources:
@@ -278,6 +302,23 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
                             "message": inc_msg
                         })
 
+            # Comprobar texto blanco en sobreimpresión (Error Crítico: desaparece en plancha)
+            if not spot_name and _has_visible_text(op_str, operands):
+                is_white_fill = is_fill and is_fill_color_white(cs_type, state['fill_color'])
+                stroke_cs_type, stroke_spot = state['stroke_cs']
+                is_white_stroke = is_stroke and not stroke_spot and is_stroke_color_white(stroke_cs_type, state['stroke_color'])
+                if (is_white_fill and state['op']) or (is_white_stroke and state['OP']):
+                    overprint_data["white_overprint"] += 1
+                    if not any(inc["page"] == page_num and inc["type"] == "WHITE_OVERPRINT" for inc in overprint_data["incidents"]):
+                        overprint_data["incidents"].append({
+                            "page": page_num,
+                            "type": "WHITE_OVERPRINT",
+                            "severity": "ERROR",
+                            "category": "Sobreimpresión",
+                            "title": "Texto blanco en sobreimpresión (desaparecerá en plancha)",
+                            "message": f"Texto blanco configurado para sobreimprimir en pág {page_num}. En plancha se borrará por completo al no calar las tintas inferiores."
+                        })
+
             if spot_name:
                 check_spot(spot_name, state['op'] if is_fill else state['OP'], page_num, overprint_data, "texto")
 
@@ -286,12 +327,34 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
             cs_type, spot_name = state['fill_cs']
             if spot_name:
                 check_spot(spot_name, state['op'], page_num, overprint_data, "relleno")
+            elif state['op'] and is_fill_color_white(cs_type, state['fill_color']):
+                overprint_data["white_overprint"] += 1
+                if not any(inc["page"] == page_num and inc["type"] == "WHITE_OVERPRINT" for inc in overprint_data["incidents"]):
+                    overprint_data["incidents"].append({
+                        "page": page_num,
+                        "type": "WHITE_OVERPRINT",
+                        "severity": "ERROR",
+                        "category": "Sobreimpresión",
+                        "title": "Vector blanco en sobreimpresión (desaparecerá en plancha)",
+                        "message": f"Relleno vectorial blanco con sobreimpresión activa en pág {page_num}. En plancha se borrará por completo."
+                    })
 
         # Vector strokes
         elif op_str in ['s', 'S', 'b', 'b*', 'B', 'B*']:
             cs_type, spot_name = state['stroke_cs']
             if spot_name:
                 check_spot(spot_name, state['OP'], page_num, overprint_data, "trazo")
+            elif state['OP'] and is_stroke_color_white(cs_type, state['stroke_color']):
+                overprint_data["white_overprint"] += 1
+                if not any(inc["page"] == page_num and inc["type"] == "WHITE_OVERPRINT" for inc in overprint_data["incidents"]):
+                    overprint_data["incidents"].append({
+                        "page": page_num,
+                        "type": "WHITE_OVERPRINT",
+                        "severity": "ERROR",
+                        "category": "Sobreimpresión",
+                        "title": "Trazo blanco en sobreimpresión (desaparecerá en plancha)",
+                        "message": f"Línea o trazo blanco con sobreimpresión activa en pág {page_num}. Desaparecerá en la impresión."
+                    })
 
 def check_spot(spot_name, is_overprinting, page_num, overprint_data, context="objeto"):
     if is_varnish_name(spot_name):
@@ -697,6 +760,7 @@ class IntelliPrintEngine:
             "dark_80_knockout": 0,
             "black_text_overprint": 0,
             "black_text_knockout": 0,
+            "white_overprint": 0,
             "varnish_overprint": 0,
             "varnish_knockout": 0,
             "pantone_overprint": 0,
@@ -814,6 +878,7 @@ class IntelliPrintEngine:
                     "dark_80_knockout": overprint_data.get("dark_80_knockout", 0),
                     "black_text_overprint": overprint_data["black_text_overprint"],
                     "black_text_knockout": overprint_data["black_text_knockout"],
+                    "white_overprint": overprint_data.get("white_overprint", 0),
                     "varnish_overprint": overprint_data["varnish_overprint"],
                     "varnish_knockout": overprint_data["varnish_knockout"],
                     "pantone_overprint": overprint_data["pantone_overprint"],
