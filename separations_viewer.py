@@ -58,6 +58,19 @@ def render_page_separation(
         doc.close()
         raise IndexError(f"Página {page_index + 1} fuera de rango (total {len(doc)}).")
 
+    # Anular la re-separación interna de MuPDF:
+    # Cuando un PDF contiene un OutputIntent (PDF/X), MuPDF aplica gestión de color interna
+    # re-separando los colores DeviceCMYK nativos (como el texto 100% K u 80% K) en una
+    # mezcla de cuatricromía CMYK (C>0, M>0, Y>0, K>0).
+    # Al desactivar temporalmente el diccionario OutputIntents del catálogo en memoria,
+    # MuPDF rasteriza los canales DeviceCMYK puros directamente en sus planchas nativas
+    # (C, M, Y, K exactos), permitiendo aislar o desactivar la plancha negra como en Acrobat.
+    try:
+        cat = doc.pdf_catalog()
+        doc.xref_set_key(cat, "OutputIntents", "null")
+    except Exception:
+        pass
+
     page = doc[page_index]
 
     # Renderizar la página en DeviceCMYK nativo con sobreimpresión activa
