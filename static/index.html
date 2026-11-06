@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
@@ -246,6 +246,20 @@
 
         <!-- Tab 1: Findings List -->
         <div id="tab-findings" class="tab-content p-6 space-y-3">
+          <!-- Banner Auto-Trapping en Incidencias -->
+          <div id="findingsOverprintBanner" class="hidden p-3.5 bg-amber-50 border border-amber-300 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
+            <div class="flex items-start gap-2.5">
+              <i class="fa-solid fa-wand-magic-sparkles text-amber-600 mt-0.5 text-sm shrink-0"></i>
+              <div>
+                <p class="font-bold text-amber-900">Corrección Automática de Calados (Auto-Trapping)</p>
+                <p id="findingsOverprintText" class="text-[11px] text-amber-700 mt-0.5">Se han detectado textos negros en calado que pueden provocar filetes blancos por desajuste de registro.</p>
+              </div>
+            </div>
+            <button onclick="applyOverprintFix()" class="shrink-0 flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold px-4 py-2 rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap btn-apply-overprint">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping
+            </button>
+          </div>
+
           <div id="findingsList" class="space-y-2.5">
             <!-- Dynamic findings -->
           </div>
@@ -321,6 +335,17 @@
                   <span id="metricPantoneOverprint" class="font-bold text-slate-800"></span>
                 </li>
               </ul>
+
+              <!-- Acción Auto-Trapping directamente en la tarjeta de Métricas -->
+              <div id="cardOverprintActionBox" class="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                <button id="btnCardApplyOverprint" onclick="applyOverprintFix()"
+                  class="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-xs cursor-pointer btn-apply-overprint">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping
+                </button>
+                <p id="cardOverprintSubtext" class="text-[10px] text-slate-500 text-center leading-tight">
+                  Inyecta sobreimpresión preventiva a textos negros en calado.
+                </p>
+              </div>
             </div>
 
             <!-- Metrics Card 3: Auditoría de Imágenes (Full Width) -->
@@ -548,6 +573,24 @@
                       <i class="fa-solid fa-droplet text-cyan-500 mr-1"></i> Sólo Cian
                     </button>
                   </div>
+                </div>
+
+                <!-- Auto-Trapping Action en Separaciones -->
+                <div id="sepOverprintBox" class="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                      <i class="fa-solid fa-wand-magic-sparkles text-amber-600"></i> Auto-Trapping
+                    </span>
+                    <span id="sepOverprintBadge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">Sobreimpresión</span>
+                  </div>
+                  <p id="sepOverprintDesc" class="text-[11px] text-amber-700 leading-tight">
+                    Inyecta sobreimpresión preventiva a textos negros oscuros para que no perforen el fondo.
+                  </p>
+                  <button id="btnSepApplyOverprint" onclick="applyOverprintFix()"
+                    class="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-all shadow-xs cursor-pointer btn-apply-overprint">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping
+                  </button>
+                  <div id="sepOverprintStatus" class="hidden text-xs mt-1"></div>
                 </div>
 
                 <!-- Mode & Options -->
@@ -977,20 +1020,71 @@
       document.getElementById('metricVarnishKnockout').textContent = over.varnish_knockout;
       document.getElementById('metricPantoneOverprint').textContent = over.pantone_overprint;
 
-      // Mostrar/ocultar panel de auto-trapping según calados detectados
+      // Sincronizar todos los paneles y botones de Auto-Trapping (en Métricas, Separaciones e Incidencias)
+      const hasKnockout = (over.black_text_knockout || 0) > 0;
+      const isDigital = (data.job_meta && data.job_meta.profile_id === 'DIGITAL_200');
+
+      // 1. Banner en Incidencias (Findings)
+      const findingsBanner = document.getElementById('findingsOverprintBanner');
+      if (findingsBanner) {
+        findingsBanner.classList.toggle('hidden', !hasKnockout);
+        const txt = document.getElementById('findingsOverprintText');
+        if (txt) txt.textContent = `Se han detectado ${over.black_text_knockout} textos negros en calado (knockout) que requieren sobreimpresión preventiva.`;
+      }
+
+      // 2. Tarjeta en Métricas (Sobreimpresión & Tintas Especiales)
+      const btnCardOP = document.getElementById('btnCardApplyOverprint');
+      const cardSubtext = document.getElementById('cardOverprintSubtext');
+      if (btnCardOP) {
+        btnCardOP.disabled = false;
+        btnCardOP.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping';
+        if (hasKnockout) {
+          btnCardOP.className = 'w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-xs cursor-pointer btn-apply-overprint';
+          if (cardSubtext) cardSubtext.textContent = `Hay ${over.black_text_knockout} texto(s) calando sobre el fondo. Pulsa para corregir.`;
+        } else {
+          btnCardOP.className = 'w-full flex items-center justify-center gap-2 bg-slate-100 text-slate-500 text-xs font-semibold px-3 py-2 rounded-lg cursor-not-allowed border border-slate-200 btn-apply-overprint';
+          btnCardOP.disabled = true;
+          btnCardOP.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600"></i> Sin calados detectados';
+          if (cardSubtext) cardSubtext.textContent = 'Todos los textos oscuros sobreimprimen correctamente.';
+        }
+      }
+
+      // 3. Panel en Previsualizador de Separaciones
+      const btnSepOP = document.getElementById('btnSepApplyOverprint');
+      const sepDesc = document.getElementById('sepOverprintDesc');
+      const sepBadge = document.getElementById('sepOverprintBadge');
+      const sepStatus = document.getElementById('sepOverprintStatus');
+      if (sepStatus) { sepStatus.classList.add('hidden'); sepStatus.innerHTML = ''; }
+      if (btnSepOP) {
+        btnSepOP.disabled = false;
+        btnSepOP.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping';
+        if (hasKnockout) {
+          btnSepOP.className = 'w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-all shadow-xs cursor-pointer btn-apply-overprint';
+          if (sepBadge) { sepBadge.textContent = `${over.black_text_knockout} calados`; sepBadge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300'; }
+          if (sepDesc) sepDesc.textContent = `Se detectan ${over.black_text_knockout} textos en calado. Pulsa para sobreimprimir y ver el fondo sin calados.`;
+        } else {
+          btnSepOP.className = 'w-full flex items-center justify-center gap-2 bg-slate-200 text-slate-500 text-xs font-semibold py-2 px-3 rounded-lg cursor-not-allowed btn-apply-overprint';
+          btnSepOP.disabled = true;
+          btnSepOP.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600"></i> Sin calados';
+          if (sepBadge) { sepBadge.textContent = 'Correcto'; sepBadge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300'; }
+          if (sepDesc) sepDesc.textContent = 'Los textos oscuros sobreimprimen adecuadamente en este documento.';
+        }
+      }
+
+      // 4. Panel inferior en Métricas (overprintFixPanel)
       const overprintPanel = document.getElementById('overprintFixPanel');
       if (overprintPanel) {
-        const hasKnockout = (over.black_text_knockout || 0) > 0;
         overprintPanel.classList.toggle('hidden', !hasKnockout);
-        // Resetear estado del botón al cargar nuevo resultado
         const btnOP = document.getElementById('btnApplyOverprint');
         const statusOP = document.getElementById('overprintFixStatus');
-        if (btnOP) { btnOP.disabled = false; btnOP.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping'; }
+        if (btnOP) {
+          btnOP.disabled = false;
+          btnOP.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping';
+          btnOP.className = 'flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-sm whitespace-nowrap btn-apply-overprint';
+        }
         if (statusOP) { statusOP.classList.add('hidden'); statusOP.innerHTML = ''; }
-        // Aviso especifico si el perfil es Digital 200
         const digitalWarning = document.getElementById('overprintDigitalWarning');
         if (digitalWarning) {
-          const isDigital = (data.job_meta && data.job_meta.profile_id === 'DIGITAL_200');
           digitalWarning.classList.toggle('hidden', !isDigital || !hasKnockout);
         }
       }
@@ -1242,44 +1336,117 @@
         alert('No hay ningún trabajo activo. Sube un PDF primero.');
         return;
       }
-      const btn = document.getElementById('btnApplyOverprint');
-      const statusEl = document.getElementById('overprintFixStatus');
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Aplicando...';
-      statusEl.classList.remove('hidden');
-      statusEl.innerHTML = '<span class="text-xs text-amber-700"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Procesando corrección de sobreimpresión automática...</span>';
+      // Actualizar todos los botones de Auto-Trapping en la interfaz
+      const allButtons = document.querySelectorAll('.btn-apply-overprint');
+      allButtons.forEach(b => {
+        b.disabled = true;
+        b.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Aplicando...';
+      });
+
+      const statusEls = [
+        document.getElementById('overprintFixStatus'),
+        document.getElementById('sepOverprintStatus')
+      ].filter(Boolean);
+
+      statusEls.forEach(el => {
+        el.classList.remove('hidden');
+        el.innerHTML = '<span class="text-xs text-amber-700"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Procesando corrección de sobreimpresión preventiva (auto-trapping)...</span>';
+      });
+
       try {
         const res = await fetch(`/api/apply-overprint/${currentJobId}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
-          statusEl.innerHTML = `
-            <div class="flex flex-wrap items-center gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5">
-              <i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i>
-              <span>Sobreimpresión aplicada en <strong>${data.pages_modified}</strong> página(s), <strong>${data.text_ops_fixed}</strong> operación(es) de texto corregidas.</span>
-              <a href="${data.download_url}" target="_blank"
-                class="ml-auto flex items-center gap-1 font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg transition-all shadow-sm">
-                <i class="fa-solid fa-download"></i> Descargar PDF corregido
-              </a>
-            </div>`;
-          // Ofrecer también recargar la previsualización de separaciones con el PDF corregido
-          statusEl.innerHTML += `
-            <p class="text-[10px] text-amber-600 mt-1 italic">
-              <i class="fa-solid fa-circle-info mr-1"></i>
-              Para verificar el resultado, ve a "Previsualización de Separaciones" y pulsa "Sin Negro (CMY)": no deberían verse siluetas blancas alrededor del texto.
-            </p>`;
+          // Éxito: actualizar todos los botones
+          allButtons.forEach(b => {
+            b.disabled = false;
+            b.className = b.className.replace(/bg-amber-\d+/, 'bg-emerald-600').replace(/hover:bg-amber-\d+/, 'hover:bg-emerald-700');
+            b.innerHTML = '<i class="fa-solid fa-circle-check"></i> Auto-Trapping Aplicado';
+          });
+
+          // Actualizar métricas
+          const knockoutEl = document.getElementById('metricBlackKnockout');
+          if (knockoutEl) {
+            knockoutEl.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
+          }
+          const overprintEl = document.getElementById('metricBlackOverprint');
+          if (overprintEl && data.text_ops_fixed) {
+            const currentVal = parseInt(overprintEl.textContent) || 0;
+            overprintEl.textContent = `${currentVal + data.text_ops_fixed} (+${data.text_ops_fixed})`;
+          }
+
+          // Actualizar textos informativos en los diferentes paneles
+          const findingsBannerText = document.getElementById('findingsOverprintText');
+          if (findingsBannerText) {
+            findingsBannerText.innerHTML = `<strong>¡Sobreimpresión aplicada!</strong> Se corrigieron ${data.text_ops_fixed} operaciones de texto en ${data.pages_modified} página(s).`;
+          }
+          const cardSubtext = document.getElementById('cardOverprintSubtext');
+          if (cardSubtext) {
+            cardSubtext.innerHTML = '<span class="text-emerald-600 font-semibold"><i class="fa-solid fa-check mr-1"></i>Sobreimpresión preventiva aplicada correctamente.</span>';
+          }
+          const sepBadge = document.getElementById('sepOverprintBadge');
+          if (sepBadge) {
+            sepBadge.textContent = 'Corregido';
+            sepBadge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300';
+          }
+          const sepDesc = document.getElementById('sepOverprintDesc');
+          if (sepDesc) {
+            sepDesc.innerHTML = `<span class="text-emerald-800 font-medium"><i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>Sobreimpresión activa en ${data.text_ops_fixed} textos. Si desactivas "Proceso Negro", la imagen de fondo ya no mostrará calados blancos.</span>`;
+          }
+
+          // Mensajes de estado con botón de descarga directa
+          statusEls.forEach(el => {
+            el.innerHTML = `
+              <div class="flex flex-wrap items-center gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 mt-2">
+                <i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i>
+                <span>Sobreimpresión inyectada en <strong>${data.pages_modified}</strong> pág(s), <strong>${data.text_ops_fixed}</strong> textos corregidos.</span>
+                <a href="${data.download_url}" target="_blank"
+                  class="ml-auto flex items-center gap-1 font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg transition-all shadow-sm">
+                  <i class="fa-solid fa-download"></i> Descargar PDF corregido
+                </a>
+              </div>`;
+          });
+
+          // Actualizar botón de descarga principal de la cabecera
+          const pdfBtn = document.getElementById('downloadPdfBtn');
+          const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+          if (pdfBtn) {
+            pdfBtn.href = data.download_url;
+            pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+          }
+          if (pdfBtnLabel) {
+            pdfBtnLabel.textContent = 'Descargar PDF (Trapping OK)';
+          }
+
+          // Refrescar automáticamente la previsualización de separaciones
+          if (typeof updateSeparationPreview === 'function') {
+            updateSeparationPreview();
+          }
+
         } else {
           const errMsg = data.detail || (data.errors && data.errors.join('; ')) || 'Error desconocido';
-          statusEl.innerHTML = `<div class="text-xs text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-lg"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error: ${errMsg}</div>`;
+          statusEls.forEach(el => {
+            el.innerHTML = `<div class="text-xs text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-lg mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error: ${errMsg}</div>`;
+          });
+          allButtons.forEach(b => {
+            b.disabled = false;
+            b.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Reintentar Auto-Trapping';
+          });
         }
       } catch (err) {
-        statusEl.innerHTML = `<div class="text-xs text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-lg"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error de red: ${err.message}</div>`;
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Auto-Trapping';
+        statusEls.forEach(el => {
+          el.innerHTML = `<div class="text-xs text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-lg mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error de red: ${err.message}</div>`;
+        });
+        allButtons.forEach(b => {
+          b.disabled = false;
+          b.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Reintentar Auto-Trapping';
+        });
       }
     }
 
-    async function convertImagesToCmyk() {      if (!currentJobId) {
+    async function convertImagesToCmyk() {
+      if (!currentJobId) {
         alert('No hay ningún trabajo activo. Sube un PDF primero.');
         return;
       }
@@ -1354,6 +1521,75 @@
         }
         if (pdfBtnLabel) {
           pdfBtnLabel.textContent = 'Descargar PDF CMYK';
+        }
+
+        // ── 1. Actualizar inmediatamente todas las filas de la tabla de imágenes en esta misma vista
+        const rows = document.querySelectorAll('#imagesTableBody tr');
+        rows.forEach(tr => {
+          const cells = tr.querySelectorAll('td');
+          if (cells.length >= 7) {
+            const badgeCell = cells[2];
+            const statusCell = cells[6];
+            if (badgeCell && badgeCell.innerHTML.includes('RGB')) {
+              badgeCell.innerHTML = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">CMYK <i class="fa-solid fa-circle-check text-emerald-600 ml-0.5"></i></span>';
+              if (statusCell) {
+                if (statusCell.innerHTML.includes('mayor resolución') || statusCell.innerHTML.includes('Resolución')) {
+                  statusCell.innerHTML = '<span class="text-amber-700 font-medium"><i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>CMYK OK · <span class="text-amber-600 font-semibold">Resolución baja</span></span>';
+                } else {
+                  statusCell.innerHTML = '<span class="text-emerald-600 font-medium"><i class="fa-solid fa-circle-check mr-1"></i>Convertida a CMYK (Óptima)</span>';
+                }
+              }
+            }
+          }
+        });
+
+        // ── 2. Actualizar el resumen de métricas de imágenes
+        const summaryEl = document.getElementById('metricImagesSummary');
+        if (summaryEl) {
+          const totalImgs = document.querySelectorAll('#imagesTableBody tr').length;
+          summaryEl.innerHTML = `<strong>${totalImgs}</strong> imágenes analizadas · <span class="text-emerald-600 font-bold"><i class="fa-solid fa-circle-check mr-1"></i>Todas en CMYK (convertidas)</span>`;
+        }
+
+        // ── 3. Actualizar el botón de la cabecera "Convertir a CMYK"
+        const btnShowCmyk = document.getElementById('btnShowCmykPanel');
+        if (btnShowCmyk) {
+          btnShowCmyk.innerHTML = '<i class="fa-solid fa-circle-check"></i> Imágenes en CMYK';
+          btnShowCmyk.className = 'flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-full';
+        }
+
+        // ── 4. Actualizar lista de Incidencias Técnicas (findingsList)
+        document.querySelectorAll('#findingsList > div').forEach(div => {
+          const text = div.textContent || '';
+          if (text.includes('RGB') || text.includes('Espacio de color')) {
+            div.className = 'p-3 rounded-lg border text-xs flex items-start gap-3 bg-emerald-50/70 border-emerald-200 text-emerald-900 transition-all';
+            const iconDiv = div.querySelector('div:first-child');
+            if (iconDiv) iconDiv.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600"></i>';
+            const titleSpan = div.querySelector('span.font-bold');
+            if (titleSpan && !titleSpan.innerHTML.includes('Resuelto')) {
+              titleSpan.innerHTML += ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-800 font-bold ml-1">✓ Resuelto en PDF CMYK</span>';
+            }
+          }
+        });
+
+        // ── 5. Actualizar KPI Card de Color (badgeColor)
+        const badgeColor = document.getElementById('badgeColor');
+        const descColor = document.getElementById('descColor');
+        if (badgeColor) {
+          badgeColor.textContent = 'APTO (CMYK)';
+          badgeColor.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200';
+        }
+        if (descColor) {
+          descColor.textContent = 'Imágenes convertidas exitosamente a CMYK mediante perfil ICC.';
+        }
+
+        // ── 6. Actualizar modelo de datos en memoria
+        if (typeof currentReport !== 'undefined' && currentReport && currentReport.job_summary) {
+          currentReport.job_summary.non_cmyk_images = 0;
+        }
+
+        // ── 7. Refrescar el visor de separaciones para usar el nuevo PDF CMYK
+        if (typeof updateSeparationPreview === 'function') {
+          updateSeparationPreview();
         }
 
       } catch (err) {

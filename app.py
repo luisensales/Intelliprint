@@ -669,11 +669,14 @@ async def get_page_separation(
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
 
+    overprint_path = job_data.get("job_meta", {}).get("overprint_fixed_pdf_path")
     converted_path = job_data.get("job_meta", {}).get("cmyk_converted_pdf_path")
     original_path = job_data.get("job_meta", {}).get("pdf_path")
 
     target_pdf = None
-    if use_converted and converted_path and os.path.exists(converted_path):
+    if use_converted and overprint_path and os.path.exists(overprint_path):
+        target_pdf = overprint_path
+    elif use_converted and converted_path and os.path.exists(converted_path):
         target_pdf = converted_path
     elif original_path and os.path.exists(original_path):
         target_pdf = original_path
