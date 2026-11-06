@@ -26,6 +26,7 @@ from spot_converter import convert_spot_colors_to_cmyk
 from hairline_fixer import fix_hairlines
 from geometry_fixer import fix_pdf_boxes_and_bleed
 from font_vectorizer import outline_fonts_in_pdf
+from mirror_bleed_generator import generate_mirror_bleed
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -450,6 +451,7 @@ async def download_pdf_file(job_id: str):
     meta = job_data.get("job_meta", {})
     pdf_p = (
         meta.get("last_fixed_pdf_path")
+        or meta.get("mirror_bleed_pdf_path")
         or meta.get("fonts_outlined_pdf_path")
         or meta.get("bleed_fixed_pdf_path")
         or meta.get("hairline_fixed_pdf_path")
@@ -1341,6 +1343,118 @@ async def download_outlined_fonts_pdf(job_id: str):
         path=fixed_path,
         media_type="application/pdf",
         filename=f"IntelliPrint_{clean_name}_Curvas_OK.pdf"
+    )
+
+
+@app.post("/api/generate-mirror-bleed/{job_id}")
+async def generate_mirror_bleed_endpoint(job_id: str, bleed_mm: float = 3.0):
+    """
+    Fase 3: Genera sangrado sintético por reflejo de 3.0 mm en los bordes de la página.
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    source_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("mirror_bleed_pdf_path")
+        or job_meta.get("fonts_outlined_pdf_path")
+        or job_meta.get("bleed_fixed_pdf_path")
+        or job_meta.get("hairline_fixed_pdf_path")
+        or job_meta.get("icc_fixed_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not source_pdf or not Path(source_pdf).exists():
+        raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
+
+    output_path = JOBS_DIR / f"{safe_id}_mirror_bleed.pdf"
+    result = generate_mirror_bleed(source_pdf, str(output_path), bleed_mm=bleed_mm)
+
+    job_meta["has_mirror_bleed"] = True
+    job_meta["has_bleed_fixed"] = True
+    job_meta["mirror_bleed_pdf_path"] = str(output_path)
+    job_meta["last_fixed_pdf_path"] = str(output_path)
+
+    # Actualizar resumen de trabajo
+    job_summary = job_data.setdefault("job_summary", {})
+    job_summary["bleed_status"] = "PASS"
+    job_summary["bleed_detected_mm"] = bleed_mm
+
+    # Filtrar incidencias de BLEED_GEOMETRY_3MM y sangrado
+    job_data["findings"] = [
+        f for f in job_data.get("findings", [])
+        if f.get("rule_id") != "BLEED_GEOMETRY_3MM"
+        and "sangrado" not in f.get("title", "").lower()
+    ]
+
+    # Recalcular resultado técnico
+    errs = sum(1 for f in job_data["findings"] if f.get("severity") == "ERROR")
+    warns = sum(1 for f in job_data["findings"] if f.get("severity") == "WARNING")
+    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
+    tech["errors_count"] = errs
+    tech["warnings_count"] = warns
+    if errs > 0:
+        tech["status"] = "FAIL"
+        tech["label"] = "NO CUMPLE"
+    elif warns > 0:
+        tech["status"] = "PASS_WITH_WARNINGS"
+        tech["label"] = "CUMPLE CON AVISOS"
+    else:
+        tech["status"] = "PASS"
+        tech["label"] = "CUMPLE"
+
+    # Regenerar certificado técnico PDF
+    cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
+    try:
+        generate_preflight_certificate_pdf(job_data, cert_path)
+    except Exception as e:
+        print(f"[generate-mirror-bleed] Error regenerando certificado: {e}")
+
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "success",
+        "job_id": safe_id,
+        "pages_processed": result.get("pages_processed", 0),
+        "bleed_mm": result.get("bleed_mm", 3.0),
+        "download_url": f"/api/download-mirror-bleed/{safe_id}",
+        "findings": job_data["findings"],
+        "triple_result": job_data["triple_result"]
+    }
+
+
+@app.get("/api/download-mirror-bleed/{job_id}")
+async def download_mirror_bleed_pdf(job_id: str):
+    """Descarga el PDF con sangrado sintético por reflejo generado."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    fixed_path = job_data.get("job_meta", {}).get("mirror_bleed_pdf_path")
+    if not fixed_path or not Path(fixed_path).exists():
+        raise HTTPException(
+            status_code=404,
+            detail="PDF con sangrado por reflejo no encontrado."
+        )
+
+    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    clean_name = filename.replace(".pdf", "")
+    return FileResponse(
+        path=fixed_path,
+        media_type="application/pdf",
+        filename=f"IntelliPrint_{clean_name}_Sangre_Reflejo.pdf"
     )
 
 

@@ -1206,10 +1206,15 @@
             badgeHtml = '<span class="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded font-bold ml-1 tracking-wide">Sangrado &lt; 3 mm</span>';
             actionHtml = `
               <div class="mt-2.5 pt-2 border-t border-rose-200 flex items-center justify-between gap-2 flex-wrap">
-                <span class="text-[11px] text-rose-800 font-medium"><i class="fa-solid fa-ruler-combined text-rose-600 mr-1"></i>Geometría de corte ISO:</span>
-                <button onclick="applyBleedGeometryFix(this)" class="btn-fix-bleed flex items-center gap-1.5 px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer">
-                  <i class="fa-solid fa-wand-magic-sparkles text-rose-200"></i> Ajustar Cajas y Sangrado 3 mm
-                </button>
+                <span class="text-[11px] text-rose-800 font-medium"><i class="fa-solid fa-ruler-combined text-rose-600 mr-1"></i>Soluciones de sangrado:</span>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <button onclick="applyBleedGeometryFix(this)" class="btn-fix-bleed flex items-center gap-1.5 px-2.5 py-1 bg-white border border-rose-300 hover:bg-rose-100 text-rose-800 rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer" title="Fija TrimBox y BleedBox formales">
+                    <i class="fa-solid fa-vector-square text-rose-600"></i> Ajustar Cajas ISO
+                  </button>
+                  <button onclick="applyMirrorBleedFix(this)" class="btn-mirror-bleed flex items-center gap-1.5 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer" title="Crea 3 mm de sangre reflejando el borde hacia afuera">
+                    <i class="fa-solid fa-wand-magic-sparkles text-rose-200"></i> Reflejar Sangrado 3 mm
+                  </button>
+                </div>
               </div>
             `;
           } else if (isFontMissing) {
@@ -2135,6 +2140,94 @@
       } catch (err) {
         console.error(err);
         alert('Error de conexión al ajustar sangrado.');
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Fase 3: Generador de Sangrado Sintético por Reflejo (Mirror Bleed)
+    // -----------------------------------------------------------------------
+    async function applyMirrorBleedFix(btn) {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo.');
+        return;
+      }
+      const card = btn.closest('#findingsList > div');
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Reflejando sangrado...';
+
+      try {
+        const res = await fetch(`/api/generate-mirror-bleed/${currentJobId}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          // Cambiar la tarjeta de la incidencia a estado resuelto
+          if (card) {
+            card.className = 'p-3 rounded-lg border text-xs flex items-center gap-3 bg-emerald-50 border-emerald-300 text-emerald-900 transition-all shadow-xs';
+            card.innerHTML = `
+              <div><i class="fa-solid fa-circle-check text-emerald-600 text-base"></i></div>
+              <div class="flex-1">
+                <span class="font-bold">Sangrado por reflejo de 3,0 mm generado con éxito</span>
+                <p class="text-[11px] text-emerald-700">Se han reflejado los píxeles perimetrales hacia el exterior manteniendo los vectores y textos netos. El corte en guillotina no dejará filetes blancos.</p>
+              </div>
+              <a href="${data.download_url}" target="_blank" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-semibold transition flex items-center gap-1 shadow-xs">
+                <i class="fa-solid fa-download"></i> PDF con Sangre
+              </a>
+            `;
+          }
+
+          // Actualizar métrica visual de sangrado en el panel
+          const metricBleedEl = document.getElementById('metricBleed');
+          if (metricBleedEl) {
+            metricBleedEl.innerHTML = '<span class="text-emerald-700 font-bold">3.0 mm (Reflejado)</span>';
+          }
+
+          // Actualizar contador de incidencias
+          const countEl = document.getElementById('findingsCount');
+          if (data.findings && countEl) {
+            countEl.textContent = data.findings.length;
+          }
+
+          // Actualizar botón de cabecera si procede
+          const pdfBtn = document.getElementById('downloadPdfBtn');
+          const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+          if (pdfBtn && data.download_url) {
+            pdfBtn.href = data.download_url;
+            pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+          }
+          if (pdfBtnLabel) {
+            pdfBtnLabel.textContent = 'Descargar PDF (Sangre OK)';
+          }
+
+          // Actualizar dictamen técnico general si viene en la respuesta
+          if (data.triple_result && data.triple_result.technical) {
+            const tech = data.triple_result.technical;
+            const techBadge = document.getElementById('badgeTechnical');
+            const descTech = document.getElementById('descTechnical');
+            if (techBadge) {
+              techBadge.textContent = tech.label;
+              if (tech.status === 'PASS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-emerald-100 text-emerald-800 border border-emerald-200';
+              } else if (tech.status === 'PASS_WITH_WARNINGS') {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-amber-100 text-amber-800 border border-amber-200';
+              } else {
+                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-red-100 text-red-800 border border-red-200';
+              }
+            }
+            if (descTech) {
+              descTech.textContent = `${tech.errors_count} errores críticos, ${tech.warnings_count} advertencias.`;
+            }
+          }
+        } else {
+          alert('Error al generar sangrado por reflejo: ' + (data.detail || 'Error desconocido'));
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de conexión al generar sangrado por reflejo.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
       }
