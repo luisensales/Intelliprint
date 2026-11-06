@@ -685,10 +685,9 @@ async def convert_spots_to_cmyk_endpoint(job_id: str, target_spots: Optional[str
 # ---------------------------------------------------------------------------
 
 @app.post("/api/apply-overprint/{job_id}")
-async def apply_overprint_fix(job_id: str, mode: str = "all"):
+async def apply_overprint_fix(job_id: str, mode: str = "k100"):
     """
-    Aplica sobreimpresión automática a textos negros en calado.
-    mode: 'all' (ambos: 100% K y >=80% K) o 'k100' (solo negro puro 100% K).
+    Aplica sobreimpresión automática exclusivamente a textos negros 100% K en calado.
     """
     # Validar job_id para evitar path traversal
     safe_id = Path(job_id).name
@@ -762,9 +761,8 @@ async def apply_overprint_fix(job_id: str, mode: str = "all"):
         if rich_fix_tmp.exists():
             rich_fix_tmp.unlink(missing_ok=True)
 
-    # ── PASO 3: Auto-trapping de textos negros/oscuros ───────────────────────
-    k_threshold = 0.99 if mode == "k100" else 0.80
-    result = apply_overprint_to_dark_text(overprint_source, str(output_path), dark_k_threshold=k_threshold)
+    # ── PASO 3: Auto-trapping de textos en negro puro 100% K ─────────────────
+    result = apply_overprint_to_dark_text(overprint_source, str(output_path), dark_k_threshold=0.99)
 
     # Limpiar tmps intermedios
     if white_fix_tmp.exists():
@@ -784,30 +782,17 @@ async def apply_overprint_fix(job_id: str, mode: str = "all"):
 
     # Actualizar estadisticas y limpiar incidencias resueltas de la ficha tecnica
     stats = job_data.get("job_summary", {}).get("overprint_stats", {})
-    if mode == "all":
-        # Resolver todas las incidencias de texto en calado (100% y 80%)
-        job_data["findings"] = [
-            f for f in job_data.get("findings", [])
-            if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "DARK_80_TEXT_KNOCKOUT")
-            and "calado" not in f.get("title", "").lower()
-        ]
-        stats["black_100_overprint"] = stats.get("black_100_overprint", 0) + stats.get("black_100_knockout", 0)
-        stats["black_100_knockout"] = 0
-        stats["dark_80_overprint"] = stats.get("dark_80_overprint", 0) + stats.get("dark_80_knockout", 0)
-        stats["dark_80_knockout"] = 0
-        stats["black_text_overprint"] = stats.get("black_text_overprint", 0) + stats.get("black_text_knockout", 0)
-        stats["black_text_knockout"] = 0
-    else:
-        # Resolver unicamente las incidencias de negro puro 100% K
-        job_data["findings"] = [
-            f for f in job_data.get("findings", [])
-            if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT_100",)
-            and "100% k" not in f.get("title", "").lower()
-        ]
-        stats["black_100_overprint"] = stats.get("black_100_overprint", 0) + stats.get("black_100_knockout", 0)
-        stats["black_100_knockout"] = 0
-        stats["black_text_overprint"] = stats.get("black_100_overprint", 0) + stats.get("dark_80_overprint", 0)
-        stats["black_text_knockout"] = stats.get("dark_80_knockout", 0)
+    job_data["findings"] = [
+        f for f in job_data.get("findings", [])
+        if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100")
+        and not (("calado" in f.get("title", "").lower() or "knockout" in f.get("title", "").lower()) and "barniz" not in f.get("title", "").lower())
+    ]
+    stats["black_100_overprint"] = stats.get("black_100_overprint", 0) + stats.get("black_100_knockout", 0)
+    stats["black_100_knockout"] = 0
+    stats["dark_80_overprint"] = 0
+    stats["dark_80_knockout"] = 0
+    stats["black_text_overprint"] = stats["black_100_overprint"]
+    stats["black_text_knockout"] = 0
 
     # Recalcular resultado tecnico general
     all_findings = job_data.get("findings", [])
@@ -842,7 +827,6 @@ async def apply_overprint_fix(job_id: str, mode: str = "all"):
         "pages_modified": result["pages_modified"],
         "text_ops_fixed": result["text_ops_fixed"],
         "text_100_fixed": result.get("text_100_fixed", 0),
-        "text_80_fixed": result.get("text_80_fixed", 0),
         "white_objects_fixed": white_objects_fixed,
         "rich_texts_fixed": rich_texts_fixed,
         "errors": result.get("errors", []),

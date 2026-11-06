@@ -4,7 +4,7 @@ overprint_fixer.py
 Motor de corrección automática de sobreimpresión (auto-trapping) para IntelliPrint.
 
 Módulos incluidos:
-  1. apply_overprint_to_dark_text      – Auto-trapping de textos negros/oscuros (≥80% K)
+  1. apply_overprint_to_dark_text      – Auto-trapping de textos en negro puro 100% K en calado
   2. apply_overprint_to_technical_inks – Sobreimpresión obligatoria de barnices/troqueles
   3. fix_white_overprint               – White Overprint Killer: objetos blancos en sobreimpresión
   4. fix_rich_black_small_text         – Rich Black Killer: negro enriquecido en texto < 12 pt → 100% K puro
@@ -27,9 +27,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Umbrales de deteccion de "negro oscuro"
 # ---------------------------------------------------------------------------
-DARK_K_THRESHOLD = 0.80    # K minimo para considerar color oscuro (>= 80% K)
+DARK_K_THRESHOLD = 0.99    # K minimo para considerar negro puro (100% K)
 CMY_MAX = 0.05             # CMY maximo para que sea negro puro (no color compuesto)
-GRAY_DARK_THRESHOLD = 0.20 # Para operador 'g': escala de grises <= este valor (<= 0.20 equivale a >= 80% K)
+GRAY_DARK_THRESHOLD = 0.01 # Para operador 'g': escala de grises <= 0.01 equivale a 100% K
 
 
 # ---------------------------------------------------------------------------
@@ -58,9 +58,9 @@ def apply_overprint_to_dark_text(
 ) -> dict:
     """
     Recorre todas las paginas del PDF e inyecta sobreimpresion automatica
-    para textos negros oscuros en calado.
+    exclusivamente para textos en negro puro 100% K en calado.
 
-    Retorna dict con claves: success, pages_modified, text_ops_fixed, text_100_fixed, text_80_fixed, errors
+    Retorna dict con claves: success, pages_modified, text_ops_fixed, text_100_fixed, errors
     """
     pdf_path = Path(pdf_path)
     output_path = Path(output_path)
@@ -68,7 +68,6 @@ def apply_overprint_to_dark_text(
     pages_modified = 0
     text_ops_fixed = 0
     text_100_fixed = 0
-    text_80_fixed = 0
 
     try:
         pdf = pikepdf.open(str(pdf_path))
@@ -78,22 +77,20 @@ def apply_overprint_to_dark_text(
             "pages_modified": 0,
             "text_ops_fixed": 0,
             "text_100_fixed": 0,
-            "text_80_fixed": 0,
             "errors": [f"No se pudo abrir el PDF: {e}"],
         }
 
     try:
         for page_num, page in enumerate(pdf.pages):
             try:
-                n_fixed, n_100, n_80 = _fix_page(pdf, page, dark_k_threshold, cmy_max)
+                n_fixed, n_100 = _fix_page(pdf, page, dark_k_threshold, cmy_max)
                 if n_fixed > 0:
                     pages_modified += 1
                     text_ops_fixed += n_fixed
                     text_100_fixed += n_100
-                    text_80_fixed += n_80
                     logger.info(
-                        "[overprint_fixer] Pagina %d: %d ops (%d de 100%%, %d de 80%%)",
-                        page_num + 1, n_fixed, n_100, n_80
+                        "[overprint_fixer] Pagina %d: %d textos 100%% K sobreimpresos",
+                        page_num + 1, n_fixed
                     )
             except Exception as e:
                 msg = f"Error en pagina {page_num + 1}: {e}"
@@ -110,7 +107,6 @@ def apply_overprint_to_dark_text(
             "pages_modified": pages_modified,
             "text_ops_fixed": text_ops_fixed,
             "text_100_fixed": text_100_fixed,
-            "text_80_fixed": text_80_fixed,
             "errors": errors,
         }
     finally:
@@ -121,7 +117,6 @@ def apply_overprint_to_dark_text(
         "pages_modified": pages_modified,
         "text_ops_fixed": text_ops_fixed,
         "text_100_fixed": text_100_fixed,
-        "text_80_fixed": text_80_fixed,
         "errors": errors,
     }
 
@@ -130,10 +125,10 @@ def apply_overprint_to_dark_text(
 # Procesado de una pagina
 # ---------------------------------------------------------------------------
 
-def _fix_page(pdf: pikepdf.Pdf, page: pikepdf.Page, dark_k_threshold: float, cmy_max: float) -> tuple[int, int, int]:
+def _fix_page(pdf: pikepdf.Pdf, page: pikepdf.Page, dark_k_threshold: float, cmy_max: float) -> tuple[int, int]:
     """
     Inyecta /IP_OP y /IP_KO en la pagina segun el color de relleno activo.
-    Devuelve (n_fixed, n_100, n_80).
+    Devuelve (n_fixed, n_100).
     """
     # 1. Garantizar que la pagina tiene Resources.ExtGState
     _ensure_extgstate(page)
@@ -142,16 +137,16 @@ def _fix_page(pdf: pikepdf.Pdf, page: pikepdf.Page, dark_k_threshold: float, cmy
     _inject_gs_entries(pdf, page)
 
     # 3. Parsear el flujo de contenido y reconstruirlo con las inserciones
-    new_commands, n_fixed, n_100, n_80 = _process_content_stream(page, dark_k_threshold, cmy_max)
+    new_commands, n_fixed, n_100 = _process_content_stream(page, dark_k_threshold, cmy_max)
 
     if n_fixed == 0:
-        return 0, 0, 0  # Nada que modificar
+        return 0, 0  # Nada que modificar
 
     # 4. Reemplazar el contenido de la pagina
     new_data = pikepdf.unparse_content_stream(new_commands)
     page.Contents = pikepdf.Stream(pdf, new_data)
 
-    return n_fixed, n_100, n_80
+    return n_fixed, n_100
 
 
 def _ensure_extgstate(page: pikepdf.Page) -> None:
@@ -193,12 +188,12 @@ def _process_content_stream(
     page: pikepdf.Page,
     dark_k_threshold: float,
     cmy_max: float,
-) -> tuple[list, int, int, int]:
+) -> tuple[list, int, int]:
     """
     Recorre los operadores del stream, rastreando color de relleno y estado
     de overprint, e inserta /IP_OP o /IP_KO donde sea necesario.
 
-    Devuelve (new_commands, n_fixed, n_100, n_80).
+    Devuelve (new_commands, n_fixed, n_100).
     """
     # Estado de color de relleno inicial: por especificacion PDF el espacio por defecto es DeviceGray 0.0
     fill_c = fill_m = fill_y = fill_k = 0.0
@@ -214,13 +209,12 @@ def _process_content_stream(
     new_commands: list = []
     n_fixed = 0
     n_100 = 0
-    n_80 = 0
 
     try:
         raw_commands = pikepdf.parse_content_stream(page)
     except Exception as e:
         logger.warning("[overprint_fixer] No se pudo parsear el stream: %s", e)
-        return [], 0, 0, 0
+        return [], 0, 0
 
     for operands, op in raw_commands:
         op_str = str(op)
@@ -243,19 +237,16 @@ def _process_content_stream(
                 color_space = "gray"
 
         elif op_str == "rg":
-            # RGB fill → no es "negro oscuro" en nuestro umbral
             color_space = "rgb"
             fill_k = 0.0
             fill_gray = None
 
         elif op_str in ("sc", "scn"):
-            # Color generico — sin CMYK claro, tratar como no-negro
             color_space = "other"
             fill_k = 0.0
             fill_gray = None
 
         elif op_str == "cs":
-            # Cambio de espacio de color de relleno
             color_space = "other"
             fill_k = 0.0
             fill_gray = None
@@ -266,14 +257,13 @@ def _process_content_stream(
                 gs_name_clean = str(operands[0]).lstrip("/")
                 gs_entry = extgs_dict.get(gs_name_clean)
                 if gs_entry is not None:
-                    # 'op' = fill overprint; 'OP' = stroke overprint
                     for key in ("/op", "/OP"):
                         if key in gs_entry:
                             val = gs_entry[key]
                             currently_overprinting = bool(val)
                             break
 
-        # ---- Detectar operaciones de texto y corregir ----
+        # ---- Detectar operaciones de texto en negro 100% K y corregir ----
         if op_str in ("Tj", "TJ", "'", '"'):
             has_text = _is_visible_text(op_str, operands)
             is_dark = has_text and _current_fill_is_dark(
@@ -282,23 +272,16 @@ def _process_content_stream(
             )
 
             if is_dark and not currently_overprinting:
-                # Insertar gs /IP_OP antes del texto oscuro en calado
+                # Insertar gs /IP_OP antes del texto 100% K en calado
                 new_commands.append(
                     ([pikepdf.Name("/IP_OP")], pikepdf.Operator("gs"))
                 )
                 currently_overprinting = True
                 n_fixed += 1
-                is_pure_100 = (
-                    (color_space == "cmyk" and fill_k >= 0.99)
-                    or (color_space == "gray" and fill_gray is not None and fill_gray <= 0.01)
-                )
-                if is_pure_100:
-                    n_100 += 1
-                else:
-                    n_80 += 1
+                n_100 += 1
 
             elif not is_dark and currently_overprinting and has_text:
-                # Restaurar calado antes de un texto no-oscuro visible
+                # Restaurar calado antes de un texto no-negro visible
                 new_commands.append(
                     ([pikepdf.Name("/IP_KO")], pikepdf.Operator("gs"))
                 )
@@ -306,7 +289,7 @@ def _process_content_stream(
 
         new_commands.append((operands, op))
 
-    return new_commands, n_fixed, n_100, n_80
+    return new_commands, n_fixed, n_100
 
 
 def _current_fill_is_dark(
@@ -316,12 +299,11 @@ def _current_fill_is_dark(
     dark_k_threshold: float,
     cmy_max: float,
 ) -> bool:
-    """True si el color de relleno actual es oscuro (candidato a sobreimprimir)."""
+    """True si el color de relleno actual es negro puro 100% K (candidato a sobreimprimir)."""
     if color_space == "cmyk":
         return k >= dark_k_threshold and c <= cmy_max and m <= cmy_max and y <= cmy_max
     if color_space == "gray" and gray is not None:
-        gray_thresh = 0.01 if dark_k_threshold >= 0.99 else GRAY_DARK_THRESHOLD
-        return gray <= gray_thresh
+        return gray <= 0.01
     return False
 
 

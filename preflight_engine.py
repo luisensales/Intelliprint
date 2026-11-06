@@ -278,36 +278,26 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
             cs_type, spot_name = state['fill_cs']
             if cs_type == 'DeviceGray' and len(state['fill_color']) >= 1:
                 gray_val = state['fill_color'][0]
-                if gray_val <= 0.20:
+                if gray_val <= 0.01:
                     is_dark_black = True
-                    k_percent = int(round((1.0 - gray_val) * 100))
+                    k_percent = 100
             elif cs_type == 'DeviceCMYK' and len(state['fill_color']) >= 4:
                 c, m, y, k = state['fill_color'][:4]
-                if c <= 0.05 and m <= 0.05 and y <= 0.05 and k >= 0.80:
+                if c <= 0.05 and m <= 0.05 and y <= 0.05 and k >= 0.99:
                     is_dark_black = True
-                    k_percent = int(round(k * 100))
+                    k_percent = 100
 
-            # Solo evaluar sobreimpresion si hay texto visible real (evitar espacios vacios o saltos)
+            # Solo evaluar sobreimpresion si hay texto visible real en negro puro 100% K
             if is_dark_black and is_fill and _has_visible_text(op_str, operands):
-                is_pure_100 = (k_percent >= 99)
                 if state['op']:
                     overprint_data["black_text_overprint"] += 1
-                    if is_pure_100:
-                        overprint_data["black_100_overprint"] += 1
-                    else:
-                        overprint_data["dark_80_overprint"] += 1
+                    overprint_data["black_100_overprint"] += 1
                 else:
                     overprint_data["black_text_knockout"] += 1
-                    if is_pure_100:
-                        overprint_data["black_100_knockout"] += 1
-                        inc_type = "BLACK_TEXT_KNOCKOUT_100"
-                        inc_title = "Texto 100% K en calado (knockout)"
-                        inc_msg = f"Texto en negro puro 100% K sin sobreimpresión en pág {page_num}. Debe sobreimprimir para evitar filetes blancos."
-                    else:
-                        overprint_data["dark_80_knockout"] += 1
-                        inc_type = "DARK_80_TEXT_KNOCKOUT"
-                        inc_title = f"Texto oscuro ({k_percent}% K) en calado (knockout)"
-                        inc_msg = f"Texto en negro u oscuro ({k_percent}% K) sin sobreimpresión en pág {page_num}. Puede sobreimprimirse con Auto-Trapping (Ambos)."
+                    overprint_data["black_100_knockout"] += 1
+                    inc_type = "BLACK_TEXT_KNOCKOUT_100"
+                    inc_title = "Texto 100% K en calado (knockout)"
+                    inc_msg = f"Texto en negro puro 100% K sin sobreimpresión en pág {page_num}. Debe sobreimprimir para evitar filetes blancos."
 
                     # Registrar maximo 1 incidencia por tipo y pagina
                     if not any(inc["page"] == page_num and inc["type"] == inc_type for inc in overprint_data["incidents"]):

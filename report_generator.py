@@ -163,16 +163,10 @@ def generate_preflight_certificate_pdf(job_data, output_path):
                     and "rgb" not in f.get("message", "").lower()]
 
     if meta.get("has_overprint_fixed") or meta.get("overprint_fixed_pdf_path"):
-        op_mode = meta.get("overprint_mode", "all")
-        if op_mode == "k100":
-            findings = [f for f in findings
-                        if f.get("rule_id") != "BLACK_TEXT_KNOCKOUT_100"
-                        and "100% k" not in f.get("title", "").lower()]
-        else:
-            findings = [f for f in findings
-                        if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "DARK_80_TEXT_KNOCKOUT")
-                        and not (("calado" in f.get("title", "").lower() or "knockout" in f.get("title", "").lower())
-                                 and "barniz" not in f.get("title", "").lower())]
+        findings = [f for f in findings
+                    if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100")
+                    and not (("calado" in f.get("title", "").lower() or "knockout" in f.get("title", "").lower())
+                             and "barniz" not in f.get("title", "").lower())]
 
     if meta.get("has_varnish_overprint_fixed"):
         findings = [f for f in findings

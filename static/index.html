@@ -159,7 +159,7 @@
       </div>
       <div>
         <h3 class="text-base font-bold text-slate-900">Analizando documento PDF...</h3>
-        <p class="text-xs text-slate-500 mt-1">Comprobando cajas, resolución efectiva, sobreimpresión de texto negro u oscuro (≥80% K), barnices y ortografía.</p>
+        <p class="text-xs text-slate-500 mt-1">Comprobando cajas, resolución efectiva, sobreimpresión de texto en negro puro (100% K), barnices y ortografía.</p>
       </div>
     </div>
 
@@ -302,11 +302,8 @@
               </div>
             </div>
             <div class="shrink-0 flex items-center gap-1.5 flex-wrap">
-              <button onclick="applyOverprintFix('all')" class="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs px-3 py-2 rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap btn-apply-overprint" title="Sobreimprime textos al 100% K y oscuros ≥80% K en un solo clic">
-                <i class="fa-solid fa-wand-magic-sparkles"></i> Ambos (100% y ≥80%)
-              </button>
-              <button onclick="applyOverprintFix('k100')" class="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs px-3 py-2 rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap btn-apply-overprint" title="Sobreimprime únicamente textos al 100% K (mantiene calado en 80%)">
-                <i class="fa-solid fa-check"></i> Solo 100% K
+              <button onclick="applyOverprintFix()" class="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap btn-apply-overprint" title="Sobreimprime textos al 100% K en un solo clic">
+                <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Sobreimprimir 100% K
               </button>
             </div>
           </div>
@@ -375,15 +372,7 @@
                   <span id="metricBlack100Knockout" class="font-bold text-amber-600">0</span>
                 </li>
 
-                <!-- Desglose Texto oscuro 80%-99% K -->
-                <li class="flex justify-between py-1 border-b border-slate-100">
-                  <span class="text-slate-600">Texto oscuro (80%-99% K) sobreimprime:</span>
-                  <span id="metricDark80Overprint" class="font-bold text-emerald-600">0</span>
-                </li>
-                <li class="flex justify-between py-1 border-b border-slate-100">
-                  <span class="text-slate-600">Texto oscuro (80%-99% K) cala (knockout):</span>
-                  <span id="metricDark80Knockout" class="font-bold text-amber-600">0</span>
-                </li>
+
 
                 <!-- Textos hechos / corregidos por Auto-Trapping -->
                 <li id="metricOverprintDoneRow" class="hidden flex justify-between py-1 border-b border-emerald-200 bg-emerald-50 px-2 rounded-md">
@@ -435,21 +424,17 @@
 
               <!-- Acción Auto-Trapping directamente en la tarjeta de Métricas -->
               <div id="cardOverprintActionBox" class="mt-3 pt-3 border-t border-slate-100 space-y-2">
-                <div id="cardOverprintButtons" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  <button onclick="applyOverprintFix('all')"
-                    class="flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-2.5 py-2 rounded-lg transition-all shadow-xs cursor-pointer btn-apply-overprint" title="Sobreimprime textos al 100% K y oscuros ≥80% K en un solo clic">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i> Ambos (100% y ≥80%)
-                  </button>
-                  <button onclick="applyOverprintFix('k100')"
-                    class="flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold px-2.5 py-2 rounded-lg transition-all shadow-xs cursor-pointer btn-apply-overprint" title="Sobreimprime exclusivamente textos al 100% K (deja el 80% K calando)">
-                    <i class="fa-solid fa-check"></i> Solo 100% K
+                <div id="cardOverprintButtons" class="flex flex-col gap-1.5">
+                  <button onclick="applyOverprintFix()"
+                    class="w-full flex items-center justify-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-xs cursor-pointer btn-apply-overprint" title="Sobreimprime textos al 100% K en un solo clic">
+                    <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Sobreimprimir 100% K
                   </button>
                 </div>
                 <div id="cardOverprintNoKnockout" class="hidden text-center py-2 px-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
                   <i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i> Sin calados detectados
                 </div>
                 <p id="cardOverprintSubtext" class="text-[10px] text-slate-500 text-center leading-tight">
-                  1 clic para corregir calados: aplica a ambos o exclusivamente al negro puro.
+                  1 clic para sobreimprimir textos en negro puro 100% K.
                 </p>
               </div>
             </div>
@@ -523,18 +508,14 @@
                   Corrección Automática de Calados (Auto-Trapping)
                 </h5>
                 <p class="text-[11px] text-amber-700">
-                  Se han detectado textos negros oscuros en <strong>calado (knockout)</strong>. Al imprimir,
+                  Se han detectado textos en negro puro 100% K en <strong>calado (knockout)</strong>. Al imprimir,
                   el mínimo desajuste de registro puede dejar <em>filetes blancos</em> alrededor de las letras.
                   Esta función inyecta sobreimpresión preventiva en dichos textos para evitarlo.
                 </p>
                 <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
-                  <button onclick="applyOverprintFix('all')"
-                    class="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-sm whitespace-nowrap btn-apply-overprint" title="Sobreimprime textos al 100% K y oscuros ≥80% K en un solo clic">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i> Ambos (100% y ≥80%)
-                  </button>
-                  <button onclick="applyOverprintFix('k100')"
-                    class="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-sm whitespace-nowrap btn-apply-overprint" title="Sobreimprime exclusivamente textos al 100% K (deja el 80% K calando)">
-                    <i class="fa-solid fa-check"></i> Solo 100% K
+                  <button onclick="applyOverprintFix()"
+                    class="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-sm whitespace-nowrap btn-apply-overprint" title="Sobreimprime textos al 100% K en un solo clic">
+                    <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Sobreimprimir 100% K
                   </button>
                   <span class="text-[10px] text-amber-600 italic">El PDF original no se modifica; se genera un nuevo archivo para descargar.</span>
                 </div>
@@ -709,14 +690,10 @@
                   <p id="sepOverprintDesc" class="text-[11px] text-amber-700 leading-tight">
                     Inyecta sobreimpresión preventiva a textos negros oscuros para que no perforen el fondo.
                   </p>
-                  <div id="sepOverprintButtons" class="grid grid-cols-2 gap-1.5">
-                    <button onclick="applyOverprintFix('all')"
-                      class="flex items-center justify-center gap-1 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-semibold py-1.5 px-2 rounded-lg transition-all shadow-xs cursor-pointer btn-apply-overprint" title="Sobreimprime textos al 100% K y oscuros ≥80% K en un solo clic">
-                      <i class="fa-solid fa-wand-magic-sparkles"></i> Ambos
-                    </button>
-                    <button onclick="applyOverprintFix('k100')"
-                      class="flex items-center justify-center gap-1 bg-slate-700 hover:bg-slate-800 text-white text-[11px] font-semibold py-1.5 px-2 rounded-lg transition-all shadow-xs cursor-pointer btn-apply-overprint" title="Sobreimprime exclusivamente 100% K (deja calando 80% K)">
-                      <i class="fa-solid fa-check"></i> Solo 100% K
+                  <div id="sepOverprintButtons" class="flex flex-col gap-1.5">
+                    <button onclick="applyOverprintFix()"
+                      class="w-full flex items-center justify-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold py-1.5 px-2 rounded-lg transition-all shadow-xs cursor-pointer btn-apply-overprint" title="Sobreimprime textos al 100% K en un solo clic">
+                      <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Sobreimprimir 100% K
                     </button>
                   </div>
                   <div id="sepOverprintNoKnockout" class="hidden text-center py-1.5 px-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold">
@@ -1183,8 +1160,7 @@
         data.findings.forEach(f => {
           const div = document.createElement('div');
           const isErr = f.severity === 'ERROR';
-          const is100KO = f.rule_id === 'BLACK_TEXT_KNOCKOUT_100';
-          const is80KO = f.rule_id === 'DARK_80_TEXT_KNOCKOUT';
+          const is100KO = (f.rule_id === 'BLACK_TEXT_KNOCKOUT_100') || (f.rule_id === 'BLACK_TEXT_KNOCKOUT');
 
           let cardStyle = '';
           let iconHtml = '';
@@ -1192,12 +1168,8 @@
 
           if (is100KO) {
             cardStyle = 'bg-slate-900/5 border-slate-700 text-slate-950 ring-1 ring-slate-800/20';
-            iconHtml = '<span class="inline-flex items-center justify-center w-5 h-5 rounded bg-slate-900 text-white font-mono font-bold text-[10px] shadow-xs" title="Texto 100% K">100</span>';
+            iconHtml = '<span class="inline-flex items-center justify-center w-5 h-5 rounded bg-slate-900 text-white font-mono font-bold text-[10px] shadow-xs" title="Texto 100% K">K</span>';
             badgeHtml = '<span class="text-[10px] bg-slate-900 text-white px-2 py-0.5 rounded font-bold ml-1 tracking-wide">100% K · Calado</span>';
-          } else if (is80KO) {
-            cardStyle = 'bg-amber-500/10 border-amber-400 text-amber-950 ring-1 ring-amber-500/20';
-            iconHtml = '<span class="inline-flex items-center justify-center w-5 h-5 rounded bg-amber-600 text-white font-mono font-bold text-[10px] shadow-xs" title="Texto >=80% K">80</span>';
-            badgeHtml = '<span class="text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded font-bold ml-1 tracking-wide">≥80% K · Gris Calado</span>';
           } else if (isErr) {
             cardStyle = 'bg-red-50/50 border-red-200 text-red-900';
             iconHtml = '<i class="fa-solid fa-circle-xmark text-red-600 text-sm"></i>';
@@ -1274,23 +1246,17 @@
       const over = summ.overprint_stats || {};
       const k100OP = over.black_100_overprint ?? (over.black_text_overprint || 0);
       const k100KO = over.black_100_knockout ?? (over.black_text_knockout || 0);
-      const k80OP  = over.dark_80_overprint ?? 0;
-      const k80KO  = over.dark_80_knockout ?? 0;
 
       const elK100OP = document.getElementById('metricBlack100Overprint');
       const elK100KO = document.getElementById('metricBlack100Knockout');
-      const elK80OP  = document.getElementById('metricDark80Overprint');
-      const elK80KO  = document.getElementById('metricDark80Knockout');
 
       if (elK100OP) elK100OP.textContent = k100OP;
       if (elK100KO) elK100KO.textContent = k100KO;
-      if (elK80OP)  elK80OP.textContent  = k80OP;
-      if (elK80KO)  elK80KO.textContent  = k80KO;
 
       const elBOP = document.getElementById('metricBlackOverprint');
       const elBKO = document.getElementById('metricBlackKnockout');
-      if (elBOP) elBOP.textContent = over.black_text_overprint || 0;
-      if (elBKO) elBKO.textContent = over.black_text_knockout || 0;
+      if (elBOP) elBOP.textContent = k100OP;
+      if (elBKO) elBKO.textContent = k100KO;
 
       document.getElementById('metricVarnishOverprint').textContent = over.varnish_overprint || 0;
       document.getElementById('metricVarnishKnockout').textContent = over.varnish_knockout || 0;
@@ -1332,18 +1298,10 @@
       // 1. Banner en Incidencias (Findings)
       const findingsBanner = document.getElementById('findingsOverprintBanner');
       if (findingsBanner) {
-        findingsBanner.classList.toggle('hidden', !hasKnockout);
+        findingsBanner.classList.toggle('hidden', k100KO === 0);
         const txt = document.getElementById('findingsOverprintText');
         if (txt) {
-          if (k100KO > 0 && k80KO > 0) {
-            txt.innerHTML = `Se detectaron <strong>${k100KO}</strong> textos al <strong>100% K</strong> y <strong>${k80KO}</strong> textos al <strong>≥80% K</strong> en calado. Puedes sobreimprimir solo los de 100% K o ambos en 1 clic.`;
-          } else if (k100KO > 0) {
-            txt.innerHTML = `Se detectaron <strong>${k100KO}</strong> textos al <strong>100% K</strong> en calado. Pulsa para sobreimprimir en 1 clic.`;
-          } else if (k80KO > 0) {
-            txt.innerHTML = `Se detectaron <strong>${k80KO}</strong> textos al <strong>≥80% K</strong> en calado. Pulsa para sobreimprimir en 1 clic.`;
-          } else {
-            txt.textContent = `Se han detectado ${over.black_text_knockout || 0} textos negros en calado (knockout).`;
-          }
+          txt.innerHTML = `Se han detectado <strong>${k100KO}</strong> texto(s) en negro puro <strong>100% K</strong> en calado (knockout). Pulsa para sobreimprimir en 1 clic.`;
         }
       }
 
@@ -1649,17 +1607,16 @@
       panel.classList.toggle('hidden');
     }
 
-    async function applyOverprintFix(mode = 'all') {
+    async function applyOverprintFix() {
       if (!currentJobId) {
         alert('No hay ningún trabajo activo. Sube un PDF primero.');
         return;
       }
-      const modeLabel = mode === 'k100' ? 'Solo 100% K' : 'Ambos (100% y ≥80% K)';
       // Actualizar todos los botones de Auto-Trapping en la interfaz
       const allButtons = document.querySelectorAll('.btn-apply-overprint');
       allButtons.forEach(b => {
         b.disabled = true;
-        b.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Aplicando...';
+        b.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Sobreimprimiendo...';
       });
 
       const statusEls = [
@@ -1669,30 +1626,26 @@
 
       statusEls.forEach(el => {
         el.classList.remove('hidden');
-        el.innerHTML = `<span class="text-xs text-amber-700"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Procesando sobreimpresión (${modeLabel})...</span>`;
+        el.innerHTML = '<span class="text-xs text-amber-700"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Sobreimprimiendo textos 100% K...</span>';
       });
 
       try {
-        const res = await fetch(`/api/apply-overprint/${currentJobId}?mode=${mode}`, { method: 'POST' });
+        const res = await fetch(`/api/apply-overprint/${currentJobId}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
           // Éxito: actualizar todos los botones
           allButtons.forEach(b => {
             b.disabled = false;
             b.className = b.className.replace(/bg-amber-\d+/, 'bg-emerald-600').replace(/hover:bg-amber-\d+/, 'hover:bg-emerald-700').replace(/bg-slate-\d+/, 'bg-emerald-700');
-            b.innerHTML = '<i class="fa-solid fa-circle-check"></i> Trapping Aplicado';
+            b.innerHTML = '<i class="fa-solid fa-circle-check"></i> Trapping 100% K Aplicado';
           });
 
-          // Actualizar métricas desglosadas (100% K y 80% K)
+          // Actualizar métricas desglosadas (100% K)
           if (data.overprint_stats) {
             const el100OP = document.getElementById('metricBlack100Overprint');
             const el100KO = document.getElementById('metricBlack100Knockout');
-            const el80OP  = document.getElementById('metricDark80Overprint');
-            const el80KO  = document.getElementById('metricDark80Knockout');
             if (el100OP) el100OP.textContent = data.overprint_stats.black_100_overprint ?? 0;
-            if (el100KO) el100KO.textContent = data.overprint_stats.black_100_knockout ?? 0;
-            if (el80OP)  el80OP.textContent  = data.overprint_stats.dark_80_overprint ?? 0;
-            if (el80KO)  el80KO.textContent  = data.overprint_stats.dark_80_knockout ?? 0;
+            if (el100KO) el100KO.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
           }
 
           // Fila informativa de textos hechos / corregidos
@@ -1700,14 +1653,7 @@
           const doneCount = document.getElementById('metricOverprintDoneCount');
           if (doneRow && doneCount) {
             doneRow.classList.remove('hidden');
-            let detail = `${data.text_ops_fixed} textos`;
-            if (data.text_100_fixed > 0 && data.text_80_fixed > 0) {
-              detail += ` (${data.text_100_fixed} de 100% K + ${data.text_80_fixed} de 80% K)`;
-            } else if (data.text_100_fixed > 0) {
-              detail += ` (100% K)`;
-            } else if (data.text_80_fixed > 0) {
-              detail += ` (80% K)`;
-            }
+            let detail = `${data.text_ops_fixed} textos 100% K sobreimpresos`;
             if (data.white_objects_fixed > 0) {
               detail += ` + ${data.white_objects_fixed} objeto(s) blanco(s) en sobreimpresión corregidos`;
             }
@@ -1739,12 +1685,7 @@
 
           const knockoutEl = document.getElementById('metricBlackKnockout');
           if (knockoutEl) {
-            if (mode === 'k100') {
-              const remaining = data.overprint_stats ? data.overprint_stats.dark_80_knockout : 0;
-              knockoutEl.innerHTML = `<span class="text-amber-600 font-bold">${remaining} <span class="text-[10px] font-normal text-slate-500">(100% K corregido; 80% K calando)</span></span>`;
-            } else {
-              knockoutEl.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
-            }
+            knockoutEl.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
           }
           const overprintEl = document.getElementById('metricBlackOverprint');
           if (overprintEl && data.text_ops_fixed) {
@@ -1755,11 +1696,11 @@
           // Actualizar textos informativos en los diferentes paneles
           const findingsBannerText = document.getElementById('findingsOverprintText');
           if (findingsBannerText) {
-            findingsBannerText.innerHTML = `<strong>¡Sobreimpresión aplicada (${modeLabel})!</strong> Se corrigieron ${data.text_ops_fixed} operaciones de texto en ${data.pages_modified} página(s).`;
+            findingsBannerText.innerHTML = `<strong>¡Sobreimpresión 100% K aplicada!</strong> Se corrigieron ${data.text_ops_fixed} textos en ${data.pages_modified} página(s).`;
           }
           const cardSubtext = document.getElementById('cardOverprintSubtext');
           if (cardSubtext) {
-            cardSubtext.innerHTML = `<span class="text-emerald-600 font-semibold"><i class="fa-solid fa-check mr-1"></i>Sobreimpresión aplicada (${modeLabel}). ${data.text_ops_fixed} textos corregidos.</span>`;
+            cardSubtext.innerHTML = `<span class="text-emerald-600 font-semibold"><i class="fa-solid fa-check mr-1"></i>Sobreimpresión 100% K activa (${data.text_ops_fixed} textos corregidos).</span>`;
           }
           const sepBadge = document.getElementById('sepOverprintBadge');
           if (sepBadge) {
@@ -1768,7 +1709,7 @@
           }
           const sepDesc = document.getElementById('sepOverprintDesc');
           if (sepDesc) {
-            sepDesc.innerHTML = `<span class="text-emerald-800 font-medium"><i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>Sobreimpresión activa en ${data.text_ops_fixed} textos (${modeLabel}). Si desactivas "Proceso Negro", la imagen de fondo ya no mostrará calados blancos.</span>`;
+            sepDesc.innerHTML = `<span class="text-emerald-800 font-medium"><i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>Sobreimpresión 100% K activa en ${data.text_ops_fixed} textos. Si desactivas "Proceso Negro", el fondo ya no mostrará calados.</span>`;
           }
 
           // Mensajes de estado con botón de descarga directa
@@ -1776,7 +1717,7 @@
             el.innerHTML = `
               <div class="flex flex-wrap items-center gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 mt-2">
                 <i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i>
-                <span>Sobreimpresión inyectada (${modeLabel}): <strong>${data.pages_modified}</strong> pág(s), <strong>${data.text_ops_fixed}</strong> textos corregidos.</span>
+                <span>Sobreimpresión 100% K inyectada: <strong>${data.pages_modified}</strong> pág(s), <strong>${data.text_ops_fixed}</strong> textos corregidos.</span>
                 <a href="${data.download_url}" target="_blank"
                   class="ml-auto flex items-center gap-1 font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg transition-all shadow-sm">
                   <i class="fa-solid fa-download"></i> Descargar PDF corregido
@@ -1801,33 +1742,13 @@
             updateSeparationPreview();
           }
 
-          // Actualizar métricas desglosadas de 100% K y 80% K
-          const elK100KO_fix = document.getElementById('metricBlack100Knockout');
-          const elK80KO_fix = document.getElementById('metricDark80Knockout');
-          if (elK100KO_fix) {
-            elK100KO_fix.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
-          }
-          if (elK80KO_fix && mode === 'all') {
-            elK80KO_fix.innerHTML = '<span class="text-emerald-600 font-bold">0 <span class="text-[10px] font-normal">(corregido)</span></span>';
-          }
-
-          // ── BORRAR las incidencias corregidas de la lista (findingsList) ──
+          // ── BORRAR las incidencias de calado resueltas de la lista (findingsList) ──
           document.querySelectorAll('#findingsList > div').forEach(div => {
             const ruleId = div.dataset.ruleId || '';
             const allText = (div.textContent || '').toLowerCase();
-            const is100KO = (ruleId === 'BLACK_TEXT_KNOCKOUT_100') || (!ruleId && allText.includes('100% k') && !allText.includes('80%'));
-            const is80KO  = (ruleId === 'DARK_80_TEXT_KNOCKOUT')  || (!ruleId && allText.includes('80%'));
-            const isGenericKO = (ruleId === 'BLACK_TEXT_KNOCKOUT') || (!ruleId && allText.includes('calado') && allText.includes('knockout') && !allText.includes('barniz') && !allText.includes('80%'));
-
-            if (mode === 'all') {
-              if (is100KO || is80KO || isGenericKO) {
-                div.remove(); // Borrar completamente de la ficha
-              }
-            } else if (mode === 'k100') {
-              // Borrar ÚNICAMENTE las de 100% K, dejando intactas las de 80% K
-              if (is100KO && !is80KO) {
-                div.remove();
-              }
+            const isKO = (ruleId === 'BLACK_TEXT_KNOCKOUT_100') || (ruleId === 'BLACK_TEXT_KNOCKOUT') || allText.includes('100% k') || (allText.includes('calado') && !allText.includes('barniz'));
+            if (isKO) {
+              div.remove();
             }
           });
 
@@ -1864,21 +1785,9 @@
             }
           }
 
-          // Actualizar o ocultar banner de calados tras la corrección
+          // Ocultar banner de calados tras la corrección
           const overprintBanner = document.getElementById('findingsOverprintBanner');
-          if (mode === 'all' || (data.overprint_stats && data.overprint_stats.black_text_knockout === 0)) {
-            if (overprintBanner) overprintBanner.classList.add('hidden');
-          } else if (mode === 'k100') {
-            const remaining80 = data.overprint_stats ? (data.overprint_stats.dark_80_knockout ?? 0) : document.querySelectorAll('[data-rule-id="DARK_80_TEXT_KNOCKOUT"]').length;
-            if (remaining80 > 0 && overprintBanner) {
-              const findingsBannerText = document.getElementById('findingsOverprintText');
-              if (findingsBannerText) {
-                findingsBannerText.innerHTML = `<strong>100% K corregido.</strong> Se mantienen <strong>${remaining80}</strong> textos al <strong>≥80% K</strong> en calado. Pulsa <em>"Ambos (100% y ≥80%)"</em> si también deseas sobreimprimirlos.`;
-              }
-            } else if (overprintBanner) {
-              overprintBanner.classList.add('hidden');
-            }
-          }
+          if (overprintBanner) overprintBanner.classList.add('hidden');
 
         } else {
           const errMsg = data.detail || (data.errors && data.errors.join('; ')) || 'Error desconocido';
