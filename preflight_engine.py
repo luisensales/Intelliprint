@@ -236,15 +236,11 @@ def detect_page_edge_elements(page, tol_pt=2.83):
             touches_right = (r.x1 >= trim.x1 - tol_pt and r.x0 < trim.x1)
             touches_bottom = (r.y1 >= trim.y1 - tol_pt and r.y0 < trim.y1)
             if touches_left or touches_top or touches_right or touches_bottom:
-                exts = []
-                if touches_left:
-                    exts.append((trim.x0 - r.x0) * 25.4 / 72.0)
-                if touches_top:
-                    exts.append((trim.y0 - r.y0) * 25.4 / 72.0)
-                if touches_right:
-                    exts.append((r.x1 - trim.x1) * 25.4 / 72.0)
-                if touches_bottom:
-                    exts.append((r.y1 - trim.y1) * 25.4 / 72.0)
+                ext_l = (trim.x0 - r.x0) * 25.4 / 72.0 if touches_left else None
+                ext_t = (trim.y0 - r.y0) * 25.4 / 72.0 if touches_top else None
+                ext_r = (r.x1 - trim.x1) * 25.4 / 72.0 if touches_right else None
+                ext_b = (r.y1 - trim.y1) * 25.4 / 72.0 if touches_bottom else None
+                exts = [e for e in [ext_l, ext_t, ext_r, ext_b] if e is not None]
                 min_ext = min(exts) if exts else 0.0
                 edge_elements.append({
                     "type": "image",
@@ -256,6 +252,12 @@ def detect_page_edge_elements(page, tol_pt=2.83):
                         "top": touches_top,
                         "right": touches_right,
                         "bottom": touches_bottom
+                    },
+                    "exts": {
+                        "left": ext_l,
+                        "top": ext_t,
+                        "right": ext_r,
+                        "bottom": ext_b
                     }
                 })
 
@@ -277,15 +279,11 @@ def detect_page_edge_elements(page, tol_pt=2.83):
         touches_right = (r.x1 >= trim.x1 - tol_pt and r.x0 < trim.x1)
         touches_bottom = (r.y1 >= trim.y1 - tol_pt and r.y0 < trim.y1)
         if touches_left or touches_top or touches_right or touches_bottom:
-            exts = []
-            if touches_left:
-                exts.append((trim.x0 - r.x0) * 25.4 / 72.0)
-            if touches_top:
-                exts.append((trim.y0 - r.y0) * 25.4 / 72.0)
-            if touches_right:
-                exts.append((r.x1 - trim.x1) * 25.4 / 72.0)
-            if touches_bottom:
-                exts.append((r.y1 - trim.y1) * 25.4 / 72.0)
+            ext_l = (trim.x0 - r.x0) * 25.4 / 72.0 if touches_left else None
+            ext_t = (trim.y0 - r.y0) * 25.4 / 72.0 if touches_top else None
+            ext_r = (r.x1 - trim.x1) * 25.4 / 72.0 if touches_right else None
+            ext_b = (r.y1 - trim.y1) * 25.4 / 72.0 if touches_bottom else None
+            exts = [e for e in [ext_l, ext_t, ext_r, ext_b] if e is not None]
             min_ext = min(exts) if exts else 0.0
             edge_elements.append({
                 "type": "vector_fill",
@@ -297,6 +295,12 @@ def detect_page_edge_elements(page, tol_pt=2.83):
                     "top": touches_top,
                     "right": touches_right,
                     "bottom": touches_bottom
+                },
+                "exts": {
+                    "left": ext_l,
+                    "top": ext_t,
+                    "right": ext_r,
+                    "bottom": ext_b
                 }
             })
 
@@ -386,49 +390,64 @@ class IntelliPrintEngine:
                     has_any_bleed_req = True
                     pages_requiring_bleed += 1
 
-                    # Element artwork extension
-                    min_element_ext = 999.0
-                    for elem in edge_elements:
-                        ext = elem.get("min_ext", 0.0)
-                        if ext < min_element_ext:
-                            min_element_ext = ext
+                    # Check each edge of TrimBox where elements reach
+                    left_exts = [e["exts"]["left"] for e in edge_elements if e["exts"]["left"] is not None]
+                    top_exts = [e["exts"]["top"] for e in edge_elements if e["exts"]["top"] is not None]
+                    right_exts = [e["exts"]["right"] for e in edge_elements if e["exts"]["right"] is not None]
+                    bottom_exts = [e["exts"]["bottom"] for e in edge_elements if e["exts"]["bottom"] is not None]
 
-                    # What is the effective bleed on this page?
-                    if box_bleed_mm >= 2.8:
-                        page_bleed_mm = box_bleed_mm
-                    elif min_element_ext >= 2.8:
-                        page_bleed_mm = round(min_element_ext, 1)
-                    else:
-                        page_bleed_mm = max(box_bleed_mm, round(min_element_ext if min_element_ext < 990 else 0.0, 1))
+                    edges_checked = []
+                    if left_exts:   edges_checked.append(('izquierdo', max(left_exts)))
+                    if top_exts:    edges_checked.append(('superior',  max(top_exts)))
+                    if right_exts:  edges_checked.append(('derecho',   max(right_exts)))
+                    if bottom_exts: edges_checked.append(('inferior',  max(bottom_exts)))
 
-                    if page_bleed_mm < min_detected_bleed:
-                        min_detected_bleed = page_bleed_mm
-
-                    # Prepress standard: 3 mm bleed required (allow 2.8 mm for rounding)
-                    if page_bleed_mm < 2.8:
+                    # 1. Structural check: does PDF define BleedBox and TrimBox?
+                    if has_explicit_trim and not has_explicit_bleedbox:
                         pages_failing_bleed += 1
-                        elem_types = []
-                        if any(e["type"] == "image" for e in edge_elements):
-                            elem_types.append("imágenes")
-                        if any(e["type"] == "vector_fill" for e in edge_elements):
-                            elem_types.append("fondos")
-                        types_desc = " y ".join(elem_types) if elem_types else "elementos"
-
-                        if has_explicit_trim and not has_explicit_bleedbox:
-                            reason = f"El PDF incluye marcas de corte pero carece de BleedBox (0.0 mm). Las {types_desc} terminan en la línea de corte sin el sangrado obligatorio de 3 mm (extensión detectada: {page_bleed_mm} mm)."
-                        elif not has_explicit_trim:
-                            reason = f"El documento no define TrimBox ni sangrado exterior (0.0 mm). Las {types_desc} terminan al borde de página."
-                        else:
-                            reason = f"El sangrado detectado es de solo {page_bleed_mm} mm (se exige un mínimo de 3.0 mm por lado)."
-
+                        min_detected_bleed = min(min_detected_bleed, 0.0)
                         findings.append({
                             "page": p_idx + 1,
                             "rule_id": "BLEED_GEOMETRY_3MM",
                             "severity": "ERROR",
                             "category": "Geometría",
-                            "title": f"Sangrado insuficiente en pág {p_idx+1} ({page_bleed_mm} mm)",
-                            "message": f"La página {p_idx+1} contiene {types_desc} a ras de corte que requieren al menos 3 mm de sangre. {reason}"
+                            "title": f"Sangrado insuficiente en pág {p_idx+1} (0.0 mm)",
+                            "message": f"La página {p_idx+1} contiene elementos al corte y marcas de corte, pero el PDF carece de BleedBox (0.0 mm configurados, se requieren 3.0 mm)."
                         })
+                    elif not has_explicit_trim:
+                        pages_failing_bleed += 1
+                        min_detected_bleed = min(min_detected_bleed, 0.0)
+                        findings.append({
+                            "page": p_idx + 1,
+                            "rule_id": "BLEED_GEOMETRY_3MM",
+                            "severity": "ERROR",
+                            "category": "Geometría",
+                            "title": f"Sangrado insuficiente en pág {p_idx+1} (0.0 mm)",
+                            "message": f"La página {p_idx+1} contiene elementos al corte pero el documento no define TrimBox ni sangrado exterior de 3.0 mm."
+                        })
+                    else:
+                        # 2. Per-edge content artwork check
+                        failing_edges = []
+                        page_eff_bleed = box_bleed_mm
+                        for edge_name, max_ext in edges_checked:
+                            eff = round(max(0.0, max_ext), 1)
+                            page_eff_bleed = min(page_eff_bleed, eff)
+                            if eff < 2.5: # Required standard 3 mm (tolerance down to 2.5 mm)
+                                failing_edges.append((edge_name, eff))
+
+                        min_detected_bleed = min(min_detected_bleed, page_eff_bleed)
+
+                        if failing_edges:
+                            pages_failing_bleed += 1
+                            desc = ', '.join([f'{name} ({ext} mm)' for name, ext in failing_edges])
+                            findings.append({
+                                "page": p_idx + 1,
+                                "rule_id": "BLEED_GEOMETRY_3MM",
+                                "severity": "ERROR",
+                                "category": "Geometría",
+                                "title": f"Sangrado insuficiente en pág {p_idx+1} ({page_eff_bleed} mm en borde {failing_edges[0][0]})",
+                                "message": f"La página {p_idx+1} contiene elementos a ras de corte que no alcanzan los 3.0 mm reglamentarios en borde: {desc}."
+                            })
 
         if requires_bleed:
             if pages_failing_bleed == 0 and has_any_bleed_req:
