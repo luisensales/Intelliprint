@@ -4015,8 +4015,13 @@
             txtEff.textContent = `${plan.efficiency_percent}%`;
           }
           if (warningBox) {
-            if (plan.warning) {
-              warningBox.textContent = `⚠️ ${plan.warning}`;
+            const msgs = [];
+            if (plan.warning) msgs.push(`⚠️ ${plan.warning}`);
+            if (plan.pdf_warnings && plan.pdf_warnings.length > 0) {
+              msgs.push(...plan.pdf_warnings);
+            }
+            if (msgs.length > 0) {
+              warningBox.innerHTML = msgs.map(m => `<div class="py-0.5">${m}</div>`).join('');
               warningBox.classList.remove('hidden');
             } else {
               warningBox.classList.add('hidden');

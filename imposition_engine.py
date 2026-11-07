@@ -11,6 +11,16 @@ Permite:
      Distribución de documentos de múltiples páginas en pliegos de producción.
   4. Generación de marcas de corte perimetrales e intermedias, cruces de registro,
      marcas de plegado punteadas, tiras de control CMYK y datos del pliego (Slug).
+
+Gestión de los 3 estados de PDF de entrada:
+  - CASO A: PDF sin sangre (MediaBox ≈ TrimBox): el motor añade las marcas exteriores.
+            Aviso: sin sangre en el original → riesgo de borde blanco tras guillotina.
+  - CASO B: PDF con sangre pero sin marcas (BleedBox > TrimBox, típicamente +3mm):
+            Correcto: se renderiza la BleedBox completa en la pose, y las marcas de corte
+            se dibujan en la posición exacta del TrimBox (inset por source_bleed_mm desde el borde).
+  - CASO C: PDF con marcas de corte ya incrustadas en la MediaBox (slug area):
+            Se detecta (MediaBox >> BleedBox en ≥8mm), se extrae solo el TrimBox vía clip,
+            y se avisa de que el PDF ya tenía marcas de impresora. No se duplican marcas.
 """
 
 from __future__ import annotations
@@ -35,35 +45,85 @@ STANDARD_SHEET_SIZES_MM: Dict[str, Tuple[float, float]] = {
     "SRA4": (225.0, 320.0),
 }
 
+# Umbral mínimo para considerar que hay sangre real (≥1 mm de diferencia)
+_BLEED_THRESHOLD_MM = 1.0
+# Umbral para detectar marcas incrustadas en MediaBox (zona de slug/marcas ≥8mm extra)
+_EMBEDDED_MARKS_THRESHOLD_MM = 7.0
 
-def _get_page_boxes_mm(page: pymupdf.Page) -> Tuple[float, float, float, float]:
+
+def _get_page_boxes_mm(page: pymupdf.Page) -> Dict[str, Any]:
     """
-    Obtiene las dimensiones netas de corte (TrimBox) y brutas con sangre en milímetros.
-    Devuelve (trim_w_mm, trim_h_mm, total_w_mm, total_h_mm).
+    Obtiene las dimensiones y estado de boxes de la página en milímetros.
+
+    Detecta automáticamente el estado del PDF:
+      - 'no_bleed':        MediaBox ≈ TrimBox, sin sangre.
+      - 'has_bleed':       BleedBox > TrimBox en ≥1mm → sangre real sin marcas.
+      - 'embedded_marks':  MediaBox >> BleedBox (o TrimBox) en ≥8mm → marcas de taller incrustadas.
+
+    Devuelve un dict con:
+      trim_w_mm, trim_h_mm        : dimensiones netas de corte (TrimBox)
+      bleed_w_mm, bleed_h_mm      : dimensiones con sangre (BleedBox o MediaBox)
+      media_w_mm, media_h_mm      : MediaBox completo (puede incluir slug)
+      source_bleed_mm             : sangre detectada en mm por lado (promedio)
+      pdf_state                   : 'no_bleed' | 'has_bleed' | 'embedded_marks'
+      clip_rect_pt                : pymupdf.Rect del TrimBox en pt, para clipping
     """
-    rect_trim = page.rect
+    # --- MediaBox (siempre disponible) ---
+    media_rect = page.rect
+    media_w_mm = media_rect.width * MM_PER_PT
+    media_h_mm = media_rect.height * MM_PER_PT
+
+    # --- TrimBox ---
+    trim_rect = page.rect  # fallback
     try:
         tb = page.trimbox
         if tb and tb.is_valid and tb.width > 20 and tb.height > 20:
-            rect_trim = tb
+            trim_rect = tb
     except Exception:
         pass
+    trim_w_mm = trim_rect.width * MM_PER_PT
+    trim_h_mm = trim_rect.height * MM_PER_PT
 
-    trim_w_mm = rect_trim.width * MM_PER_PT
-    trim_h_mm = rect_trim.height * MM_PER_PT
-
-    rect_total = page.rect
+    # --- BleedBox ---
+    bleed_rect = trim_rect  # fallback al TrimBox si no hay BleedBox
     try:
         bb = page.bleedbox
         if bb and bb.is_valid and bb.width > 20 and bb.height > 20:
-            rect_total = bb
+            bleed_rect = bb
     except Exception:
         pass
+    bleed_w_mm = bleed_rect.width * MM_PER_PT
+    bleed_h_mm = bleed_rect.height * MM_PER_PT
 
-    total_w_mm = rect_total.width * MM_PER_PT
-    total_h_mm = rect_total.height * MM_PER_PT
+    # --- Sangre detectada (diferencia BleedBox - TrimBox) ---
+    bleed_diff_w = (bleed_w_mm - trim_w_mm) / 2.0
+    bleed_diff_h = (bleed_h_mm - trim_h_mm) / 2.0
+    source_bleed_mm = round(max(0.0, (bleed_diff_w + bleed_diff_h) / 2.0), 2)
 
-    return round(trim_w_mm, 2), round(trim_h_mm, 2), round(total_w_mm, 2), round(total_h_mm, 2)
+    # --- Slug/Marks extra (diferencia MediaBox - BleedBox) ---
+    slug_extra_w = (media_w_mm - bleed_w_mm) / 2.0
+    slug_extra_h = (media_h_mm - bleed_h_mm) / 2.0
+    slug_extra_mm = max(slug_extra_w, slug_extra_h)
+
+    # --- Clasificación del estado ---
+    if slug_extra_mm >= _EMBEDDED_MARKS_THRESHOLD_MM:
+        pdf_state = "embedded_marks"
+    elif source_bleed_mm >= _BLEED_THRESHOLD_MM:
+        pdf_state = "has_bleed"
+    else:
+        pdf_state = "no_bleed"
+
+    return {
+        "trim_w_mm": round(trim_w_mm, 2),
+        "trim_h_mm": round(trim_h_mm, 2),
+        "bleed_w_mm": round(bleed_w_mm, 2),
+        "bleed_h_mm": round(bleed_h_mm, 2),
+        "media_w_mm": round(media_w_mm, 2),
+        "media_h_mm": round(media_h_mm, 2),
+        "source_bleed_mm": source_bleed_mm,
+        "pdf_state": pdf_state,
+        "clip_rect_pt": trim_rect,  # TrimBox en puntos (para clip en show_pdf_page)
+    }
 
 
 def calculate_imposition_plan(
@@ -72,13 +132,16 @@ def calculate_imposition_plan(
     orientation: str = "auto",  # "auto", "landscape", "portrait"
     mode: str = "step_and_repeat",  # "step_and_repeat", "booklet", "2up", "4up"
     gap_mm: float = 4.0,  # Calle intermedia entre poses
-    bleed_mm: float = 2.0,  # Sangrado por pose en la imposición
+    bleed_mm: float = 2.0,  # Sangrado por pose en la imposición (mínimo de seguridad)
     sheet_margin_mm: float = 10.0,  # Margen perimetral para pinza de máquina y marcas
     user_cols: Optional[int] = None,
     user_rows: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Calcula el plan geométrico de imposición y aprovechamiento del pliego.
+
+    Detecta automáticamente el estado del PDF de origen (sin sangre / con sangre / con marcas
+    incrustadas) y adapta el plan geométrico en consecuencia.
     """
     pdf_path = Path(pdf_path)
     if not pdf_path.exists():
@@ -91,19 +154,53 @@ def calculate_imposition_plan(
         raise ValueError("El documento PDF no contiene páginas.")
 
     p0 = doc[0]
-    trim_w_mm, trim_h_mm, src_total_w_mm, src_total_h_mm = _get_page_boxes_mm(p0)
+    boxes = _get_page_boxes_mm(p0)
     doc.close()
+
+    trim_w_mm = boxes["trim_w_mm"]
+    trim_h_mm = boxes["trim_h_mm"]
+    bleed_w_mm = boxes["bleed_w_mm"]
+    bleed_h_mm = boxes["bleed_h_mm"]
+    source_bleed_mm = boxes["source_bleed_mm"]
+    pdf_state = boxes["pdf_state"]
+
+    # La pose "efectiva" incluye la sangre cuando el PDF la tiene nativamente,
+    # para que el contenido sangrado se renderice completo en el pliego.
+    if pdf_state == "has_bleed":
+        pose_base_w = bleed_w_mm
+        pose_base_h = bleed_h_mm
+    else:
+        # 'no_bleed' o 'embedded_marks': usamos TrimBox (en embedded_marks haremos clip)
+        pose_base_w = trim_w_mm
+        pose_base_h = trim_h_mm
 
     base_sheet = STANDARD_SHEET_SIZES_MM.get(sheet_size.upper(), STANDARD_SHEET_SIZES_MM["SRA3"])
     sheet_short_mm, sheet_long_mm = min(base_sheet), max(base_sheet)
 
+    # Avisos pedagógicos para el operario
+    warnings_list: List[str] = []
+    if pdf_state == "no_bleed":
+        warnings_list.append(
+            "⚠ El PDF no tiene sangre. Se recomienda aplicar 'Mirror Bleed' antes de imponer "
+            "para evitar bordes blancos tras la guillotina."
+        )
+    elif pdf_state == "embedded_marks":
+        warnings_list.append(
+            "ℹ El PDF ya contiene marcas de corte incrustadas (zona de slug detectada). "
+            "El motor extraerá solo el TrimBox para evitar marcas duplicadas."
+        )
+    elif pdf_state == "has_bleed":
+        warnings_list.append(
+            f"✓ Sangrado de {source_bleed_mm:.1f} mm detectado. Las poses incluirán la sangre "
+            "completa y las marcas de corte se situarán en la línea de TrimBox."
+        )
+
+    # =========================================================================
     # 1. PLAN MODO CUADERNILLO (BOOKLET SADDLE-STITCH)
+    # =========================================================================
     if mode == "booklet":
-        # En cuadernillo, 2 páginas van por pliego apaisado
         sheet_w_mm = sheet_long_mm
         sheet_h_mm = sheet_short_mm
-        # Ajustar dimensiones de escala 100%
-        # Comprobar si 2 páginas caben en el pliego
         avail_w = sheet_w_mm - 2 * sheet_margin_mm
         avail_h = sheet_h_mm - 2 * sheet_margin_mm
         fits_normal = (trim_w_mm * 2 <= avail_w and trim_h_mm <= avail_h)
@@ -116,6 +213,8 @@ def calculate_imposition_plan(
         sheets_needed = padded_pages // 4
         eff = round(((trim_w_mm * 2 * trim_h_mm) / (sheet_w_mm * sheet_h_mm)) * 100, 1)
 
+        warning_text = None if fits_normal else "El formato de página excede el tamaño del pliego seleccionado para cuadernillo."
+
         return {
             "mode": "booklet",
             "sheet_size": sheet_size.upper(),
@@ -126,18 +225,25 @@ def calculate_imposition_plan(
             "sheets_needed": sheets_needed,
             "pages_per_sheet_side": 2,
             "pose_size_mm": [trim_w_mm, trim_h_mm],
+            "pose_with_bleed_mm": [pose_base_w, pose_base_h],
             "grid": {"cols": 2, "rows": 1, "total_poses": 2},
             "rotated_90": False,
             "gap_mm": 0.0,
             "bleed_mm": bleed_mm,
+            "source_bleed_mm": source_bleed_mm,
+            "pdf_state": pdf_state,
             "sheet_margin_mm": sheet_margin_mm,
             "efficiency_percent": eff,
             "fits": fits_normal,
-            "warning": None if fits_normal else "El formato de página excede el tamaño del pliego seleccionado para cuadernillo."
+            "warning": warning_text,
+            "pdf_warnings": warnings_list,
         }
 
+    # =========================================================================
     # 2. PLAN MODO PASO Y REPETICIÓN (STEP & REPEAT / N-UP)
-    # Probar orientaciones de pliego y rotación de poses para maximizar aprovechamiento
+    # El tamaño de celda para calcular el grid usa pose_base (con sangre si la hay)
+    # para que las poses no se solapen.
+    # =========================================================================
     best_option: Optional[Dict[str, Any]] = None
     best_poses = -1
     best_eff = -1.0
@@ -153,10 +259,10 @@ def calculate_imposition_plan(
         avail_w = s_w - 2 * sheet_margin_mm
         avail_h = s_h - 2 * sheet_margin_mm
 
-        # Variantes de rotación de la pose
+        # Variantes de rotación de la pose (usando el tamaño con sangre si la hay)
         pose_variants = [
-            {"rot": False, "w": trim_w_mm, "h": trim_h_mm},
-            {"rot": True, "w": trim_h_mm, "h": trim_w_mm},
+            {"rot": False, "w": pose_base_w, "h": pose_base_h},
+            {"rot": True,  "w": pose_base_h, "h": pose_base_w},
         ]
 
         for pv in pose_variants:
@@ -164,6 +270,9 @@ def calculate_imposition_plan(
             if pw <= 0 or ph <= 0:
                 continue
 
+            # El gap entre poses no necesita duplicar la sangre porque la sangre
+            # de poses adyacentes se solaparía igualmente (como en prepress real).
+            # Usamos gap_mm como calle de corte entre líneas de TrimBox.
             if user_cols and user_rows:
                 c = user_cols
                 r = user_rows
@@ -179,7 +288,8 @@ def calculate_imposition_plan(
             if poses <= 0:
                 continue
 
-            used_area = poses * pw * ph
+            # Eficiencia sobre TrimBox (el área útil real)
+            used_area = poses * trim_w_mm * trim_h_mm
             sheet_area = s_w * s_h
             eff = round((used_area / sheet_area) * 100, 1)
 
@@ -193,19 +303,22 @@ def calculate_imposition_plan(
                     "orientation": s_orient,
                     "original_pages": total_doc_pages,
                     "pose_size_mm": [trim_w_mm, trim_h_mm],
+                    "pose_with_bleed_mm": [pose_base_w, pose_base_h],
                     "grid": {"cols": c, "rows": r, "total_poses": poses},
                     "rotated_90": pv["rot"],
-                    "effective_pose_size_mm": [pw, ph],
+                    "effective_pose_size_mm": [pw, ph],  # Tamaño de celda (incluye sangre si la hay)
                     "gap_mm": gap_mm,
                     "bleed_mm": bleed_mm,
+                    "source_bleed_mm": source_bleed_mm,
+                    "pdf_state": pdf_state,
                     "sheet_margin_mm": sheet_margin_mm,
                     "efficiency_percent": eff,
                     "fits": True,
-                    "warning": None
+                    "warning": None,
+                    "pdf_warnings": warnings_list,
                 }
 
     if not best_option:
-        # Fallback si el diseño es más grande que el pliego
         s_w, s_h = sheet_long_mm, sheet_short_mm
         return {
             "mode": mode,
@@ -214,15 +327,19 @@ def calculate_imposition_plan(
             "orientation": "landscape",
             "original_pages": total_doc_pages,
             "pose_size_mm": [trim_w_mm, trim_h_mm],
+            "pose_with_bleed_mm": [pose_base_w, pose_base_h],
             "grid": {"cols": 1, "rows": 1, "total_poses": 1},
             "rotated_90": False,
             "effective_pose_size_mm": [trim_w_mm, trim_h_mm],
             "gap_mm": gap_mm,
             "bleed_mm": bleed_mm,
+            "source_bleed_mm": source_bleed_mm,
+            "pdf_state": pdf_state,
             "sheet_margin_mm": sheet_margin_mm,
             "efficiency_percent": round(((trim_w_mm * trim_h_mm) / (s_w * s_h)) * 100, 1),
             "fits": False,
-            "warning": "El documento excede el área útil del pliego (incluyendo márgenes de pinza)."
+            "warning": "El documento excede el área útil del pliego (incluyendo márgenes de pinza).",
+            "pdf_warnings": warnings_list,
         }
 
     return best_option
@@ -259,6 +376,29 @@ def _draw_cmyk_color_strip(page: pymupdf.Page, x_start: float, y_top: float, pat
     shape.commit()
 
 
+def _place_pose(
+    sheet: pymupdf.Page,
+    src_doc: pymupdf.Document,
+    page_idx: int,
+    rect_pose: pymupdf.Rect,
+    rotate: int,
+    pdf_state: str,
+    clip_rect_pt: pymupdf.Rect,
+):
+    """
+    Coloca una pose en el pliego, respetando el estado del PDF:
+      - 'has_bleed':       Renderiza la BleedBox completa en rect_pose (sangre incluida).
+      - 'embedded_marks':  Clipea al TrimBox para excluir las marcas incrustadas.
+      - 'no_bleed':        Renderiza sin clip (igual que el comportamiento anterior).
+    """
+    if pdf_state == "embedded_marks":
+        # Clip al TrimBox: descartamos la zona de slug/marcas de la MediaBox
+        sheet.show_pdf_page(rect_pose, src_doc, page_idx, rotate=rotate, clip=clip_rect_pt)
+    else:
+        # 'has_bleed' o 'no_bleed': renderizar el contenido completo en la pose
+        sheet.show_pdf_page(rect_pose, src_doc, page_idx, rotate=rotate)
+
+
 def generate_imposed_pdf(
     pdf_path: str | Path,
     output_path: str | Path,
@@ -277,6 +417,11 @@ def generate_imposed_pdf(
 ) -> Dict[str, Any]:
     """
     Genera el archivo PDF impuesto en pliego de máquina listo para ripeo y CTP/Digital.
+
+    Gestiona correctamente los 3 estados del PDF de origen:
+      CASO A (no_bleed):       Poses sin sangre + marcas exteriores + aviso.
+      CASO B (has_bleed):      Poses con sangre completa + marcas en posición TrimBox.
+      CASO C (embedded_marks): Clip al TrimBox, se elimina la zona de marcas incrustadas.
     """
     pdf_path = Path(pdf_path)
     output_path = Path(output_path)
@@ -300,6 +445,14 @@ def generate_imposed_pdf(
     sheet_w_pt = sheet_w_mm * PT_PER_MM
     sheet_h_pt = sheet_h_mm * PT_PER_MM
 
+    pdf_state = plan.get("pdf_state", "no_bleed")
+    source_bleed_mm = plan.get("source_bleed_mm", 0.0)
+
+    # Obtener clip_rect_pt del PDF real (siempre lo necesitamos para embedded_marks)
+    p0 = src_doc[0]
+    boxes = _get_page_boxes_mm(p0)
+    clip_rect_pt = boxes["clip_rect_pt"]
+
     # =========================================================================
     # 1. GENERACIÓN: MODO CUADERNILLO GRAPADO (SADDLE-STITCH BOOKLET)
     # =========================================================================
@@ -308,18 +461,17 @@ def generate_imposed_pdf(
         padded_p = plan["padded_pages"]
         sheets_needed = plan["sheets_needed"]
 
+        # En cuadernillo siempre usamos TrimBox (tamaño neto de la página)
         pw_pt = plan["pose_size_mm"][0] * PT_PER_MM
         ph_pt = plan["pose_size_mm"][1] * PT_PER_MM
 
-        # Centrar el díptico en el pliego
         total_w_pt = pw_pt * 2
         total_h_pt = ph_pt
         x_start = (sheet_w_pt - total_w_pt) / 2.0
         y_start = (sheet_h_pt - total_h_pt) / 2.0
 
         for k in range(sheets_needed):
-            # Lado Frontal del Pliego k
-            p_front_left_idx = (padded_p - 1) - (2 * k)
+            p_front_left_idx  = (padded_p - 1) - (2 * k)
             p_front_right_idx = 2 * k
 
             sheet_front = out_doc.new_page(width=sheet_w_pt, height=sheet_h_pt)
@@ -328,11 +480,10 @@ def generate_imposed_pdf(
             rect_fr = pymupdf.Rect(x_start + pw_pt, y_start, x_start + 2 * pw_pt, y_start + ph_pt)
 
             if p_front_left_idx < total_p:
-                sheet_front.show_pdf_page(rect_fl, src_doc, p_front_left_idx)
+                _place_pose(sheet_front, src_doc, p_front_left_idx, rect_fl, 0, pdf_state, clip_rect_pt)
             if p_front_right_idx < total_p:
-                sheet_front.show_pdf_page(rect_fr, src_doc, p_front_right_idx)
+                _place_pose(sheet_front, src_doc, p_front_right_idx, rect_fr, 0, pdf_state, clip_rect_pt)
 
-            # Marcas y slug en cara frontal
             _decorate_sheet(
                 sheet=sheet_front,
                 sheet_w_pt=sheet_w_pt,
@@ -344,6 +495,7 @@ def generate_imposed_pdf(
                 pw_pt=pw_pt,
                 ph_pt=ph_pt,
                 gap_pt=0.0,
+                source_bleed_mm=0.0,  # cuadernillo: marks en borde del TrimBox
                 add_marks=add_marks,
                 add_reg_crosses=add_reg_crosses,
                 add_color_bar=add_color_bar,
@@ -352,8 +504,8 @@ def generate_imposed_pdf(
                 is_booklet=True,
             )
 
-            # Lado Reverso del Pliego k
-            p_back_left_idx = 2 * k + 1
+            # Lado Reverso
+            p_back_left_idx  = 2 * k + 1
             p_back_right_idx = (padded_p - 1) - (2 * k + 1)
 
             sheet_back = out_doc.new_page(width=sheet_w_pt, height=sheet_h_pt)
@@ -362,9 +514,9 @@ def generate_imposed_pdf(
             rect_br = pymupdf.Rect(x_start + pw_pt, y_start, x_start + 2 * pw_pt, y_start + ph_pt)
 
             if p_back_left_idx < total_p:
-                sheet_back.show_pdf_page(rect_bl, src_doc, p_back_left_idx)
+                _place_pose(sheet_back, src_doc, p_back_left_idx, rect_bl, 0, pdf_state, clip_rect_pt)
             if p_back_right_idx < total_p:
-                sheet_back.show_pdf_page(rect_br, src_doc, p_back_right_idx)
+                _place_pose(sheet_back, src_doc, p_back_right_idx, rect_br, 0, pdf_state, clip_rect_pt)
 
             _decorate_sheet(
                 sheet=sheet_back,
@@ -377,6 +529,7 @@ def generate_imposed_pdf(
                 pw_pt=pw_pt,
                 ph_pt=ph_pt,
                 gap_pt=0.0,
+                source_bleed_mm=0.0,
                 add_marks=add_marks,
                 add_reg_crosses=add_reg_crosses,
                 add_color_bar=add_color_bar,
@@ -392,6 +545,7 @@ def generate_imposed_pdf(
         cols = plan["grid"]["cols"]
         rows = plan["grid"]["rows"]
         total_poses_per_sheet = cols * rows
+        # effective_pose_size_mm ya incluye la sangre cuando hay 'has_bleed'
         pw_pt = plan["effective_pose_size_mm"][0] * PT_PER_MM
         ph_pt = plan["effective_pose_size_mm"][1] * PT_PER_MM
         gap_pt = plan["gap_mm"] * PT_PER_MM
@@ -403,21 +557,34 @@ def generate_imposed_pdf(
         x_start = (sheet_w_pt - total_grid_w_pt) / 2.0
         y_start = (sheet_h_pt - total_grid_h_pt) / 2.0
 
-        # Para PDFs de 1 página (ej. flyers o tarjetas), se repite la misma página
-        # Para PDFs multipágina (ej. 2-up o 4-up de varias páginas), se van colocando sucesivamente
         num_src_pages = len(src_doc)
-        if num_src_pages == 1:
-            # Pliego único con la misma página repetida en todas las poses
-            sheet = out_doc.new_page(width=sheet_w_pt, height=sheet_h_pt)
+        rotate_val = 90 if rot else 0
+
+        def _fill_sheet_step_repeat(sheet: pymupdf.Page, sh_idx: int, start_page_idx: int) -> int:
+            """Rellena un pliego de Paso y Repetición. Devuelve el índice de página actualizado."""
+            page_idx_local = start_page_idx
             for r in range(rows):
                 for c in range(cols):
+                    src_page_idx = page_idx_local if num_src_pages > 1 else 0
+                    if num_src_pages > 1 and page_idx_local >= num_src_pages:
+                        break
                     px = x_start + c * (pw_pt + gap_pt)
                     py = y_start + r * (ph_pt + gap_pt)
                     rect_pose = pymupdf.Rect(px, py, px + pw_pt, py + ph_pt)
-                    if rot:
-                        sheet.show_pdf_page(rect_pose, src_doc, 0, rotate=90)
-                    else:
-                        sheet.show_pdf_page(rect_pose, src_doc, 0)
+                    _place_pose(sheet, src_doc, src_page_idx, rect_pose, rotate_val, pdf_state, clip_rect_pt)
+                    if num_src_pages > 1:
+                        page_idx_local += 1
+            return page_idx_local
+
+        if num_src_pages == 1:
+            sheet = out_doc.new_page(width=sheet_w_pt, height=sheet_h_pt)
+            _fill_sheet_step_repeat(sheet, 0, 0)
+
+            pdf_state_label = {
+                "no_bleed":       "SIN SANGRE",
+                "has_bleed":      f"SANGRE {source_bleed_mm:.1f}mm",
+                "embedded_marks": "MARCAS INCRUSTADAS",
+            }.get(pdf_state, "")
 
             _decorate_sheet(
                 sheet=sheet,
@@ -430,30 +597,24 @@ def generate_imposed_pdf(
                 pw_pt=pw_pt,
                 ph_pt=ph_pt,
                 gap_pt=gap_pt,
+                source_bleed_mm=source_bleed_mm,
                 add_marks=add_marks,
                 add_reg_crosses=add_reg_crosses,
                 add_color_bar=add_color_bar,
                 add_slug=add_slug,
-                slug_text=f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · {pdf_path.name} · {sheet_size.upper()} ({sheet_w_mm:.0f}×{sheet_h_mm:.0f} mm) · {total_poses_per_sheet} poses ({cols}×{rows}) · Escala 100%",
+                slug_text=(
+                    f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · {pdf_path.name} · "
+                    f"{sheet_size.upper()} ({sheet_w_mm:.0f}×{sheet_h_mm:.0f} mm) · "
+                    f"{total_poses_per_sheet} poses ({cols}×{rows}) · 100% · {pdf_state_label}"
+                ),
                 is_booklet=False,
             )
         else:
-            # Documento multipágina: calcular pliegos necesarios
             sheets_count = math.ceil(num_src_pages / total_poses_per_sheet)
             page_idx = 0
             for sh_idx in range(sheets_count):
                 sheet = out_doc.new_page(width=sheet_w_pt, height=sheet_h_pt)
-                for r in range(rows):
-                    for c in range(cols):
-                        if page_idx < num_src_pages:
-                            px = x_start + c * (pw_pt + gap_pt)
-                            py = y_start + r * (ph_pt + gap_pt)
-                            rect_pose = pymupdf.Rect(px, py, px + pw_pt, py + ph_pt)
-                            if rot:
-                                sheet.show_pdf_page(rect_pose, src_doc, page_idx, rotate=90)
-                            else:
-                                sheet.show_pdf_page(rect_pose, src_doc, page_idx)
-                            page_idx += 1
+                page_idx = _fill_sheet_step_repeat(sheet, sh_idx, page_idx)
 
                 _decorate_sheet(
                     sheet=sheet,
@@ -466,6 +627,7 @@ def generate_imposed_pdf(
                     pw_pt=pw_pt,
                     ph_pt=ph_pt,
                     gap_pt=gap_pt,
+                    source_bleed_mm=source_bleed_mm,
                     add_marks=add_marks,
                     add_reg_crosses=add_reg_crosses,
                     add_color_bar=add_color_bar,
@@ -498,6 +660,7 @@ def _decorate_sheet(
     pw_pt: float,
     ph_pt: float,
     gap_pt: float,
+    source_bleed_mm: float,
     add_marks: bool,
     add_reg_crosses: bool,
     add_color_bar: bool,
@@ -507,58 +670,65 @@ def _decorate_sheet(
 ):
     """
     Inyecta marcas de corte vectoriales, cruces de registro, plegado, tiras densitométricas y slug.
+
+    Parámetro clave: source_bleed_mm
+      - 0.0  → Las marcas de corte se dibujan en el borde de la pose (modo sin sangre o cuadernillo).
+      - >0.0 → Las marcas de corte se desplazan HACIA ADENTRO por source_bleed_mm desde el borde
+               de la pose, señalando la línea real de TrimBox (porque la pose incluye la sangre).
     """
     shape = sheet.new_shape()
-    mark_len = 5.0 * PT_PER_MM  # 5 mm
-    mark_offset = 2.0 * PT_PER_MM  # 2 mm
+    mark_len = 5.0 * PT_PER_MM   # 5 mm
+    mark_offset = 2.0 * PT_PER_MM  # 2 mm gap entre contenido y marca
+    bleed_pt = source_bleed_mm * PT_PER_MM  # offset inward para TrimBox
 
-    # 1. Marcas de corte perimetrales e intermedias
+    # 1. Marcas de corte
     if add_marks:
-        # Cortes verticales en X
+        # Posiciones X de los bordes de corte (en coordenadas de pliego)
+        # Con sangre: el borde real de corte está a +bleed_pt desde el borde de la pose
         x_positions = []
         for c in range(cols):
-            x_left = x_start + c * (pw_pt + gap_pt)
-            x_right = x_left + pw_pt
+            x_left  = x_start + c * (pw_pt + gap_pt) + bleed_pt
+            x_right = x_left + pw_pt - 2 * bleed_pt
             x_positions.extend([x_left, x_right])
 
-        # Cortes horizontales en Y
+        # Posiciones Y de los bordes de corte
         y_positions = []
         for r in range(rows):
-            y_top = y_start + r * (ph_pt + gap_pt)
-            y_bottom = y_top + ph_pt
+            y_top    = y_start + r * (ph_pt + gap_pt) + bleed_pt
+            y_bottom = y_top + ph_pt - 2 * bleed_pt
             y_positions.extend([y_top, y_bottom])
 
-        # Dibujar marcas verticales en el borde superior e inferior
-        y_min = y_start
-        y_max = y_start + rows * ph_pt + (rows - 1) * gap_pt
-        for xp in x_positions:
-            # Arriba
-            shape.draw_line(pymupdf.Point(xp, y_min - mark_offset), pymupdf.Point(xp, y_min - mark_offset - mark_len))
-            # Abajo
-            shape.draw_line(pymupdf.Point(xp, y_max + mark_offset), pymupdf.Point(xp, y_max + mark_offset + mark_len))
+        # Límites de la rejilla (con sangre, si la hay, hacia afuera)
+        y_min_grid = y_start
+        y_max_grid = y_start + rows * ph_pt + (rows - 1) * gap_pt
+        x_min_grid = x_start
+        x_max_grid = x_start + cols * pw_pt + (cols - 1) * gap_pt
 
-        # Dibujar marcas horizontales en el borde izquierdo y derecho
-        x_min = x_start
-        x_max = x_start + cols * pw_pt + (cols - 1) * gap_pt
+        # Marcas de corte verticales (arriba y abajo de cada columna de corte)
+        for xp in x_positions:
+            # Arriba: desde fuera del contenido hacia arriba
+            y_top_mark = y_min_grid + bleed_pt - mark_offset
+            shape.draw_line(pymupdf.Point(xp, y_top_mark), pymupdf.Point(xp, y_top_mark - mark_len))
+            # Abajo
+            y_bot_mark = y_max_grid - bleed_pt + mark_offset
+            shape.draw_line(pymupdf.Point(xp, y_bot_mark), pymupdf.Point(xp, y_bot_mark + mark_len))
+
+        # Marcas de corte horizontales (izquierda y derecha de cada fila de corte)
         for yp in y_positions:
             # Izquierda
-            shape.draw_line(pymupdf.Point(x_min - mark_offset, yp), pymupdf.Point(x_min - mark_offset - mark_len, yp))
+            x_left_mark = x_min_grid + bleed_pt - mark_offset
+            shape.draw_line(pymupdf.Point(x_left_mark, yp), pymupdf.Point(x_left_mark - mark_len, yp))
             # Derecha
-            shape.draw_line(pymupdf.Point(x_max + mark_offset, yp), pymupdf.Point(x_max + mark_offset + mark_len, yp))
+            x_right_mark = x_max_grid - bleed_pt + mark_offset
+            shape.draw_line(pymupdf.Point(x_right_mark, yp), pymupdf.Point(x_right_mark + mark_len, yp))
 
-        # Si hay calles intermedias (gap > 0), dibujar marcas de corte entre calles
-        if gap_pt > 0:
-            for c in range(cols - 1):
-                x_gutter_l = x_start + (c + 1) * pw_pt + c * gap_pt
-                x_gutter_r = x_gutter_l + gap_pt
-                # Marcas en calles superiores e inferiores ya están en x_positions
-                pass
-
-        # Si es cuadernillo grapado, dibujar marca de plegado (fold mark punteada) en el lomo central
+        # Marca de plegado (fold mark) en cuadernillo
         if is_booklet and cols == 2:
             x_spine = x_start + pw_pt
-            shape.draw_line(pymupdf.Point(x_spine, y_min - mark_offset), pymupdf.Point(x_spine, y_min - mark_offset - mark_len))
-            shape.draw_line(pymupdf.Point(x_spine, y_max + mark_offset), pymupdf.Point(x_spine, y_max + mark_offset + mark_len))
+            y_top_mark = y_min_grid + bleed_pt - mark_offset
+            y_bot_mark = y_max_grid - bleed_pt + mark_offset
+            shape.draw_line(pymupdf.Point(x_spine, y_top_mark), pymupdf.Point(x_spine, y_top_mark - mark_len))
+            shape.draw_line(pymupdf.Point(x_spine, y_bot_mark), pymupdf.Point(x_spine, y_bot_mark + mark_len))
 
     shape.finish(color=(0, 0, 0), width=0.35)
     shape.commit()
@@ -569,7 +739,6 @@ def _decorate_sheet(
         cy_mid = sheet_h_pt / 2.0
         r_cross = 5.0
         reg_margin = 6.0 * PT_PER_MM
-        # 4 cruces en los 4 costados
         _draw_registration_cross(sheet, cx_mid, reg_margin, r_cross)
         _draw_registration_cross(sheet, cx_mid, sheet_h_pt - reg_margin, r_cross)
         _draw_registration_cross(sheet, reg_margin, cy_mid, r_cross)
@@ -577,7 +746,6 @@ def _decorate_sheet(
 
     # 3. Tiras de control densitométrico CMYK
     if add_color_bar:
-        # Colocar tira densitométrica centrada en la parte superior
         bar_w = 8 * 15.0
         bar_x = (sheet_w_pt - bar_w) / 2.0 + 35.0
         bar_y = 5.0 * PT_PER_MM
@@ -645,4 +813,3 @@ def render_imposition_preview_image(
     finally:
         if temp_out.exists():
             temp_out.unlink()
-
