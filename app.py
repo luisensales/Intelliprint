@@ -1990,6 +1990,7 @@ async def batch_fix_endpoint(
     geometry: bool = True,
     mirror_bleed: bool = False,
     cmyk_images: bool = True,
+    spot_colors: bool = False,
     fonts: bool = True,
     tac: bool = True,
     printer_marks: bool = False
@@ -2174,6 +2175,33 @@ async def batch_fix_endpoint(
                     if f.get("rule_id") != "SOURCE_COLOR_DIAGNOSTIC"
                     and "rgb" not in f.get("title", "").lower()
                     and "rgb" not in f.get("message", "").lower()
+                ]
+
+        # 4d. Descomposición de Tintas Planas / Pantone a CMYK
+        if spot_colors:
+            step_spots_out = JOBS_DIR / f"{safe_id}_bstep_spots.pdf"
+            temp_files.append(step_spots_out)
+            spots_res = convert_spot_colors_to_cmyk(
+                pdf_path=str(current_in),
+                output_path=str(step_spots_out),
+                target_spots=None,
+                convert_technical=False
+            )
+            if spots_res.get("success") and step_spots_out.exists():
+                current_in = step_spots_out
+                n_spots = len(spots_res.get("spots_converted", []))
+                title_txt = f"Conversión de Tintas Planas a CMYK ({n_spots} tintas convertidas)" if n_spots > 0 else "Tintas Planas a CMYK (0 tintas comerciales)"
+                steps_applied.append({
+                    "action": "spot_colors",
+                    "title": title_txt,
+                    "details": spots_res
+                })
+                if n_spots > 0:
+                    job_meta["has_spot_converted"] = True
+                job_data["findings"] = [
+                    f for f in job_data.get("findings", [])
+                    if f.get("rule_id") != "SPOT_COLOR_FOUND"
+                    and not (("pantone" in f.get("title", "").lower() or "tinta plana" in f.get("title", "").lower()) and "barniz" not in f.get("title", "").lower() and "troquel" not in f.get("title", "").lower())
                 ]
 
         # 5. OutputIntent ICC

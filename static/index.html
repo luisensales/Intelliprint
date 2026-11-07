@@ -1062,9 +1062,20 @@
 
         <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
           <div class="flex items-center gap-3">
+            <input type="checkbox" id="batchChkSpots" class="rounded accent-emerald-600 w-4 h-4">
+            <div>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-indigo-700 transition">7. Descomponer Tintas Planas (Pantone) a CMYK</p>
+              <p class="text-[11px] text-slate-500">Convierte colores directos comerciales a cuatricromía preservando barnices y troqueles</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-300 shrink-0 ml-2">Opcional</span>
+        </label>
+
+        <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
+          <div class="flex items-center gap-3">
             <input type="checkbox" id="batchChkIcc" checked class="rounded accent-emerald-600 w-4 h-4">
             <div>
-              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">7. Incrustar OutputIntent ISO Coated v2 (FOGRA39)</p>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">8. Incrustar OutputIntent ISO Coated v2 (FOGRA39)</p>
               <p class="text-[11px] text-slate-500">Declara la condición de impresión estándar para el RIP de la imprenta</p>
             </div>
           </div>
@@ -1075,7 +1086,7 @@
           <div class="flex items-center gap-3">
             <input type="checkbox" id="batchChkTac" checked class="rounded accent-emerald-600 w-4 h-4">
             <div>
-              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">8. Limitar Cobertura de Tinta (TAC ≤ 300%)</p>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">9. Limitar Cobertura de Tinta (TAC ≤ 300%)</p>
               <p class="text-[11px] text-slate-500">Reduce píxeles CMYK con cobertura excesiva para evitar repintado</p>
             </div>
           </div>
@@ -1086,7 +1097,7 @@
           <div class="flex items-center gap-3">
             <input type="checkbox" id="batchChkMarks" class="rounded accent-emerald-600 w-4 h-4">
             <div>
-              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">9. Añadir Marcas de Imprenta y Registro (+10 mm)</p>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">10. Añadir Marcas de Imprenta y Registro (+10 mm)</p>
               <p class="text-[11px] text-slate-500">Inyecta marcas de corte, cruces de registro y tira CMYK (opcional, para pruebas)</p>
             </div>
           </div>
@@ -3553,6 +3564,7 @@
       const geometry    = document.getElementById('batchChkGeometry')?.checked ?? true;
       const mirrorBleed = document.getElementById('batchChkMirrorBleed')?.checked ?? false;
       const cmyk        = document.getElementById('batchChkCmyk')?.checked ?? true;
+      const spots       = document.getElementById('batchChkSpots')?.checked ?? false;
       const icc         = document.getElementById('batchChkIcc')?.checked ?? true;
       const tac         = document.getElementById('batchChkTac')?.checked ?? true;
       const marks       = document.getElementById('batchChkMarks')?.checked ?? false;
@@ -3571,6 +3583,7 @@
           geometry,
           mirror_bleed: mirrorBleed,
           cmyk_images: cmyk,
+          spot_colors: spots,
           icc,
           tac,
           printer_marks: marks
