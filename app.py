@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import pymupdf
 
 from preflight_engine import IntelliPrintEngine
-from icc_manager import get_available_icc_profiles, detect_pdf_output_intent, apply_icc_to_pdf
+from icc_manager import get_available_icc_profiles, detect_pdf_output_intent, apply_icc_to_pdf, ICC_DIR
 from spellcheck_engine import save_word_to_glossary
 from report_generator import generate_preflight_certificate_pdf
 from color_converter import convert_rgb_images_to_cmyk, extract_embedded_icc_to_tempfile
@@ -1913,6 +1913,322 @@ async def get_page_separation(
                 os.unlink(temp_extracted_icc)
             except Exception:
                 pass
+
+
+@app.get("/api/render-comparison/{job_id}")
+async def render_comparison_endpoint(
+    job_id: str,
+    page: int = 1,
+    side: str = "after",
+    dpi: int = 130
+):
+    """
+    Fase 3: Renderiza la vista 'before' (original) o 'after' (corregido)
+    para el comparador interactivo con cortinilla (Split View Slider).
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    orig_path = job_meta.get("pdf_path")
+    fixed_path = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("tac_limited_pdf_path")
+        or job_meta.get("printer_marks_pdf_path")
+        or job_meta.get("mirror_bleed_pdf_path")
+        or job_meta.get("fonts_outlined_pdf_path")
+        or job_meta.get("bleed_fixed_pdf_path")
+        or job_meta.get("hairline_fixed_pdf_path")
+        or job_meta.get("icc_fixed_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or orig_path
+    )
+
+    target_path = orig_path if side == "before" else fixed_path
+    if not target_path or not Path(target_path).exists():
+        target_path = orig_path
+
+    if not target_path or not Path(target_path).exists():
+        raise HTTPException(status_code=404, detail="PDF no encontrado.")
+
+    try:
+        doc = pymupdf.open(target_path)
+        p_idx = max(0, min(len(doc) - 1, page - 1))
+        page_obj = doc[p_idx]
+        pix = page_obj.get_pixmap(dpi=min(200, max(60, dpi)))
+        img_bytes = pix.tobytes("jpeg")
+        doc.close()
+        return Response(content=img_bytes, media_type="image/jpeg")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error renderizando página para comparación: {e}")
+
+
+@app.post("/api/batch-fix/{job_id}")
+async def batch_fix_endpoint(
+    job_id: str,
+    trapping: bool = True,
+    hairlines: bool = True,
+    icc: bool = True,
+    geometry: bool = True,
+    fonts: bool = True,
+    tac: bool = True,
+    printer_marks: bool = False
+):
+    """
+    Fase 3: Lote de Acciones en 1 Clic (One-Click Batch Fixer).
+    Ejecuta secuencial y acumulativamente las correcciones estándar seleccionadas.
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    source_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not source_pdf or not Path(source_pdf).exists():
+        raise HTTPException(status_code=400, detail="PDF original no encontrado.")
+
+    final_batch_path = JOBS_DIR / f"{safe_id}_batch_fixed.pdf"
+    current_in = Path(source_pdf)
+    steps_applied = []
+    temp_files = []
+
+    try:
+        # 1. Trapping & Overprint Killer
+        if trapping:
+            step1_out = JOBS_DIR / f"{safe_id}_bstep1_trapping.pdf"
+            temp_files.append(step1_out)
+            w_out = JOBS_DIR / f"{safe_id}_bw_tmp.pdf"
+            temp_files.append(w_out)
+            w_res = fix_white_overprint(str(current_in), str(w_out))
+            cur_trap_src = str(w_out) if (w_res.get("success") and w_res.get("objects_fixed", 0) > 0) else str(current_in)
+
+            rb_out = JOBS_DIR / f"{safe_id}_brb_tmp.pdf"
+            temp_files.append(rb_out)
+            rb_res = fix_rich_black_small_text(cur_trap_src, str(rb_out))
+            cur_trap_src2 = str(rb_out) if (rb_res.get("success") and rb_res.get("texts_fixed", 0) > 0) else cur_trap_src
+
+            trap_res = apply_overprint_to_dark_text(cur_trap_src2, str(step1_out), dark_k_threshold=0.99)
+            if trap_res.get("success") and step1_out.exists():
+                current_in = step1_out
+                steps_applied.append({
+                    "action": "trapping",
+                    "title": "Auto-Trapping y Sobreimpresión 100% K",
+                    "details": trap_res
+                })
+                job_data["findings"] = [
+                    f for f in job_data.get("findings", [])
+                    if f.get("rule_id") not in ("WHITE_OVERPRINT", "RICH_BLACK_SMALL_TEXT", "BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100")
+                    and "blanco" not in f.get("title", "").lower()
+                    and not (("calado" in f.get("title", "").lower() or "knockout" in f.get("title", "").lower()) and "barniz" not in f.get("title", "").lower())
+                ]
+                stats = job_data.get("job_summary", {}).get("overprint_stats", {})
+                stats["white_overprint"] = 0
+                stats["rich_black_small_text"] = 0
+                stats["black_100_overprint"] = stats.get("black_100_overprint", 0) + stats.get("black_100_knockout", 0)
+                stats["black_100_knockout"] = 0
+
+        # 2. Corrector de Hairlines (< 0.25 pt)
+        if hairlines:
+            step2_out = JOBS_DIR / f"{safe_id}_bstep2_hairlines.pdf"
+            temp_files.append(step2_out)
+            hl_res = fix_hairlines(str(current_in), str(step2_out), target_width=0.30)
+            if hl_res.get("success") and step2_out.exists():
+                current_in = step2_out
+                steps_applied.append({
+                    "action": "hairlines",
+                    "title": "Engrosado de Filetes Finos (Hairlines)",
+                    "details": hl_res
+                })
+                job_data["findings"] = [
+                    f for f in job_data.get("findings", [])
+                    if f.get("rule_id") not in ("HAIRLINE_WIDTH", "HAIRLINE_STROKE")
+                    and "hairline" not in f.get("title", "").lower()
+                    and "línea fina" not in f.get("title", "").lower()
+                ]
+
+        # 3. Trazado de tipografías a curvas
+        if fonts:
+            step3_out = JOBS_DIR / f"{safe_id}_bstep3_fonts.pdf"
+            temp_files.append(step3_out)
+            font_res = outline_fonts_in_pdf(str(current_in), str(step3_out))
+            if font_res.get("success") and step3_out.exists():
+                current_in = step3_out
+                steps_applied.append({
+                    "action": "fonts",
+                    "title": "Tipografías Trazadas a Curvas",
+                    "details": font_res
+                })
+                job_data["findings"] = [
+                    f for f in job_data.get("findings", [])
+                    if f.get("rule_id") != "USED_FONTS_EMBEDDED"
+                    and "incrustada" not in f.get("title", "").lower()
+                    and "fuente" not in f.get("title", "").lower()
+                ]
+
+        # 4. Normalización de Cajas de Página y Sangrado 3 mm
+        if geometry:
+            step4_out = JOBS_DIR / f"{safe_id}_bstep4_geometry.pdf"
+            temp_files.append(step4_out)
+            geom_res = fix_pdf_boxes_and_bleed(str(current_in), str(step4_out), target_bleed_mm=3.0)
+            if geom_res.get("success") and step4_out.exists():
+                current_in = step4_out
+                steps_applied.append({
+                    "action": "geometry",
+                    "title": "Cajas ISO y Sangrado 3 mm",
+                    "details": geom_res
+                })
+                job_data["findings"] = [
+                    f for f in job_data.get("findings", [])
+                    if f.get("rule_id") != "BLEED_GEOMETRY_3MM"
+                    and "sangrado" not in f.get("title", "").lower()
+                    and "bleed" not in f.get("title", "").lower()
+                ]
+
+        # 5. OutputIntent ICC
+        if icc:
+            step5_out = JOBS_DIR / f"{safe_id}_bstep5_icc.pdf"
+            temp_files.append(step5_out)
+            shutil.copyfile(str(current_in), str(step5_out))
+            target_icc = "ISOcoated_v2_eci.icc" if (ICC_DIR / "ISOcoated_v2_eci.icc").exists() else "ISOcoated_v2_300_bas.icc"
+            applied_info = apply_icc_to_pdf(step5_out, target_icc)
+            if applied_info and step5_out.exists():
+                current_in = step5_out
+                steps_applied.append({
+                    "action": "icc",
+                    "title": "OutputIntent ICC ISO Coated v2 (FOGRA39)",
+                    "details": applied_info
+                })
+                job_summary = job_data.setdefault("job_summary", {})
+                job_summary["icc_detected"] = applied_info
+                job_data["findings"] = [
+                    f for f in job_data.get("findings", [])
+                    if f.get("rule_id") != "DOCUMENT_OUTPUT_ICC"
+                    and "outputintent" not in f.get("title", "").lower()
+                ]
+
+        # 6. Limitador de Cobertura Total de Tinta (TAC <= 300%)
+        if tac:
+            step6_out = JOBS_DIR / f"{safe_id}_bstep6_tac.pdf"
+            temp_files.append(step6_out)
+            tac_res = limit_pdf_tac(str(current_in), str(step6_out), max_tac_percent=300.0)
+            if tac_res.get("success") and step6_out.exists():
+                current_in = step6_out
+                steps_applied.append({
+                    "action": "tac",
+                    "title": "Limitación de Cobertura de Tinta (TAC 300%)",
+                    "details": tac_res
+                })
+                job_data["findings"] = [
+                    f for f in job_data.get("findings", [])
+                    if f.get("rule_id") != "MAX_INK_COVERAGE"
+                    and "cobertura" not in f.get("title", "").lower()
+                    and "tac" not in f.get("title", "").lower()
+                ]
+
+        # 7. Marcas de Imprenta (Opcional)
+        if printer_marks:
+            step7_out = JOBS_DIR / f"{safe_id}_bstep7_marks.pdf"
+            temp_files.append(step7_out)
+            orig_filename = job_meta.get("filename", "documento.pdf")
+            pm_res = add_printer_marks_to_pdf(str(current_in), str(step7_out), slug_margin_mm=10.0, bleed_mm=3.0, job_filename=orig_filename)
+            if pm_res.get("success") and step7_out.exists():
+                current_in = step7_out
+                steps_applied.append({
+                    "action": "printer_marks",
+                    "title": "Marcas de Imprenta y Registro (+10 mm)",
+                    "details": pm_res
+                })
+
+        # Copiar el resultado final acumulativo a final_batch_path
+        shutil.copyfile(str(current_in), str(final_batch_path))
+
+    finally:
+        for tmp in temp_files:
+            if tmp.exists() and tmp != final_batch_path:
+                try:
+                    tmp.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+    # Registrar en job_meta
+    job_data["job_meta"]["batch_fixed_pdf_path"] = str(final_batch_path)
+    job_data["job_meta"]["last_fixed_pdf_path"] = str(final_batch_path)
+    job_data["job_meta"]["batch_steps_applied"] = steps_applied
+
+    # Recalcular dictamen técnico
+    all_findings = job_data.get("findings", [])
+    errs = sum(1 for f in all_findings if f.get("severity") == "ERROR")
+    warns = sum(1 for f in all_findings if f.get("severity") == "WARNING")
+    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
+    tech["errors_count"] = errs
+    tech["warnings_count"] = warns
+    if errs == 0 and warns == 0:
+        tech["status"] = "PASS"
+        tech["verdict"] = "CORRECTO"
+        tech["description"] = "Archivo completamente normalizado y listo para producción."
+    elif errs == 0:
+        tech["status"] = "WARNING"
+        tech["verdict"] = "CON OBSERVACIONES"
+        tech["description"] = f"Errores críticos resueltos en lote. Restan {warns} advertencias menores no críticas."
+    else:
+        tech["status"] = "ERROR"
+        tech["verdict"] = "RECHAZADO"
+        tech["description"] = f"Se corrigieron incidencias en lote, pero restan {errs} errores críticos pendientes."
+
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "success": True,
+        "message": f"Se aplicaron {len(steps_applied)} acciones de corrección en lote con éxito.",
+        "steps_applied": steps_applied,
+        "errors_count": errs,
+        "warnings_count": warns,
+        "verdict": tech["verdict"],
+        "download_url": f"/api/download-batch/{job_id}"
+    }
+
+
+@app.get("/api/download-batch/{job_id}")
+async def download_batch_endpoint(job_id: str):
+    """Descarga el PDF con las correcciones integrales del lote."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    batch_path = job_data.get("job_meta", {}).get("batch_fixed_pdf_path")
+    if not batch_path or not Path(batch_path).exists():
+        batch_path = job_data.get("job_meta", {}).get("last_fixed_pdf_path")
+
+    if not batch_path or not Path(batch_path).exists():
+        raise HTTPException(status_code=404, detail="PDF corregido en lote no encontrado.")
+
+    orig_filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    stem = Path(orig_filename).stem
+    download_filename = f"{stem}_lote_corregido.pdf"
+
+    return FileResponse(
+        path=batch_path,
+        media_type="application/pdf",
+        filename=download_filename
+    )
 
 
 if __name__ == "__main__":

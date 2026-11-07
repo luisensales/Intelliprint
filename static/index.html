@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
@@ -191,6 +191,9 @@
             <a id="downloadCertBtn" href="#" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-file-shield"></i> Descargar Ficha en PDF
             </a>
+            <button onclick="openBatchFixModal()" id="btnBatchFix" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Aplica en lote las correcciones estándar recomendadas para imprenta">
+              <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> <span>Taller en 1 Clic</span>
+            </button>
             <button onclick="applyPrinterMarks(this)" id="btnPrinterMarks" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer" title="Inyectar marcas de corte, cruces de registro y tiras CMYK">
               <i class="fa-solid fa-crop-simple text-amber-400"></i> <span>Marcas de Imprenta</span>
             </button>
@@ -250,6 +253,9 @@
           </button>
           <button class="py-3 px-4 tab-btn text-slate-500 hover:text-slate-800" data-tab="tab-separations">
             <i class="fa-solid fa-layer-group mr-1.5"></i> Previsualización de Separaciones
+          </button>
+          <button class="py-3 px-4 tab-btn text-slate-500 hover:text-slate-800" data-tab="tab-comparison" id="tabComparisonBtn">
+            <i class="fa-solid fa-code-compare mr-1.5"></i> Comparador Antes / Después
           </button>
           <button class="py-3 px-4 tab-btn text-slate-500 hover:text-slate-800" data-tab="tab-release">
             <i class="fa-solid fa-stamp mr-1.5"></i> Autorización de Salida
@@ -802,6 +808,128 @@
           </div>
         </div>
 
+        <!-- Tab 6: Comparador Visual Antes / Después (Split View Slider) -->
+        <div id="tab-comparison" class="tab-content hidden p-6 space-y-5">
+          <div class="border border-slate-200 rounded-xl p-5 bg-white space-y-4 shadow-sm">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h4 class="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <i class="fa-solid fa-code-compare text-blue-600"></i> Comparador Visual con Cortinilla (Split View Antes / Después)
+                </h4>
+                <p class="text-[11px] text-slate-500 mt-0.5">
+                  Desplaza el divisor interactivo para contrastar en tiempo real el <strong>PDF original subido (Antes)</strong> con el <strong>PDF con correcciones del taller (Después)</strong>.
+                </p>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <!-- Selector de resolución DPI -->
+                <div class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs">
+                  <span class="text-slate-500 font-medium">Resolución:</span>
+                  <select id="compDpiSelect" onchange="updateComparisonView()" class="bg-transparent font-bold text-slate-800 outline-none cursor-pointer">
+                    <option value="100">100 DPI (Rápido)</option>
+                    <option value="130" selected>130 DPI (Estándar)</option>
+                    <option value="160">160 DPI (Alta nitidez)</option>
+                  </select>
+                </div>
+
+                <!-- Selector de página -->
+                <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs shadow-2xs">
+                  <button id="compPrevPageBtn" type="button" onclick="changeCompPage(-1)"
+                    class="w-7 h-7 flex items-center justify-center rounded-md bg-white hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-200 transition"
+                    title="Página anterior (←)">
+                    <i class="fa-solid fa-chevron-left text-[11px]"></i>
+                  </button>
+
+                  <div class="flex items-center gap-1 px-1 text-xs">
+                    <span class="text-slate-500 font-medium">Pág.</span>
+                    <input type="number" id="compPageInput" min="1" max="1" value="1"
+                      onchange="onCompPageInputChange(this.value)"
+                      onkeydown="if(event.key==='Enter') onCompPageInputChange(this.value)"
+                      class="w-12 text-center bg-white border border-slate-300 rounded px-1 py-0.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none">
+                    <span class="text-slate-500 font-medium">de <span id="compTotalPages" class="font-bold text-slate-700">1</span></span>
+                  </div>
+
+                  <button id="compNextPageBtn" type="button" onclick="changeCompPage(1)"
+                    class="w-7 h-7 flex items-center justify-center rounded-md bg-white hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-200 transition"
+                    title="Página siguiente (→)">
+                    <i class="fa-solid fa-chevron-right text-[11px]"></i>
+                  </button>
+                </div>
+
+                <!-- Botón refrescar -->
+                <button onclick="updateComparisonView()" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 transition" title="Refrescar visualización">
+                  <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Indicadores de estado -->
+            <div class="flex flex-wrap items-center justify-between gap-2 px-1 text-xs">
+              <div class="flex items-center gap-3">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 border border-blue-200 text-blue-700 font-semibold">
+                  <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Izquierda: Original (Antes)
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Derecha: Corregido (Después)
+                </span>
+              </div>
+              <div id="compFixesAppliedPill" class="text-slate-500 text-[11px] font-medium">
+                <!-- Se llena dinámicamente con las correcciones aplicadas -->
+              </div>
+            </div>
+
+            <!-- Split View Canvas Container -->
+            <div class="relative w-full bg-slate-950 rounded-xl overflow-hidden border border-slate-800 shadow-inner flex items-center justify-center p-3 select-none min-h-[480px]">
+              <!-- Loading Overlay -->
+              <div id="compLoadingOverlay" class="absolute inset-0 bg-slate-950/70 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-40 text-white transition-opacity duration-200">
+                <i class="fa-solid fa-circle-notch fa-spin text-3xl text-blue-400"></i>
+                <p class="text-xs text-slate-300 font-medium">Renderizando páginas para comparación...</p>
+              </div>
+
+              <!-- Empty State -->
+              <div id="compEmptyNotice" class="hidden text-center text-slate-400 text-xs py-12">
+                <i class="fa-solid fa-circle-info text-2xl text-slate-500 mb-2"></i>
+                <p>Carga y procesa un PDF para activar el comparador visual.</p>
+              </div>
+
+              <!-- Comparison Image Frame -->
+              <div id="compFrameWrapper" class="relative max-w-full max-h-[750px] shadow-2xl rounded overflow-hidden leading-none inline-block">
+                <!-- Base Image: Before (Original) -->
+                <img id="compImgBefore" src="" alt="PDF Original (Antes)" class="block max-h-[720px] max-w-full object-contain pointer-events-none">
+
+                <!-- Overlay Image: After (Corregido) clipped from split pos to 100% -->
+                <img id="compImgAfter" src="" alt="PDF Corregido (Después)" class="absolute inset-0 w-full h-full object-contain pointer-events-none" style="clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%);">
+
+                <!-- Divider Line -->
+                <div id="compDividerLine" class="absolute top-0 bottom-0 pointer-events-none z-20" style="left: 50%; transform: translateX(-50%); width: 2px; background: #3b82f6; box-shadow: 0 0 10px rgba(59,130,246,0.8), 0 0 4px rgba(0,0,0,0.8);">
+                  <!-- Circular Grab Handle -->
+                  <div class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 left-1/2 w-8 h-8 rounded-full bg-blue-600 text-white shadow-xl flex items-center justify-center text-xs border-2 border-white pointer-events-none transition-transform hover:scale-110">
+                    <i class="fa-solid fa-arrows-left-right text-[11px]"></i>
+                  </div>
+                </div>
+
+                <!-- Floating Labels on Image Corners -->
+                <div class="absolute top-2 left-2 px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-bold tracking-wide uppercase border border-slate-700 pointer-events-none z-10">
+                  Original (Antes)
+                </div>
+                <div class="absolute top-2 right-2 px-2 py-0.5 rounded bg-emerald-950/80 backdrop-blur-xs text-emerald-300 text-[10px] font-bold tracking-wide uppercase border border-emerald-700 pointer-events-none z-10">
+                  Corregido (Después)
+                </div>
+
+                <!-- Range Slider Control overlay for effortless drag -->
+                <input type="range" id="compSliderInput" min="0" max="100" value="50" step="0.1"
+                  class="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-30 m-0"
+                  title="Arrastra para deslizar la cortinilla entre el Original y el Corregido">
+              </div>
+            </div>
+
+            <!-- Ayuda rápida -->
+            <p class="text-[11px] text-slate-500 text-center">
+              <i class="fa-solid fa-lightbulb text-amber-500 mr-1"></i>
+              <strong>Consejo:</strong> Haz clic o arrastra el ratón horizontalmente sobre la imagen para mover la cortinilla. También puedes usar las flechas del teclado cuando el comparador está seleccionado.
+            </p>
+          </div>
+        </div>
+
       </div>
 
       <!-- Action Footer: Comenzar nuevo análisis -->
@@ -818,6 +946,132 @@
     </section>
 
   </main>
+
+  <!-- =====================================================================
+       MODAL: Taller de Preimpresión en 1 Clic (Batch Fixer)
+  ====================================================================== -->
+  <div id="batchFixModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="batchModalTitle">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onclick="closeBatchFixModal()"></div>
+    <!-- Panel -->
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden animate-fade-in">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-emerald-700 to-teal-700 text-white">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center">
+            <i class="fa-solid fa-wand-magic-sparkles text-amber-300 text-sm"></i>
+          </div>
+          <div>
+            <h3 id="batchModalTitle" class="text-sm font-bold">Taller de Preimpresión en 1 Clic</h3>
+            <p class="text-xs text-emerald-100 font-normal">Selecciona las correcciones a aplicar en lote</p>
+          </div>
+        </div>
+        <button onclick="closeBatchFixModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="px-6 py-5 space-y-3 max-h-[65vh] overflow-y-auto">
+        <p class="text-xs text-slate-600 pb-1 border-b border-slate-100">
+          Las correcciones se aplican de forma <strong>secuencial y acumulativa</strong> en el orden indicado, conservando la cadena de ediciones previas.
+        </p>
+
+        <!-- Checkbox list -->
+        <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="batchChkTrapping" checked class="rounded accent-emerald-600 w-4 h-4">
+            <div>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">1. Auto-Trapping + White/Rich Black Killer</p>
+              <p class="text-[11px] text-slate-500">Sobreimprime textos 100% K, elimina blancos en sobreimpresión y normaliza negro enriquecido &lt; 12 pt</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-red-100 text-red-700 rounded border border-red-200 shrink-0 ml-2">Crítico</span>
+        </label>
+
+        <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="batchChkHairlines" checked class="rounded accent-emerald-600 w-4 h-4">
+            <div>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">2. Corrector de Filetes Finos (Hairlines)</p>
+              <p class="text-[11px] text-slate-500">Engrosa trazos &lt; 0.25 pt a 0.30 pt mínimo seguro para impresión</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded border border-amber-200 shrink-0 ml-2">Aviso</span>
+        </label>
+
+        <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="batchChkFonts" checked class="rounded accent-emerald-600 w-4 h-4">
+            <div>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">3. Trazar Tipografías a Curvas</p>
+              <p class="text-[11px] text-slate-500">Convierte fuentes no incrustadas a trazados vectoriales seguros</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded border border-amber-200 shrink-0 ml-2">Aviso</span>
+        </label>
+
+        <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="batchChkGeometry" checked class="rounded accent-emerald-600 w-4 h-4">
+            <div>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">4. Normalizar Cajas y Sangrado 3 mm</p>
+              <p class="text-[11px] text-slate-500">Ajusta MediaBox, TrimBox y BleedBox según norma ISO offset</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded border border-amber-200 shrink-0 ml-2">Aviso</span>
+        </label>
+
+        <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="batchChkIcc" checked class="rounded accent-emerald-600 w-4 h-4">
+            <div>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">5. Incrustar OutputIntent ISO Coated v2 (FOGRA39)</p>
+              <p class="text-[11px] text-slate-500">Declara la condición de impresión estándar para el RIP de la imprenta</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded border border-blue-200 shrink-0 ml-2">Recomendado</span>
+        </label>
+
+        <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="batchChkTac" checked class="rounded accent-emerald-600 w-4 h-4">
+            <div>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">6. Limitar Cobertura de Tinta (TAC ≤ 300%)</p>
+              <p class="text-[11px] text-slate-500">Reduce píxeles CMYK con cobertura excesiva para evitar repintado</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded border border-blue-200 shrink-0 ml-2">Recomendado</span>
+        </label>
+
+        <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="batchChkMarks" class="rounded accent-emerald-600 w-4 h-4">
+            <div>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">7. Añadir Marcas de Imprenta y Registro (+10 mm)</p>
+              <p class="text-[11px] text-slate-500">Inyecta marcas de corte, cruces de registro y tira CMYK (opcional, para pruebas)</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-300 shrink-0 ml-2">Opcional</span>
+        </label>
+      </div>
+
+      <!-- Footer / Resultado -->
+      <div id="batchResultArea" class="hidden px-6 pb-4 pt-2">
+        <div id="batchResultContent" class="p-3.5 rounded-xl border text-xs space-y-2"></div>
+      </div>
+
+      <!-- Footer buttons -->
+      <div class="flex items-center justify-between gap-3 px-6 py-4 bg-slate-50 border-t border-slate-200">
+        <button onclick="closeBatchFixModal()" id="batchCancelBtn" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition">
+          Cancelar
+        </button>
+        <button onclick="executeBatchFix(this)" id="batchRunBtn" class="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer">
+          <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Aplicar correcciones seleccionadas
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Footer -->
   <footer class="bg-white border-t border-slate-200 py-6 mt-auto">
@@ -1482,6 +1736,9 @@
 
       // Inicializar Previsualizador de Separaciones de Color
       initSeparations(summ.pages || 1);
+
+      // Inicializar Comparador Antes / Despues
+      initComparison(summ.pages || 1);
 
       // Renderizar placas de tintas planas (Pantone / Especiales)
       const spotColors = summ.spot_colors;
@@ -3092,6 +3349,217 @@
       }, 100);
     }
 
+
+    // =========================================================================
+    // COMPARADOR VISUAL ANTES / DESPUES - Split View Slider (Fase 3 Item 4)
+    // =========================================================================
+
+    let compCurrentPage = 1;
+    let compTotalPageCount = 1;
+    let compSliderPct = 50;
+    let compDebounce = null;
+
+    function initComparison(pageCount) {
+      compTotalPageCount = Math.max(1, pageCount || 1);
+      compCurrentPage = 1;
+      const totalSpan = document.getElementById('compTotalPages');
+      if (totalSpan) totalSpan.textContent = compTotalPageCount;
+      const pageInput = document.getElementById('compPageInput');
+      if (pageInput) { pageInput.min = 1; pageInput.max = compTotalPageCount; pageInput.value = 1; }
+      const slider = document.getElementById('compSliderInput');
+      if (slider) { slider.value = 50; compSliderPct = 50; applyCompSliderPos(50); }
+      updateCompNavButtons();
+    }
+
+    function updateCompNavButtons() {
+      const prevBtn = document.getElementById('compPrevPageBtn');
+      const nextBtn = document.getElementById('compNextPageBtn');
+      if (prevBtn) prevBtn.disabled = (compCurrentPage <= 1);
+      if (nextBtn) nextBtn.disabled = (compCurrentPage >= compTotalPageCount);
+      const pageInput = document.getElementById('compPageInput');
+      if (pageInput) pageInput.value = compCurrentPage;
+    }
+
+    function changeCompPage(delta) {
+      const newPage = compCurrentPage + delta;
+      if (newPage < 1 || newPage > compTotalPageCount) return;
+      compCurrentPage = newPage;
+      updateCompNavButtons();
+      updateComparisonView();
+    }
+
+    function onCompPageInputChange(val) {
+      const pageNum = parseInt(val, 10);
+      if (isNaN(pageNum) || pageNum < 1 || pageNum > compTotalPageCount) return;
+      compCurrentPage = pageNum;
+      updateCompNavButtons();
+      updateComparisonView();
+    }
+
+    function applyCompSliderPos(pct) {
+      pct = Math.max(0, Math.min(100, pct));
+      compSliderPct = pct;
+      const afterImg = document.getElementById('compImgAfter');
+      const divLine  = document.getElementById('compDividerLine');
+      if (afterImg) afterImg.style.clipPath = `polygon(${pct}% 0, 100% 0, 100% 100%, ${pct}% 100%)`;
+      if (divLine)  divLine.style.left = `${pct}%`;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const slider = document.getElementById('compSliderInput');
+      if (slider) {
+        slider.addEventListener('input', (e) => { applyCompSliderPos(parseFloat(e.target.value)); });
+        slider.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowLeft')  applyCompSliderPos(compSliderPct - 2);
+          if (e.key === 'ArrowRight') applyCompSliderPos(compSliderPct + 2);
+          const s = document.getElementById('compSliderInput');
+          if (s) s.value = compSliderPct;
+        });
+      }
+      const compTabBtn = document.getElementById('tabComparisonBtn');
+      if (compTabBtn) {
+        compTabBtn.addEventListener('click', () => { if (currentJobId) updateComparisonView(); });
+      }
+    });
+
+    function updateComparisonView() {
+      if (!currentJobId) return;
+      clearTimeout(compDebounce);
+      compDebounce = setTimeout(async () => {
+        const dpiSel = document.getElementById('compDpiSelect');
+        const dpi    = dpiSel ? parseInt(dpiSel.value) : 130;
+        const page   = compCurrentPage || 1;
+        const overlay     = document.getElementById('compLoadingOverlay');
+        const imgBefore   = document.getElementById('compImgBefore');
+        const imgAfter    = document.getElementById('compImgAfter');
+        const emptyNotice = document.getElementById('compEmptyNotice');
+        const wrapper     = document.getElementById('compFrameWrapper');
+
+        if (overlay) overlay.classList.remove('hidden');
+        if (emptyNotice) emptyNotice.classList.add('hidden');
+
+        const urlBefore = `/api/render-comparison/${currentJobId}?page=${page}&side=before&dpi=${dpi}&t=${Date.now()}`;
+        const urlAfter  = `/api/render-comparison/${currentJobId}?page=${page}&side=after&dpi=${dpi}&t=${Date.now()}`;
+
+        try {
+          const [resBefore, resAfter] = await Promise.all([fetch(urlBefore), fetch(urlAfter)]);
+          if (resBefore.ok && resAfter.ok) {
+            const blobBefore = await resBefore.blob();
+            const blobAfter  = await resAfter.blob();
+            if (imgBefore) {
+              imgBefore.onload = () => {
+                if (wrapper) wrapper.classList.remove('hidden');
+                if (overlay) overlay.classList.add('hidden');
+                applyCompSliderPos(compSliderPct);
+              };
+              imgBefore.src = URL.createObjectURL(blobBefore);
+            }
+            if (imgAfter) imgAfter.src = URL.createObjectURL(blobAfter);
+          } else {
+            if (overlay) overlay.classList.add('hidden');
+            if (emptyNotice) emptyNotice.classList.remove('hidden');
+          }
+        } catch (err) {
+          console.error('Comparison fetch error:', err);
+          if (overlay) overlay.classList.add('hidden');
+        }
+      }, 150);
+    }
+
+    // =========================================================================
+    // TALLER EN 1 CLIC - Batch Fixer Modal (Fase 3 Item 5)
+    // =========================================================================
+
+    function openBatchFixModal() {
+      if (!currentJobId) { alert('No hay ningun trabajo activo. Sube y analiza un PDF primero.'); return; }
+      const modal = document.getElementById('batchFixModal');
+      if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+      const resultArea = document.getElementById('batchResultArea');
+      if (resultArea) resultArea.classList.add('hidden');
+      const runBtn = document.getElementById('batchRunBtn');
+      if (runBtn) { runBtn.disabled = false; runBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Aplicar correcciones seleccionadas'; }
+      const cancelBtn = document.getElementById('batchCancelBtn');
+      if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.textContent = 'Cancelar'; }
+    }
+
+    function closeBatchFixModal() {
+      const modal = document.getElementById('batchFixModal');
+      if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+    }
+
+    async function executeBatchFix(btn) {
+      if (!currentJobId) return;
+      const trapping  = document.getElementById('batchChkTrapping')?.checked ?? true;
+      const hairlines = document.getElementById('batchChkHairlines')?.checked ?? true;
+      const fonts     = document.getElementById('batchChkFonts')?.checked ?? true;
+      const geometry  = document.getElementById('batchChkGeometry')?.checked ?? true;
+      const icc       = document.getElementById('batchChkIcc')?.checked ?? true;
+      const tac       = document.getElementById('batchChkTac')?.checked ?? true;
+      const marks     = document.getElementById('batchChkMarks')?.checked ?? false;
+
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Aplicando correcciones...';
+      const cancelBtn = document.getElementById('batchCancelBtn');
+      if (cancelBtn) cancelBtn.disabled = true;
+
+      try {
+        const params = new URLSearchParams({ trapping, hairlines, fonts, geometry, icc, tac, printer_marks: marks });
+        const resp = await fetch(`/api/batch-fix/${currentJobId}?${params.toString()}`, { method: 'POST' });
+        const data = await resp.json();
+
+        const resultArea    = document.getElementById('batchResultArea');
+        const resultContent = document.getElementById('batchResultContent');
+        resultArea.classList.remove('hidden');
+
+        if (resp.ok && data.success) {
+          const stepsHtml = (data.steps_applied || []).map(s =>
+            `<li class="flex items-center gap-1.5"><i class="fa-solid fa-circle-check text-emerald-600"></i> ${s.title}</li>`
+          ).join('');
+          const verdictClass = data.errors_count === 0 && data.warnings_count === 0 ? 'bg-emerald-600 text-white' :
+                               data.errors_count === 0 ? 'bg-amber-500 text-white' : 'bg-red-600 text-white';
+          resultContent.className = 'p-3.5 rounded-xl border border-emerald-300 bg-emerald-50 text-xs space-y-2';
+          resultContent.innerHTML = `
+            <p class="font-bold text-emerald-800"><i class="fa-solid fa-check-double mr-1"></i> ${data.message}</p>
+            <ul class="space-y-1 text-emerald-700 pl-1">${stepsHtml}</ul>
+            <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-emerald-200 mt-1">
+              <span class="font-semibold text-emerald-900">Dictamen tras el lote:</span>
+              <span class="font-bold px-2 py-0.5 rounded-full text-xs ${verdictClass}">${data.verdict}</span>
+              <span class="text-slate-600">${data.errors_count} error(es) &middot; ${data.warnings_count} aviso(s) pendiente(s)</span>
+            </div>
+            <a href="/api/download-batch/${currentJobId}" target="_blank"
+               class="inline-flex items-center gap-1.5 mt-1 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg shadow text-xs transition">
+              <i class="fa-solid fa-file-arrow-down"></i> Descargar PDF con lote aplicado
+            </a>`;
+
+          const badge = document.getElementById('findingsCount');
+          if (badge) badge.textContent = (data.errors_count || 0) + (data.warnings_count || 0);
+
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-check text-emerald-200"></i> Lote completado!';
+          if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.textContent = 'Cerrar'; }
+
+          const compTab = document.getElementById('tab-comparison');
+          if (compTab && !compTab.classList.contains('hidden')) updateComparisonView();
+
+        } else {
+          resultContent.className = 'p-3.5 rounded-xl border border-red-300 bg-red-50 text-xs';
+          resultContent.innerHTML = `<p class="font-bold text-red-800"><i class="fa-solid fa-circle-xmark mr-1"></i> Error en el lote</p>
+            <p class="text-red-700 mt-1">${data.detail || 'Error desconocido del servidor.'}</p>`;
+          btn.disabled = false; btn.innerHTML = origHtml;
+          if (cancelBtn) cancelBtn.disabled = false;
+        }
+      } catch (err) {
+        console.error('Batch fix error:', err);
+        const resultArea    = document.getElementById('batchResultArea');
+        const resultContent = document.getElementById('batchResultContent');
+        resultArea.classList.remove('hidden');
+        resultContent.className = 'p-3.5 rounded-xl border border-red-300 bg-red-50 text-xs';
+        resultContent.innerHTML = '<p class="font-bold text-red-800">Error de conexion al ejecutar el lote.</p>';
+        btn.disabled = false; btn.innerHTML = origHtml;
+        if (cancelBtn) cancelBtn.disabled = false;
+      }
+    }
   </script>
 </body>
 </html>
