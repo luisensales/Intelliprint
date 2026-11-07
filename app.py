@@ -27,6 +27,7 @@ from hairline_fixer import fix_hairlines
 from geometry_fixer import fix_pdf_boxes_and_bleed
 from font_vectorizer import outline_fonts_in_pdf
 from mirror_bleed_generator import generate_mirror_bleed
+from printer_marks_generator import add_printer_marks_to_pdf
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -451,6 +452,7 @@ async def download_pdf_file(job_id: str):
     meta = job_data.get("job_meta", {})
     pdf_p = (
         meta.get("last_fixed_pdf_path")
+        or meta.get("printer_marks_pdf_path")
         or meta.get("mirror_bleed_pdf_path")
         or meta.get("fonts_outlined_pdf_path")
         or meta.get("bleed_fixed_pdf_path")
@@ -1455,6 +1457,102 @@ async def download_mirror_bleed_pdf(job_id: str):
         path=fixed_path,
         media_type="application/pdf",
         filename=f"IntelliPrint_{clean_name}_Sangre_Reflejo.pdf"
+    )
+
+
+@app.post("/api/add-printer-marks/{job_id}")
+async def add_printer_marks_endpoint(
+    job_id: str,
+    slug_margin_mm: float = 10.0,
+    bleed_mm: float = 3.0
+):
+    """
+    Fase 3: Añade marcas de imprenta profesionales (corte, registro, tiras CMYK e información).
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    source_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("printer_marks_pdf_path")
+        or job_meta.get("mirror_bleed_pdf_path")
+        or job_meta.get("fonts_outlined_pdf_path")
+        or job_meta.get("bleed_fixed_pdf_path")
+        or job_meta.get("hairline_fixed_pdf_path")
+        or job_meta.get("icc_fixed_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not source_pdf or not Path(source_pdf).exists():
+        raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
+
+    filename = job_meta.get("filename", "documento.pdf")
+    output_path = JOBS_DIR / f"{safe_id}_printer_marks.pdf"
+    result = add_printer_marks_to_pdf(
+        source_pdf,
+        str(output_path),
+        slug_margin_mm=slug_margin_mm,
+        bleed_mm=bleed_mm,
+        job_filename=filename
+    )
+
+    job_meta["has_printer_marks"] = True
+    job_meta["printer_marks_pdf_path"] = str(output_path)
+    job_meta["last_fixed_pdf_path"] = str(output_path)
+
+    # Regenerar certificado técnico PDF
+    cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
+    try:
+        generate_preflight_certificate_pdf(job_data, cert_path)
+    except Exception as e:
+        print(f"[add-printer-marks] Error regenerando certificado: {e}")
+
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "success",
+        "job_id": safe_id,
+        "pages_processed": result.get("pages_processed", 0),
+        "slug_margin_mm": slug_margin_mm,
+        "bleed_mm": bleed_mm,
+        "download_url": f"/api/download-printer-marks/{safe_id}",
+        "findings": job_data.get("findings", []),
+        "triple_result": job_data.get("triple_result", {})
+    }
+
+
+@app.get("/api/download-printer-marks/{job_id}")
+async def download_printer_marks_pdf(job_id: str):
+    """Descarga el PDF con marcas de imprenta profesionales añadidas."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    fixed_path = job_data.get("job_meta", {}).get("printer_marks_pdf_path")
+    if not fixed_path or not Path(fixed_path).exists():
+        raise HTTPException(
+            status_code=404,
+            detail="PDF con marcas de imprenta no encontrado."
+        )
+
+    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    clean_name = filename.replace(".pdf", "")
+    return FileResponse(
+        path=fixed_path,
+        media_type="application/pdf",
+        filename=f"IntelliPrint_{clean_name}_Marcas.pdf"
     )
 
 

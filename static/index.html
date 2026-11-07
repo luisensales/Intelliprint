@@ -191,6 +191,9 @@
             <a id="downloadCertBtn" href="#" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-file-shield"></i> Descargar Ficha en PDF
             </a>
+            <button onclick="applyPrinterMarks(this)" id="btnPrinterMarks" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer" title="Inyectar marcas de corte, cruces de registro y tiras CMYK">
+              <i class="fa-solid fa-crop-simple text-amber-400"></i> <span>Marcas de Imprenta</span>
+            </button>
             <button id="downloadJsonBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-code"></i> JSON Oficial
             </button>
@@ -2228,6 +2231,54 @@
       } catch (err) {
         console.error(err);
         alert('Error de conexión al generar sangrado por reflejo.');
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Fase 3: Inyector de Marcas de Imprenta (Printer Marks)
+    // -----------------------------------------------------------------------
+    async function applyPrinterMarks(btn) {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo.');
+        return;
+      }
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Inyectando marcas...';
+
+      try {
+        const res = await fetch(`/api/add-printer-marks/${currentJobId}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400 mr-1"></i> Marcas Listas';
+          btn.classList.remove('bg-slate-800', 'hover:bg-slate-700');
+          btn.classList.add('bg-emerald-700', 'hover:bg-emerald-800');
+
+          // Actualizar botón de descarga de la cabecera
+          const pdfBtn = document.getElementById('downloadPdfBtn');
+          const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+          if (pdfBtn && data.download_url) {
+            pdfBtn.href = data.download_url;
+            pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+          }
+          if (pdfBtnLabel) {
+            pdfBtnLabel.textContent = 'Descargar PDF con Marcas';
+          }
+
+          // Abrir PDF con marcas en pestaña nueva
+          window.open(data.download_url, '_blank');
+        } else {
+          alert('Error al añadir marcas de imprenta: ' + (data.detail || 'Error desconocido'));
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        alert('Error de conexión al añadir marcas de imprenta.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
       }
