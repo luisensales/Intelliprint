@@ -1957,6 +1957,14 @@ async def render_comparison_endpoint(
     if not target_path or not Path(target_path).exists():
         raise HTTPException(status_code=404, detail="PDF no encontrado.")
 
+    has_fixed = bool(
+        fixed_path
+        and Path(fixed_path).exists()
+        and orig_path
+        and Path(orig_path).exists()
+        and Path(fixed_path).resolve() != Path(orig_path).resolve()
+    )
+
     try:
         doc = pymupdf.open(target_path)
         p_idx = max(0, min(len(doc) - 1, page - 1))
@@ -1964,7 +1972,11 @@ async def render_comparison_endpoint(
         pix = page_obj.get_pixmap(dpi=min(200, max(60, dpi)))
         img_bytes = pix.tobytes("jpeg")
         doc.close()
-        return Response(content=img_bytes, media_type="image/jpeg")
+        return Response(
+            content=img_bytes,
+            media_type="image/jpeg",
+            headers={"X-Has-Fixes": "1" if has_fixed else "0"}
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error renderizando página para comparación: {e}")
 

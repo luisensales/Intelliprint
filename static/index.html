@@ -877,6 +877,22 @@
               </div>
             </div>
 
+            <!-- Banner de feedback si no hay correcciones aplicadas aún -->
+            <div id="compNoFixesNotice" class="hidden p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
+              <div class="flex items-start gap-2.5">
+                <i class="fa-solid fa-clone text-amber-500 text-sm shrink-0 mt-0.5"></i>
+                <div>
+                  <p class="font-bold">Vista Idéntica: Aún no se han aplicado correcciones del taller a este documento.</p>
+                  <p class="text-amber-700 text-[11px] mt-0.5">
+                    Ambas caras de la cortinilla (Antes y Después) muestran actualmente el PDF original idéntico. Aplica correcciones desde la pestaña de <em>Incidencias Técnicas</em> o ejecuta el <strong>Taller en 1 Clic</strong> para contrastar los cambios.
+                  </p>
+                </div>
+              </div>
+              <button onclick="openBatchFixModal()" class="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-lg shadow-xs transition cursor-pointer">
+                <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Corregir en 1 Clic
+              </button>
+            </div>
+
             <!-- Split View Canvas Container -->
             <div class="relative w-full bg-slate-950 rounded-xl overflow-hidden border border-slate-800 shadow-inner flex items-center justify-center p-3 select-none min-h-[480px]">
               <!-- Loading Overlay -->
@@ -3466,6 +3482,26 @@
         try {
           const [resBefore, resAfter] = await Promise.all([fetch(urlBefore), fetch(urlAfter)]);
           if (resBefore.ok && resAfter.ok) {
+            const hasFixes = (resAfter.headers.get('x-has-fixes') === '1');
+            const noFixNotice = document.getElementById('compNoFixesNotice');
+            const pill = document.getElementById('compFixesAppliedPill');
+
+            if (hasFixes) {
+              if (noFixNotice) noFixNotice.classList.add('hidden');
+              if (pill) {
+                pill.innerHTML = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Comparando: Original vs. Corregido
+                </span>`;
+              }
+            } else {
+              if (noFixNotice) noFixNotice.classList.remove('hidden');
+              if (pill) {
+                pill.innerHTML = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                  <i class="fa-solid fa-clone text-slate-400"></i> Vista Idéntica (Sin correcciones aplicadas)
+                </span>`;
+              }
+            }
+
             const blobBefore = await resBefore.blob();
             const blobAfter  = await resAfter.blob();
             if (imgBefore) {
