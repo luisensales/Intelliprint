@@ -206,6 +206,9 @@
             <button onclick="openImpositionModal()" id="btnOpenImposition" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Montaje e imposición de pliegos de máquina (Paso y repetición N-Up / Cuadernillo grapado en SRA3, A3, A4)">
               <i class="fa-solid fa-table-cells text-amber-300"></i> <span>Imposición Pliego</span>
             </button>
+            <button onclick="openBarcodeModal()" id="btnOpenBarcodes" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Inspector y Corrector de Códigos de Barras y Códigos QR (EAN-13, QR, 100% K)">
+              <i class="fa-solid fa-barcode text-amber-300"></i> <span>Códigos & QR</span>
+            </button>
             <button id="downloadJsonBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-code"></i> JSON Oficial
             </button>
@@ -1345,6 +1348,70 @@
             <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Generar Pliego PDF
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: INSPECTOR Y CORRECTOR DE CÓDIGOS DE BARRAS Y QR -->
+  <!-- ========================================================================= -->
+  <div id="barcodeModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="bcModalTitle">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onclick="closeBarcodeModal()"></div>
+    <!-- Panel -->
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
+            <i class="fa-solid fa-barcode text-amber-300 text-lg"></i>
+          </div>
+          <div>
+            <h3 id="bcModalTitle" class="text-sm font-bold flex items-center gap-2">
+              Inspector y Corrector de Códigos de Barras y QR
+              <span id="bcBadgeHeader" class="text-[10px] bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Verificación GS1 / ISO</span>
+            </h3>
+            <p class="text-xs text-emerald-200 font-normal">EAN-13 · EAN-8 · UPC · QR Code · Detección de Negro Enriquecido (Rich Black) y Zona de Silencio</p>
+          </div>
+        </div>
+        <button onclick="closeBarcodeModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Main Body -->
+      <div class="p-6 overflow-y-auto flex-1 space-y-4">
+        <!-- Status summary banner -->
+        <div id="bcSummaryBanner" class="p-4 rounded-xl border flex items-center justify-between gap-4 bg-slate-50 border-slate-200">
+          <div class="flex items-center gap-3">
+            <div id="bcSummaryIcon" class="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-slate-600 text-lg">
+              <i class="fa-solid fa-spinner fa-spin"></i>
+            </div>
+            <div>
+              <div id="bcSummaryTitle" class="text-sm font-bold text-slate-800">Analizando códigos en el documento...</div>
+              <div id="bcSummarySubtitle" class="text-xs text-slate-500">Escaneando páginas en busca de códigos de barras lineales y QR...</div>
+            </div>
+          </div>
+          <button id="bcBtnFixAll" onclick="executeFixBarcodes(null)" class="hidden inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer">
+            <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Corregir Todos a 100% K
+          </button>
+        </div>
+
+        <!-- Cards container -->
+        <div id="bcListContainer" class="space-y-3">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-between px-6 py-3.5 bg-slate-50 border-t border-slate-200 shrink-0">
+        <span class="text-[11px] text-slate-500 flex items-center gap-1.5">
+          <i class="fa-solid fa-circle-info text-indigo-500"></i>
+          Un código a 4 tintas CMYK provoca rechazo en lectores láser por desajuste de registro. Se exige 100% K puro.
+        </span>
+        <button onclick="closeBarcodeModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+          Cerrar
+        </button>
       </div>
     </div>
   </div>
@@ -4109,6 +4176,210 @@
         alert('Error de conexión al generar el pliego.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
+      }
+    }
+
+    // =========================================================================
+    // BARCODE & QR INSPECTOR & FIXER
+    // =========================================================================
+    let currentBarcodeFindings = [];
+
+    function openBarcodeModal() {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo. Sube y analiza un PDF primero.');
+        return;
+      }
+      const modal = document.getElementById('barcodeModal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        loadBarcodeInspection();
+      }
+    }
+
+    function closeBarcodeModal() {
+      const modal = document.getElementById('barcodeModal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    async function loadBarcodeInspection() {
+      if (!currentJobId) return;
+
+      const summaryBanner = document.getElementById('bcSummaryBanner');
+      const summaryIcon = document.getElementById('bcSummaryIcon');
+      const summaryTitle = document.getElementById('bcSummaryTitle');
+      const summarySubtitle = document.getElementById('bcSummarySubtitle');
+      const btnFixAll = document.getElementById('bcBtnFixAll');
+      const listContainer = document.getElementById('bcListContainer');
+
+      if (summaryIcon) summaryIcon.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-emerald-600"></i>';
+      if (summaryTitle) summaryTitle.textContent = 'Analizando códigos en el documento...';
+      if (summarySubtitle) summarySubtitle.textContent = 'Escaneando páginas en busca de códigos de barras lineales y QR...';
+      if (btnFixAll) btnFixAll.classList.add('hidden');
+      if (listContainer) listContainer.innerHTML = '<div class="text-center py-12 text-slate-400 text-xs"><i class="fa-solid fa-barcode text-3xl mb-2 text-slate-300 block"></i>Escaneando páginas...</div>';
+
+      try {
+        const resp = await fetch(`/api/barcodes/inspect/${currentJobId}`);
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          if (summaryTitle) summaryTitle.textContent = 'Error al inspeccionar códigos';
+          if (summarySubtitle) summarySubtitle.textContent = data.detail || 'Ocurrió un error en el servidor.';
+          if (listContainer) listContainer.innerHTML = '';
+          return;
+        }
+
+        currentBarcodeFindings = data.findings || [];
+
+        if (currentBarcodeFindings.length === 0) {
+          if (summaryBanner) summaryBanner.className = 'p-4 rounded-xl border flex items-center justify-between gap-4 bg-slate-50 border-slate-200';
+          if (summaryIcon) {
+            summaryIcon.className = 'w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-slate-600 text-lg';
+            summaryIcon.innerHTML = '<i class="fa-solid fa-info"></i>';
+          }
+          if (summaryTitle) summaryTitle.textContent = 'No se detectaron códigos de barras ni QR';
+          if (summarySubtitle) summarySubtitle.textContent = 'El documento no contiene patrones EAN-13, EAN-8, UPC ni códigos QR identificables.';
+          if (listContainer) listContainer.innerHTML = '<div class="p-8 text-center text-xs text-slate-400 border border-dashed rounded-xl">Documento libre de códigos de barras.</div>';
+          return;
+        }
+
+        const hasErrors = data.errors_count > 0;
+        const hasWarnings = data.warnings_count > 0;
+
+        if (hasErrors) {
+          if (summaryBanner) summaryBanner.className = 'p-4 rounded-xl border flex items-center justify-between gap-4 bg-rose-50 border-rose-200';
+          if (summaryIcon) {
+            summaryIcon.className = 'w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center text-lg';
+            summaryIcon.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+          }
+          if (summaryTitle) summaryTitle.textContent = `Se detectaron ${data.total_barcodes_found} código(s) · ${data.errors_count} con riesgo de imprenta`;
+          if (summarySubtitle) summarySubtitle.textContent = 'Hay códigos compuestos en Negro Enriquecido (4 tintas CMYK) o sin zona de silencio que pueden fallar en escáneres.';
+          if (btnFixAll) btnFixAll.classList.remove('hidden');
+        } else if (hasWarnings) {
+          if (summaryBanner) summaryBanner.className = 'p-4 rounded-xl border flex items-center justify-between gap-4 bg-amber-50 border-amber-200';
+          if (summaryIcon) {
+            summaryIcon.className = 'w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg';
+            summaryIcon.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i>';
+          }
+          if (summaryTitle) summaryTitle.textContent = `Se detectaron ${data.total_barcodes_found} código(s) · Requieren ajustes`;
+          if (summarySubtitle) summarySubtitle.textContent = 'Revisa las advertencias de tamaño, contraste perimetral o composición.';
+          if (btnFixAll) btnFixAll.classList.remove('hidden');
+        } else {
+          if (summaryBanner) summaryBanner.className = 'p-4 rounded-xl border flex items-center justify-between gap-4 bg-emerald-50 border-emerald-200';
+          if (summaryIcon) {
+            summaryIcon.className = 'w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-lg';
+            summaryIcon.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+          }
+          if (summaryTitle) summaryTitle.textContent = `Todos los códigos son 100% K Puro (${data.total_barcodes_found} detectado(s))`;
+          if (summarySubtitle) summarySubtitle.textContent = 'Cumplen estrictamente con los estándares ISO/GS1 para lectura óptica perfecta.';
+          if (btnFixAll) btnFixAll.classList.add('hidden');
+        }
+
+        // Render Cards
+        listContainer.innerHTML = currentBarcodeFindings.map(item => {
+          const col = item.color_analysis;
+          const isError = item.status === 'ERROR';
+          const isOk = item.status === 'OK';
+          const badgeClass = isOk ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : (isError ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-amber-100 text-amber-800 border-amber-300');
+          const borderClass = isOk ? 'border-emerald-200 bg-white' : (isError ? 'border-rose-300 bg-rose-50/20' : 'border-amber-300 bg-amber-50/20');
+          const previewUrl = `/api/barcodes/preview/${currentJobId}?page_index=${item.page_index}&x0=${item.rect_pt[0]}&y0=${item.rect_pt[1]}&x1=${item.rect_pt[2]}&y1=${item.rect_pt[3]}&dpi=150&t=${Date.now()}`;
+
+          return `
+            <div class="p-4 rounded-xl border ${borderClass} shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div class="flex items-center gap-4 flex-1">
+                <img src="${previewUrl}" alt="Preview" class="w-24 h-16 object-contain bg-white rounded border border-slate-200 p-1 shadow-2xs shrink-0">
+                <div class="space-y-1">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-slate-800">${item.type}</span>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeClass}">${item.status}</span>
+                    <span class="text-[10px] text-slate-400">Pág ${item.page_number} (${item.dimensions_mm[0]} × ${item.dimensions_mm[1]} mm)</span>
+                  </div>
+                  <div class="text-xs font-mono font-bold text-indigo-700 bg-slate-100 px-2 py-0.5 rounded inline-block">
+                    ${item.payload}
+                  </div>
+                  <div class="text-[11px] text-slate-600 flex items-center gap-3">
+                    <span>Tintas: <strong>${col.bar_color_desc}</strong></span>
+                    <span>TAC: <strong>${col.tac_pct}%</strong></span>
+                  </div>
+                  ${item.reasons.length > 0 ? `
+                    <div class="text-[11px] text-rose-700 font-medium">
+                      ${item.reasons.map(r => `<div>⚠ ${r}</div>`).join('')}
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+
+              ${item.fixable ? `
+                <button onclick="executeFixBarcodes('${item.id}', this)" class="shrink-0 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Corregir a 100% K
+                </button>
+              ` : `
+                <span class="shrink-0 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1">
+                  <i class="fa-solid fa-check"></i> Óptimo 100% K
+                </span>
+              `}
+            </div>
+          `;
+        }).join('');
+
+      } catch (err) {
+        console.error('Error cargando inspección de códigos:', err);
+        if (summaryTitle) summaryTitle.textContent = 'Error de conexión';
+      }
+    }
+
+    async function executeFixBarcodes(barcodeId = null, btn = null) {
+      if (!currentJobId) return;
+
+      const origHtml = btn ? btn.innerHTML : null;
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Corrigiendo...';
+      }
+      const fixAllBtn = document.getElementById('bcBtnFixAll');
+      if (fixAllBtn && !btn) {
+        fixAllBtn.disabled = true;
+        fixAllBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
+      }
+
+      try {
+        const resp = await fetch(`/api/barcodes/fix/${currentJobId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            barcode_ids: barcodeId ? [barcodeId] : null,
+            force_pure_k: true,
+            add_quiet_zone: true,
+            quiet_zone_margin_mm: 2.0
+          })
+        });
+
+        const res = await resp.json();
+        if (resp.ok && res.status === 'success') {
+          // Re-inspeccionar para actualizar la vista
+          await loadBarcodeInspection();
+        } else {
+          alert('Error corrigiendo código: ' + (res.detail || 'Error desconocido'));
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+          }
+        }
+      } catch (err) {
+        console.error('Error al corregir códigos:', err);
+        alert('Error de conexión al procesar la corrección.');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      } finally {
+        if (fixAllBtn && !btn) {
+          fixAllBtn.disabled = false;
+          fixAllBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Corregir Todos a 100% K';
+        }
       }
     }
   </script>

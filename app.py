@@ -36,6 +36,11 @@ from imposition_engine import (
     render_imposition_preview_image,
     STANDARD_SHEET_SIZES_MM,
 )
+from barcode_engine import (
+    inspect_barcodes_in_pdf,
+    fix_barcodes_in_pdf,
+    render_barcode_preview_image,
+)
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -2578,6 +2583,136 @@ async def preview_imposition_endpoint(
         return Response(content=img_bytes, media_type="image/jpeg")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error renderizando previsualización de imposición: {e}")
+
+
+# =============================================================================
+# ENDPOINTS: INSPECTOR Y CORRECTOR DE CÓDIGOS DE BARRAS Y QR
+# =============================================================================
+
+@app.get("/api/barcodes/inspect/{job_id}")
+async def inspect_barcodes_endpoint(job_id: str):
+    """Inspecciona códigos de barras (EAN-13, EAN-8, UPC) y QR en busca de Rich Black o falta de Quiet Zone."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    target_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("batch_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not target_pdf or not Path(target_pdf).exists():
+        raise HTTPException(status_code=404, detail="Archivo PDF no encontrado.")
+
+    try:
+        report = inspect_barcodes_in_pdf(target_pdf)
+        return report
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error inspeccionando códigos de barras: {e}")
+
+
+@app.post("/api/barcodes/fix/{job_id}")
+async def fix_barcodes_endpoint(job_id: str, request: Request):
+    """Corrige códigos de barras y QR forzándolos a 100% K puro e inyectando reserva blanca opaca."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    target_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("batch_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not target_pdf or not Path(target_pdf).exists():
+        raise HTTPException(status_code=404, detail="Archivo PDF no encontrado.")
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    barcode_ids = body.get("barcode_ids")  # Lista opcional de IDs a corregir
+    force_pure_k = bool(body.get("force_pure_k", True))
+    add_quiet_zone = bool(body.get("add_quiet_zone", True))
+    quiet_zone_margin_mm = float(body.get("quiet_zone_margin_mm", 2.0))
+
+    output_pdf = JOBS_DIR / f"{safe_id}_barcode_fixed.pdf"
+
+    try:
+        result = fix_barcodes_in_pdf(
+            pdf_path=target_pdf,
+            output_path=output_pdf,
+            barcode_ids_to_fix=barcode_ids,
+            force_pure_k=force_pure_k,
+            add_quiet_zone=add_quiet_zone,
+            quiet_zone_margin_mm=quiet_zone_margin_mm,
+        )
+
+        job_meta["barcode_fixed_pdf_path"] = str(output_pdf)
+        job_meta["last_fixed_pdf_path"] = str(output_pdf)
+        with open(job_json_path, "w", encoding="utf-8") as f:
+            json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error corrigiendo códigos de barras: {e}")
+
+
+@app.get("/api/barcodes/preview/{job_id}")
+async def preview_barcode_endpoint(
+    job_id: str,
+    page_index: int = 0,
+    x0: float = 0.0,
+    y0: float = 0.0,
+    x1: float = 100.0,
+    y1: float = 100.0,
+    dpi: int = 150
+):
+    """Renderiza un recorte JPEG de previsualización de un código detectado."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    target_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("batch_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not target_pdf or not Path(target_pdf).exists():
+        raise HTTPException(status_code=404, detail="Archivo PDF no encontrado.")
+
+    try:
+        img_bytes = render_barcode_preview_image(
+            pdf_path=target_pdf,
+            page_index=page_index,
+            rect_pt=[x0, y0, x1, y1],
+            dpi=dpi
+        )
+        return Response(content=img_bytes, media_type="image/jpeg")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando previsualización de código: {e}")
 
 
 if __name__ == "__main__":
