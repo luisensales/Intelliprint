@@ -209,6 +209,9 @@
             <button onclick="openBarcodeModal()" id="btnOpenBarcodes" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Inspector y Corrector de Códigos de Barras y Códigos QR (EAN-13, QR, 100% K)">
               <i class="fa-solid fa-barcode text-amber-300"></i> <span>Códigos & QR</span>
             </button>
+            <button onclick="openBatchHotfolderModal()" id="btnOpenBatch" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Procesamiento por Lote y Carpeta Caliente (Hot-Folder)">
+              <i class="fa-solid fa-layer-group text-amber-300"></i> <span>Lote & Hot-Folder</span>
+            </button>
             <button id="downloadJsonBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-code"></i> JSON Oficial
             </button>
@@ -1410,6 +1413,222 @@
           Un código a 4 tintas CMYK provoca rechazo en lectores láser por desajuste de registro. Se exige 100% K puro.
         </span>
         <button onclick="closeBarcodeModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: PROCESAMIENTO POR LOTE Y CARPETA CALIENTE (HOT-FOLDER) -->
+  <!-- ========================================================================= -->
+  <div id="batchHotfolderModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="batchModalTitle">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onclick="closeBatchHotfolderModal()"></div>
+    <!-- Panel -->
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-5xl w-full border border-slate-200 overflow-hidden animate-fade-in flex flex-col max-h-[92vh]">
+      <!-- Header with Tabs -->
+      <div class="px-6 pt-4 pb-0 bg-gradient-to-r from-sky-900 via-indigo-900 to-slate-900 text-white shrink-0">
+        <div class="flex items-center justify-between pb-3">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
+              <i class="fa-solid fa-layer-group text-amber-300 text-lg"></i>
+            </div>
+            <div>
+              <h3 id="batchModalTitle" class="text-sm font-bold flex items-center gap-2">
+                Procesamiento por Lote y Carpeta Caliente (Hot-Folder)
+                <span class="text-[10px] bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Flujo de Taller</span>
+              </h3>
+              <p class="text-xs text-sky-200 font-normal">Multi-PDF Drop · Preflight Concurrente · Corrección Masiva · Demonio Hot-Folder</p>
+            </div>
+          </div>
+          <button onclick="closeBatchHotfolderModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white cursor-pointer">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="flex items-center gap-2 border-b border-white/15">
+          <button id="tabBtnBatchQueue" onclick="switchBatchTab('queue')" class="px-4 py-2.5 text-xs font-bold border-b-2 border-amber-400 text-amber-300 transition flex items-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-list-check"></i> Cola de Lotes (Multi-PDF)
+          </button>
+          <button id="tabBtnHotfolder" onclick="switchBatchTab('hotfolder')" class="px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-white/70 hover:text-white transition flex items-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-folder-tree"></i> Carpeta Caliente (Hot-Folder)
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Body -->
+      <div class="p-6 overflow-y-auto flex-1 space-y-4">
+        
+        <!-- =================== TAB 1: COLA DE LOTES =================== -->
+        <div id="tabContentBatchQueue" class="space-y-4">
+          <!-- Dropzone -->
+          <div id="batchDropzone" onclick="document.getElementById('batchInputFiles').click()" class="border-2 border-dashed border-sky-300 hover:border-sky-500 bg-sky-50/50 hover:bg-sky-50 rounded-2xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2">
+            <input type="file" id="batchInputFiles" multiple accept=".pdf" class="hidden" onchange="onBatchFilesSelected(this)">
+            <div class="w-12 h-12 rounded-2xl bg-sky-100 flex items-center justify-center text-sky-600 text-xl shadow-xs">
+              <i class="fa-solid fa-cloud-arrow-up"></i>
+            </div>
+            <div>
+              <span class="text-sm font-bold text-slate-800">Arrastra aquí múltiples PDFs</span>
+              <span class="text-xs text-slate-500 block">o haz clic para seleccionar varios archivos (procesamiento paralelo)</span>
+            </div>
+            <span class="text-[11px] text-sky-700 bg-sky-100/80 px-2.5 py-0.5 rounded-full font-semibold">1 a 50 archivos simultáneos</span>
+          </div>
+
+          <!-- Queue Control Bar -->
+          <div class="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <div class="flex items-center gap-3 text-xs">
+              <span class="font-bold text-slate-700">Resumen del Lote:</span>
+              <span id="batchCountTotal" class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded-md font-semibold text-[11px]">0 archivos</span>
+              <span id="batchCountApproved" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md font-semibold text-[11px]">0 conformes</span>
+              <span id="batchCountErrors" class="px-2 py-0.5 bg-rose-100 text-rose-800 rounded-md font-semibold text-[11px]">0 con errores</span>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button id="btnBatchFixAll" onclick="executeBatchFixAll(this)" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer" disabled>
+                <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Corregir Todo el Lote
+              </button>
+              <button id="btnBatchZip" onclick="executeBatchDownloadZip(this)" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer" disabled>
+                <i class="fa-solid fa-file-zipper"></i> Descargar Todo en ZIP
+              </button>
+              <button onclick="clearBatchQueue()" class="px-2.5 py-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg text-xs transition" title="Limpiar lista">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Queue Table -->
+          <div class="border border-slate-200 rounded-xl overflow-hidden bg-white">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200">
+                  <tr>
+                    <th class="py-2.5 px-3">Archivo</th>
+                    <th class="py-2.5 px-3 text-center">Páginas</th>
+                    <th class="py-2.5 px-3 text-center">Tamaño</th>
+                    <th class="py-2.5 px-3 text-center">Estado Técnico</th>
+                    <th class="py-2.5 px-3">Incidencias</th>
+                    <th class="py-2.5 px-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="batchTableBody" class="divide-y divide-slate-100 text-slate-700">
+                  <tr>
+                    <td colspan="6" class="py-8 text-center text-slate-400">
+                      No hay archivos en la cola. Arrastra varios PDFs arriba para comenzar.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- =================== TAB 2: CARPETA CALIENTE =================== -->
+        <div id="tabContentHotfolder" class="space-y-4 hidden">
+          <!-- Service Status Banner -->
+          <div class="p-4 rounded-xl border border-slate-200 bg-slate-50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <div id="hfStatusDot" class="w-3.5 h-3.5 rounded-full bg-slate-400"></div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-slate-800">Demonio Hot-Folder:</span>
+                  <span id="hfStatusText" class="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">DETENIDO</span>
+                </div>
+                <span class="text-[11px] text-slate-500">Supervisa periódicamente la carpeta de entrada y aplica preflight y auto-corrección sin intervención.</span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button id="btnHfToggle" onclick="toggleHotfolderDaemon(this)" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer">
+                <i class="fa-solid fa-play"></i> Iniciar Demonio
+              </button>
+              <button onclick="triggerHotfolderProcessNow(this)" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer" title="Procesar inmediatamente los archivos pendientes en /in">
+                <i class="fa-solid fa-rotate"></i> Escanear Ahora
+              </button>
+            </div>
+          </div>
+
+          <!-- Folders Cards Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <!-- IN -->
+            <div class="p-3.5 rounded-xl border border-sky-200 bg-sky-50/40 space-y-1">
+              <div class="flex items-center justify-between text-xs font-bold text-sky-900">
+                <span class="flex items-center gap-1.5"><i class="fa-solid fa-inbox text-sky-600"></i> Entrada (in/)</span>
+                <span id="hfCountIn" class="px-2 py-0.5 bg-sky-200 rounded-md text-[10px]">0</span>
+              </div>
+              <p class="text-[11px] text-slate-500 truncate font-mono" id="hfPathIn">hotfolder/in</p>
+              <span class="text-[10px] text-sky-700">Deposita aquí los PDFs (vía red, FTP o copia).</span>
+            </div>
+
+            <!-- APPROVED -->
+            <div class="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-1">
+              <div class="flex items-center justify-between text-xs font-bold text-emerald-900">
+                <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle-check text-emerald-600"></i> Aprobados (out_aprobados/)</span>
+                <span id="hfCountApproved" class="px-2 py-0.5 bg-emerald-200 rounded-md text-[10px]">0</span>
+              </div>
+              <p class="text-[11px] text-slate-500 truncate font-mono" id="hfPathApproved">hotfolder/out_aprobados</p>
+              <div class="pt-1">
+                <a href="/api/hotfolder/download-all/approved" class="text-[11px] text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-1">
+                  <i class="fa-solid fa-download"></i> Descargar Aprobados (ZIP)
+                </a>
+              </div>
+            </div>
+
+            <!-- REJECTED -->
+            <div class="p-3.5 rounded-xl border border-rose-200 bg-rose-50/40 space-y-1">
+              <div class="flex items-center justify-between text-xs font-bold text-rose-900">
+                <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle-xmark text-rose-600"></i> Rechazados (out_rechazados/)</span>
+                <span id="hfCountRejected" class="px-2 py-0.5 bg-rose-200 rounded-md text-[10px]">0</span>
+              </div>
+              <p class="text-[11px] text-slate-500 truncate font-mono" id="hfPathRejected">hotfolder/out_rechazados</p>
+              <div class="pt-1">
+                <a href="/api/hotfolder/download-all/rejected" class="text-[11px] text-rose-700 hover:text-rose-900 font-bold flex items-center gap-1">
+                  <i class="fa-solid fa-download"></i> Descargar Rechazados (ZIP)
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Activity Log Table -->
+          <div class="space-y-1.5">
+            <span class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <i class="fa-solid fa-clock-rotate-left text-slate-400"></i> Registro de Actividad Reciente del Hot-Folder:
+            </span>
+            <div class="border border-slate-200 rounded-xl overflow-hidden bg-white">
+              <div class="overflow-x-auto max-h-56">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200 sticky top-0">
+                    <tr>
+                      <th class="py-2 px-3">Hora</th>
+                      <th class="py-2 px-3">Archivo</th>
+                      <th class="py-2 px-3 text-center">Estado</th>
+                      <th class="py-2 px-3">Detalles</th>
+                      <th class="py-2 px-3">Destino</th>
+                    </tr>
+                  </thead>
+                  <tbody id="hfLogBody" class="divide-y divide-slate-100 text-slate-700">
+                    <tr>
+                      <td colspan="5" class="py-6 text-center text-slate-400">
+                        No hay registros recientes. Deposita un PDF en <code class="font-mono text-slate-600">hotfolder/in/</code> para probar.
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-between px-6 py-3.5 bg-slate-50 border-t border-slate-200 shrink-0">
+        <span class="text-[11px] text-slate-500 flex items-center gap-1.5">
+          <i class="fa-solid fa-shield-halved text-sky-600"></i>
+          IntelliPrint aplica perfiles ISO Coated v2 (FOGRA39) y corrección acumulativa con trazabilidad por pliego.
+        </span>
+        <button onclick="closeBatchHotfolderModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition cursor-pointer">
           Cerrar
         </button>
       </div>
@@ -4380,6 +4599,424 @@
           fixAllBtn.disabled = false;
           fixAllBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Corregir Todos a 100% K';
         }
+      }
+    }
+
+    // =========================================================================
+    // PROCESAMIENTO POR LOTE Y CARPETA CALIENTE (HOT-FOLDER)
+    // =========================================================================
+    let batchQueueItems = [];
+    let hotfolderPollTimer = null;
+
+    function openBatchHotfolderModal() {
+      const modal = document.getElementById('batchHotfolderModal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        refreshHotfolderStatus();
+        setupBatchDropzone();
+      }
+    }
+
+    function closeBatchHotfolderModal() {
+      const modal = document.getElementById('batchHotfolderModal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        if (hotfolderPollTimer) {
+          clearInterval(hotfolderPollTimer);
+          hotfolderPollTimer = null;
+        }
+      }
+    }
+
+    function switchBatchTab(tabName) {
+      const tabQueue = document.getElementById('tabContentBatchQueue');
+      const tabHf = document.getElementById('tabContentHotfolder');
+      const btnQueue = document.getElementById('tabBtnBatchQueue');
+      const btnHf = document.getElementById('tabBtnHotfolder');
+
+      if (tabName === 'queue') {
+        if (tabQueue) tabQueue.classList.remove('hidden');
+        if (tabHf) tabHf.classList.add('hidden');
+        if (btnQueue) {
+          btnQueue.className = 'px-4 py-2.5 text-xs font-bold border-b-2 border-amber-400 text-amber-300 transition flex items-center gap-2 cursor-pointer';
+        }
+        if (btnHf) {
+          btnHf.className = 'px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-white/70 hover:text-white transition flex items-center gap-2 cursor-pointer';
+        }
+      } else {
+        if (tabQueue) tabQueue.classList.add('hidden');
+        if (tabHf) tabHf.classList.remove('hidden');
+        if (btnQueue) {
+          btnQueue.className = 'px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-white/70 hover:text-white transition flex items-center gap-2 cursor-pointer';
+        }
+        if (btnHf) {
+          btnHf.className = 'px-4 py-2.5 text-xs font-bold border-b-2 border-amber-400 text-amber-300 transition flex items-center gap-2 cursor-pointer';
+        }
+        refreshHotfolderStatus();
+        if (!hotfolderPollTimer) {
+          hotfolderPollTimer = setInterval(refreshHotfolderStatus, 5000);
+        }
+      }
+    }
+
+    function setupBatchDropzone() {
+      const dz = document.getElementById('batchDropzone');
+      if (!dz || dz.dataset.listening) return;
+      dz.dataset.listening = 'true';
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dz.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dz.classList.add('border-sky-600', 'bg-sky-100/60');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dz.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dz.classList.remove('border-sky-600', 'bg-sky-100/60');
+        });
+      });
+
+      dz.addEventListener('drop', (e) => {
+        const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+        if (files.length > 0) {
+          uploadBatchFiles(files);
+        }
+      });
+    }
+
+    function onBatchFilesSelected(input) {
+      if (input.files && input.files.length > 0) {
+        uploadBatchFiles(Array.from(input.files));
+        input.value = '';
+      }
+    }
+
+    async function uploadBatchFiles(files) {
+      const tbody = document.getElementById('batchTableBody');
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-8 text-center text-slate-500">
+              <i class="fa-solid fa-spinner fa-spin text-sky-600 text-xl mb-2 block"></i>
+              Subiendo y analizando ${files.length} archivo(s) en paralelo...
+            </td>
+          </tr>
+        `;
+      }
+
+      const formData = new FormData();
+      files.forEach(f => formData.append('files', f));
+      formData.append('profile_id', 'OFFSET_300');
+      formData.append('icc_option', 'preserve');
+
+      try {
+        const resp = await fetch('/api/batch/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await resp.json();
+
+        if (resp.ok && data.status === 'success') {
+          batchQueueItems.push(...data.jobs);
+          renderBatchQueueTable();
+        } else {
+          alert('Error procesando lote: ' + (data.detail || 'Fallo del servidor'));
+          renderBatchQueueTable();
+        }
+      } catch (err) {
+        console.error('Error al subir lote:', err);
+        alert('Error de red al subir el lote de archivos.');
+        renderBatchQueueTable();
+      }
+    }
+
+    function renderBatchQueueTable() {
+      const tbody = document.getElementById('batchTableBody');
+      const countTotal = document.getElementById('batchCountTotal');
+      const countApp = document.getElementById('batchCountApproved');
+      const countErr = document.getElementById('batchCountErrors');
+      const btnFixAll = document.getElementById('btnBatchFixAll');
+      const btnZip = document.getElementById('btnBatchZip');
+
+      if (!tbody) return;
+
+      if (batchQueueItems.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-8 text-center text-slate-400">
+              No hay archivos en la cola. Arrastra varios PDFs arriba para comenzar.
+            </td>
+          </tr>
+        `;
+        if (countTotal) countTotal.textContent = '0 archivos';
+        if (countApp) countApp.textContent = '0 conformes';
+        if (countErr) countErr.textContent = '0 con errores';
+        if (btnFixAll) btnFixAll.disabled = true;
+        if (btnZip) btnZip.disabled = true;
+        return;
+      }
+
+      let approved = 0;
+      let withErrors = 0;
+
+      tbody.innerHTML = batchQueueItems.map((item) => {
+        const isApproved = item.status === 'APPROVED' || item.status === 'FIXED';
+        if (isApproved) approved++; else withErrors++;
+
+        const badgeClass = isApproved
+          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+          : 'bg-rose-100 text-rose-800 border-rose-300';
+        const badgeLabel = item.status === 'FIXED' ? 'CORREGIDO' : (isApproved ? 'CONFORME' : 'CON ERRORES');
+
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-2.5 px-3 font-semibold text-slate-800">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-file-pdf text-rose-500"></i>
+                <span class="truncate max-w-xs" title="${item.filename}">${item.filename}</span>
+              </div>
+            </td>
+            <td class="py-2.5 px-3 text-center">${item.pages_count || 1} pág</td>
+            <td class="py-2.5 px-3 text-center text-slate-500">${item.file_size_mb} MB</td>
+            <td class="py-2.5 px-3 text-center">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeClass}">
+                ${badgeLabel}
+              </span>
+            </td>
+            <td class="py-2.5 px-3 text-[11px] text-slate-600">
+              ${item.errors_count > 0 ? `<span class="text-rose-600 font-bold">${item.errors_count} error(es)</span> · ` : ''}
+              ${item.warnings_count} adv · <span class="text-slate-400">${item.summary || 'Completado'}</span>
+            </td>
+            <td class="py-2.5 px-3 text-right">
+              <div class="inline-flex items-center gap-1.5">
+                <button onclick="loadBatchJobIntoInspector('${item.job_id}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold transition cursor-pointer" title="Abrir en pantalla principal">
+                  Abrir
+                </button>
+                <a href="/api/download-client-report/${item.job_id}" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[11px] font-semibold transition" title="Informe Cliente A4">
+                  Informe
+                </a>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      if (countTotal) countTotal.textContent = `${batchQueueItems.length} archivos`;
+      if (countApp) countApp.textContent = `${approved} conformes`;
+      if (countErr) countErr.textContent = `${withErrors} con errores`;
+      if (btnFixAll) btnFixAll.disabled = (batchQueueItems.length === 0);
+      if (btnZip) btnZip.disabled = (batchQueueItems.length === 0);
+    }
+
+    function clearBatchQueue() {
+      batchQueueItems = [];
+      renderBatchQueueTable();
+    }
+
+    async function executeBatchFixAll(btn) {
+      if (batchQueueItems.length === 0) return;
+
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Corrigiendo lote...';
+
+      const jobIds = batchQueueItems.map(item => item.job_id);
+
+      try {
+        const resp = await fetch('/api/batch/fix-all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_ids: jobIds })
+        });
+        const data = await resp.json();
+
+        if (resp.ok && data.status === 'success') {
+          batchQueueItems.forEach(item => {
+            item.status = 'FIXED';
+            item.errors_count = 0;
+            item.summary = 'Auto-corregido con éxito (100% K, sangrado, hairlines)';
+          });
+          renderBatchQueueTable();
+          alert('Lote corregido con éxito. Puedes descargar el ZIP con todos los archivos.');
+        } else {
+          alert('Error corrigiendo el lote: ' + (data.detail || 'Fallo desconocido'));
+        }
+      } catch (err) {
+        console.error('Error al corregir lote:', err);
+        alert('Error de conexión al procesar la corrección por lote.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+
+    async function executeBatchDownloadZip(btn) {
+      if (batchQueueItems.length === 0) return;
+
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creando ZIP...';
+
+      const jobIds = batchQueueItems.map(item => item.job_id);
+
+      try {
+        const resp = await fetch('/api/batch/download-zip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_ids: jobIds })
+        });
+
+        if (resp.ok) {
+          const blob = await resp.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `Lote_Corregido_IntelliPrint_${Date.now()}.zip`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+        } else {
+          alert('Error generando el archivo ZIP.');
+        }
+      } catch (err) {
+        console.error('Error descargando ZIP:', err);
+        alert('Error de conexión al descargar el ZIP.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+
+    function loadBatchJobIntoInspector(jobId) {
+      currentJobId = jobId;
+      closeBatchHotfolderModal();
+      fetch(`/api/report/${jobId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.triple_result) {
+            renderResults(data);
+          }
+        })
+        .catch(err => console.error('Error cargando trabajo:', err));
+    }
+
+    // --- HOT-FOLDER FUNCTIONS ---
+
+    async function refreshHotfolderStatus() {
+      try {
+        const resp = await fetch('/api/hotfolder/status');
+        const data = await resp.json();
+        if (!resp.ok) return;
+
+        const dot = document.getElementById('hfStatusDot');
+        const text = document.getElementById('hfStatusText');
+        const btnToggle = document.getElementById('btnHfToggle');
+        const countIn = document.getElementById('hfCountIn');
+        const countApp = document.getElementById('hfCountApproved');
+        const countRej = document.getElementById('hfCountRejected');
+        const pathIn = document.getElementById('hfPathIn');
+        const pathApp = document.getElementById('hfPathApproved');
+        const pathRej = document.getElementById('hfPathRejected');
+        const logBody = document.getElementById('hfLogBody');
+
+        if (data.running) {
+          if (dot) dot.className = 'w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse';
+          if (text) {
+            text.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800';
+            text.textContent = 'ACTIVO (VIGILANDO)';
+          }
+          if (btnToggle) {
+            btnToggle.className = 'inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer';
+            btnToggle.innerHTML = '<i class="fa-solid fa-stop"></i> Detener Demonio';
+          }
+        } else {
+          if (dot) dot.className = 'w-3.5 h-3.5 rounded-full bg-slate-400';
+          if (text) {
+            text.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700';
+            text.textContent = 'DETENIDO';
+          }
+          if (btnToggle) {
+            btnToggle.className = 'inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer';
+            btnToggle.innerHTML = '<i class="fa-solid fa-play"></i> Iniciar Demonio';
+          }
+        }
+
+        if (countIn) countIn.textContent = data.queue_counts?.in || 0;
+        if (countApp) countApp.textContent = data.queue_counts?.approved || 0;
+        if (countRej) countRej.textContent = data.queue_counts?.rejected || 0;
+
+        if (pathIn && data.paths?.in) pathIn.textContent = data.paths.in;
+        if (pathApp && data.paths?.out_approved) pathApp.textContent = data.paths.out_approved;
+        if (pathRej && data.paths?.out_rejected) pathRej.textContent = data.paths.out_rejected;
+
+        if (logBody) {
+          const events = data.recent_events || [];
+          if (events.length === 0) {
+            logBody.innerHTML = `
+              <tr>
+                <td colspan="5" class="py-6 text-center text-slate-400">
+                  No hay registros recientes. Deposita un PDF en <code class="font-mono text-slate-600">hotfolder/in/</code> para probar.
+                </td>
+              </tr>
+            `;
+          } else {
+            logBody.innerHTML = events.map(ev => {
+              const isApp = ev.status === 'APPROVED';
+              const badgeClass = isApp
+                ? 'bg-emerald-100 text-emerald-800'
+                : 'bg-rose-100 text-rose-800';
+              return `
+                <tr class="hover:bg-slate-50 transition">
+                  <td class="py-2 px-3 text-slate-400 font-mono text-[11px]">${ev.timestamp}</td>
+                  <td class="py-2 px-3 font-semibold text-slate-800">${ev.filename}</td>
+                  <td class="py-2 px-3 text-center">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">${ev.status}</span>
+                  </td>
+                  <td class="py-2 px-3 text-slate-600 text-[11px]">${ev.message}</td>
+                  <td class="py-2 px-3 font-mono text-slate-500 text-[11px]">${ev.destination || '-'}</td>
+                </tr>
+              `;
+            }).join('');
+          }
+        }
+      } catch (err) {
+        console.error('Error consultando hotfolder:', err);
+      }
+    }
+
+    async function toggleHotfolderDaemon(btn) {
+      try {
+        const statusResp = await fetch('/api/hotfolder/status');
+        const st = await statusResp.json();
+        const action = st.running ? 'stop' : 'start';
+        await fetch(`/api/hotfolder/${action}`, { method: 'POST' });
+        await refreshHotfolderStatus();
+      } catch (err) {
+        console.error('Error conmutando demonio hotfolder:', err);
+      }
+    }
+
+    async function triggerHotfolderProcessNow(btn) {
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Escaneando...';
+      try {
+        const resp = await fetch('/api/hotfolder/process-now', { method: 'POST' });
+        const data = await resp.json();
+        await refreshHotfolderStatus();
+        alert(`Escaneo completado: ${data.processed_count} archivo(s) procesados.`);
+      } catch (err) {
+        console.error('Error forzando escaneo hotfolder:', err);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
       }
     }
   </script>

@@ -12,8 +12,19 @@ uploads/*
 !uploads/.gitkeep
 jobs/*
 !jobs/.gitkeep
+hotfolder/in/*
+!hotfolder/in/.gitkeep
+hotfolder/processing/*
+!hotfolder/processing/.gitkeep
+hotfolder/out_aprobados/*
+!hotfolder/out_aprobados/.gitkeep
+hotfolder/out_rechazados/*
+!hotfolder/out_rechazados/.gitkeep
+hotfolder/hotfolder_events.json
 
 # System & OS
+desktop.ini
+*.ini
 .DS_Store
 Thumbs.db
 .tmp.driveupload/

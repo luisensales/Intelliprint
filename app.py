@@ -6,7 +6,7 @@ import uuid
 import time
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
@@ -40,6 +40,15 @@ from barcode_engine import (
     inspect_barcodes_in_pdf,
     fix_barcodes_in_pdf,
     render_barcode_preview_image,
+)
+from hotfolder_engine import (
+    hotfolder_service,
+    process_batch_upload,
+    batch_fix_jobs,
+    create_batch_zip,
+    IN_DIR,
+    APPROVED_DIR,
+    REJECTED_DIR,
 )
 
 BASE_DIR = Path(__file__).parent
@@ -2713,6 +2722,132 @@ async def preview_barcode_endpoint(
         return Response(content=img_bytes, media_type="image/jpeg")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generando previsualización de código: {e}")
+
+
+# =============================================================================
+# ENDPOINTS: PROCESAMIENTO POR LOTE (MULTI-PDF) Y CARPETA CALIENTE (HOT-FOLDER)
+# =============================================================================
+
+@app.post("/api/batch/upload")
+async def batch_upload_endpoint(
+    files: List[UploadFile] = File(...),
+    profile_id: str = Form("OFFSET_300"),
+    icc_option: str = Form("preserve"),
+    selected_icc: Optional[str] = Form(None)
+):
+    """Sube y analiza múltiples archivos PDF en paralelo."""
+    if not files:
+        raise HTTPException(status_code=400, detail="No se enviaron archivos.")
+
+    file_tuples = []
+    for f in files:
+        if not f.filename.lower().endswith(".pdf"):
+            continue
+        content = await f.read()
+        file_tuples.append((f.filename, content))
+
+    if not file_tuples:
+        raise HTTPException(status_code=400, detail="Ninguno de los archivos subidos es un PDF válido.")
+
+    results = process_batch_upload(
+        files=file_tuples,
+        profile_id=profile_id,
+        icc_option=icc_option,
+        selected_icc=selected_icc
+    )
+    return {"status": "success", "total_uploaded": len(results), "jobs": results}
+
+
+@app.post("/api/batch/fix-all")
+async def batch_fix_all_endpoint(request: Request):
+    """Aplica la auto-corrección acumulativa completa a una lista de trabajos."""
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    job_ids = body.get("job_ids", [])
+    if not job_ids:
+        raise HTTPException(status_code=400, detail="Lista de job_ids vacía.")
+
+    results = batch_fix_jobs(job_ids)
+    return {"status": "success", "results": results}
+
+
+@app.post("/api/batch/download-zip")
+async def batch_download_zip_endpoint(request: Request):
+    """Empaqueta y descarga un archivo ZIP con los PDFs corregidos e informes del lote."""
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    job_ids = body.get("job_ids", [])
+    if not job_ids:
+        raise HTTPException(status_code=400, detail="No se seleccionaron trabajos para el ZIP.")
+
+    zip_bytes = create_batch_zip(job_ids)
+    now_str = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"Lote_Corregido_IntelliPrint_{now_str}.zip"
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.get("/api/hotfolder/status")
+async def hotfolder_status_endpoint():
+    """Consulta el estado del demonio de carpeta caliente y los contadores de colas."""
+    return hotfolder_service.get_status()
+
+
+@app.post("/api/hotfolder/start")
+async def hotfolder_start_endpoint():
+    """Inicia el demonio de vigilancia de hotfolder/in/."""
+    hotfolder_service.start()
+    return {"status": "success", "message": "Servicio de Carpeta Caliente iniciado.", "running": True}
+
+
+@app.post("/api/hotfolder/stop")
+async def hotfolder_stop_endpoint():
+    """Detiene el demonio de vigilancia de hotfolder/in/."""
+    hotfolder_service.stop()
+    return {"status": "success", "message": "Servicio de Carpeta Caliente detenido.", "running": False}
+
+
+@app.post("/api/hotfolder/process-now")
+async def hotfolder_process_now_endpoint():
+    """Fuerza el procesamiento inmediato de todos los PDFs presentes en hotfolder/in/."""
+    in_files = sorted(list(IN_DIR.glob("*.pdf")), key=lambda p: p.stat().st_mtime)
+    processed = []
+    for f in in_files:
+        res = hotfolder_service.process_file_sync(f)
+        if res:
+            processed.append(res)
+    return {"status": "success", "processed_count": len(processed), "items": processed}
+
+
+@app.get("/api/hotfolder/download-all/{category}")
+async def hotfolder_download_all_endpoint(category: str):
+    """Descarga como ZIP todos los archivos de aprobados o rechazados."""
+    target_dir = APPROVED_DIR if category == "approved" else REJECTED_DIR
+    files = list(target_dir.glob("*.*"))
+    if not files:
+        raise HTTPException(status_code=404, detail="No hay archivos en esta carpeta.")
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in files:
+            zf.write(f, arcname=f.name)
+    zip_buffer.seek(0)
+    now_str = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"HotFolder_{category.capitalize()}_{now_str}.zip"
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 if __name__ == "__main__":

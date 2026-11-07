@@ -606,3 +606,4 @@ def render_barcode_preview_image(
     img_bytes = pix.tobytes(output="jpeg")
     doc.close()
     return img_bytes
+
