@@ -28,6 +28,7 @@ from geometry_fixer import fix_pdf_boxes_and_bleed
 from font_vectorizer import outline_fonts_in_pdf
 from mirror_bleed_generator import generate_mirror_bleed
 from printer_marks_generator import add_printer_marks_to_pdf
+from tac_limiter import limit_pdf_tac
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -452,6 +453,7 @@ async def download_pdf_file(job_id: str):
     meta = job_data.get("job_meta", {})
     pdf_p = (
         meta.get("last_fixed_pdf_path")
+        or meta.get("tac_limited_pdf_path")
         or meta.get("printer_marks_pdf_path")
         or meta.get("mirror_bleed_pdf_path")
         or meta.get("fonts_outlined_pdf_path")
@@ -1553,6 +1555,96 @@ async def download_printer_marks_pdf(job_id: str):
         path=fixed_path,
         media_type="application/pdf",
         filename=f"IntelliPrint_{clean_name}_Marcas.pdf"
+    )
+
+
+@app.post("/api/limit-tac/{job_id}")
+async def limit_tac_endpoint(
+    job_id: str,
+    max_tac: float = 300.0
+):
+    """
+    Fase 3: Limita la cobertura total de tinta (TAC / TIC) al 300% (o valor especificado) mediante UCR.
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    source_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("tac_limited_pdf_path")
+        or job_meta.get("printer_marks_pdf_path")
+        or job_meta.get("mirror_bleed_pdf_path")
+        or job_meta.get("fonts_outlined_pdf_path")
+        or job_meta.get("bleed_fixed_pdf_path")
+        or job_meta.get("hairline_fixed_pdf_path")
+        or job_meta.get("icc_fixed_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not source_pdf or not Path(source_pdf).exists():
+        raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
+
+    output_path = JOBS_DIR / f"{safe_id}_tac_limited.pdf"
+    result = limit_pdf_tac(source_pdf, str(output_path), max_tac_percent=max_tac)
+
+    job_meta["has_tac_limited"] = True
+    job_meta["tac_limited_pdf_path"] = str(output_path)
+    job_meta["last_fixed_pdf_path"] = str(output_path)
+
+    # Regenerar certificado técnico PDF
+    cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
+    try:
+        generate_preflight_certificate_pdf(job_data, cert_path)
+    except Exception as e:
+        print(f"[limit-tac] Error regenerando certificado: {e}")
+
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "success",
+        "job_id": safe_id,
+        "images_inspected": result.get("images_inspected", 0),
+        "images_clamped": result.get("images_clamped", 0),
+        "peak_tac_before": result.get("peak_tac_before", 0.0),
+        "target_max_tac": max_tac,
+        "download_url": f"/api/download-tac/{safe_id}",
+        "findings": job_data.get("findings", []),
+        "triple_result": job_data.get("triple_result", {})
+    }
+
+
+@app.get("/api/download-tac/{job_id}")
+async def download_tac_pdf(job_id: str):
+    """Descarga el PDF con cobertura de tinta limitada (TAC <= 300%)."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    fixed_path = job_data.get("job_meta", {}).get("tac_limited_pdf_path")
+    if not fixed_path or not Path(fixed_path).exists():
+        raise HTTPException(
+            status_code=404,
+            detail="PDF con TAC limitado no encontrado."
+        )
+
+    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    clean_name = filename.replace(".pdf", "")
+    return FileResponse(
+        path=fixed_path,
+        media_type="application/pdf",
+        filename=f"IntelliPrint_{clean_name}_TAC300.pdf"
     )
 
 

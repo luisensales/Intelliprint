@@ -194,6 +194,9 @@
             <button onclick="applyPrinterMarks(this)" id="btnPrinterMarks" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer" title="Inyectar marcas de corte, cruces de registro y tiras CMYK">
               <i class="fa-solid fa-crop-simple text-amber-400"></i> <span>Marcas de Imprenta</span>
             </button>
+            <button onclick="applyTacLimiter(this)" id="btnTacLimiter" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer" title="Limitar cobertura total de tinta al 300% (evita repintado)">
+              <i class="fa-solid fa-droplet text-cyan-400"></i> <span>Limitar TAC 300%</span>
+            </button>
             <button id="downloadJsonBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-code"></i> JSON Oficial
             </button>
@@ -2279,6 +2282,54 @@
       } catch (err) {
         console.error('Error:', err);
         alert('Error de conexión al añadir marcas de imprenta.');
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Fase 3: Limitador de Cobertura Total de Tinta (TAC 300%)
+    // -----------------------------------------------------------------------
+    async function applyTacLimiter(btn) {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo.');
+        return;
+      }
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Limitando TAC a 300%...';
+
+      try {
+        const res = await fetch(`/api/limit-tac/${currentJobId}?max_tac=300`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-circle-check text-cyan-400 mr-1"></i> TAC ≤ 300% OK';
+          btn.classList.remove('bg-slate-800', 'hover:bg-slate-700');
+          btn.classList.add('bg-cyan-800', 'hover:bg-cyan-900');
+
+          // Actualizar botón de descarga de la cabecera
+          const pdfBtn = document.getElementById('downloadPdfBtn');
+          const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+          if (pdfBtn && data.download_url) {
+            pdfBtn.href = data.download_url;
+            pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+          }
+          if (pdfBtnLabel) {
+            pdfBtnLabel.textContent = 'Descargar PDF (TAC ≤ 300%)';
+          }
+
+          // Abrir PDF con TAC limitado en pestaña nueva
+          window.open(data.download_url, '_blank');
+        } else {
+          alert('Error al limitar TAC: ' + (data.detail || 'Error desconocido'));
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        alert('Error de conexión al limitar TAC.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
       }
