@@ -1198,7 +1198,6 @@
     const filePrompt = document.getElementById('filePrompt');
     const fileInfo = document.getElementById('fileInfo');
     const fileName = document.getElementById('fileName');
-    const fileSize = document.getElementById('fileSize');
     const removeFileBtn = document.getElementById('removeFileBtn');
     const startCheckBtn = document.getElementById('startCheckBtn');
     const iccCatalogSelect = document.getElementById('iccCatalogSelect');
@@ -1265,7 +1264,6 @@
       selectedFile = file;
       fileName.textContent = file.name;
       const mbStr = (file.size / (1024 * 1024)).toFixed(2);
-      if (fileSize) fileSize.textContent = `${mbStr} MB`;
       const metaSpan = document.getElementById('fileMetaSpan');
       if (metaSpan) metaSpan.textContent = `(${mbStr} MB)`;
 
@@ -3103,15 +3101,13 @@
           }
         }
 
-        // ── 5. Actualizar KPI Card de Color (badgeColor)
-        const badgeColor = document.getElementById('badgeColor');
-        const descColor = document.getElementById('descColor');
-        if (badgeColor) {
-          badgeColor.textContent = 'APTO (CMYK)';
-          badgeColor.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200';
-        }
-        if (descColor) {
-          descColor.textContent = 'Imágenes convertidas exitosamente a CMYK mediante perfil ICC.';
+        // ── 5. Actualizar badge técnico si ya no restan incidencias
+        if (remainingCount === 0) {
+          const techBadge = document.getElementById('badgeTechnical');
+          if (techBadge) {
+            techBadge.textContent = 'APTO';
+            techBadge.className = 'text-sm font-bold px-3 py-1 rounded-full inline-block bg-emerald-100 text-emerald-800 border border-emerald-300';
+          }
         }
 
         // ── 6. Actualizar modelo de datos en memoria

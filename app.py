@@ -553,7 +553,7 @@ async def convert_images_to_cmyk(
             dst_icc_path = temp_icc_file
         else:
             # Si no hay ICC embebido, usar el seleccionado en el job o el predeterminado
-            fallback_name = job_data.get("job_meta", {}).get("selected_icc", "ISOcoated_v2_eci.icc")
+            fallback_name = job_data.get("job_meta", {}).get("selected_icc") or "ISOcoated_v2_eci.icc"
             fallback_path = ICC_PROFILES_DIR / fallback_name
             if not fallback_path.exists():
                 fallback_path = ICC_PROFILES_DIR / "ISOcoated_v2_300_bas.icc"
