@@ -16,7 +16,9 @@ def add_printer_marks_to_pdf(
     output_path: str,
     slug_margin_mm: float = 10.0,
     bleed_mm: float = 3.0,
-    job_filename: Optional[str] = None
+    job_filename: Optional[str] = None,
+    job_id: Optional[str] = None,
+    base_url: str = "",
 ) -> Dict[str, Any]:
     """
     Añade marcas de imprenta estándar ISO a todas las páginas de un PDF:
@@ -125,6 +127,16 @@ def add_printer_marks_to_pdf(
         # 4. Información de Trabajo (Slug)
         info_text = f"{doc_name} · Pág {idx + 1}/{total_pages} · {now_str} · IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII"
         np.insert_text(pymupdf.Point(margin, slug_pt / 2 + 2), info_text, fontsize=6.5, color=(0.2, 0.2, 0.2))
+
+        # Código QR de Trazabilidad para el Maquinista
+        if job_id:
+            try:
+                from traceability_engine import embed_traceability_qr
+                qr_sz = slug_pt * 0.75
+                qr_rect = pymupdf.Rect(margin - qr_sz - 4, slug_pt / 2 - qr_sz / 2, margin - 4, slug_pt / 2 + qr_sz / 2)
+                embed_traceability_qr(np, qr_rect, job_id=job_id, base_url=base_url)
+            except Exception:
+                pass
 
     temp_marked_path = str(output_path) + ".tmp.pdf"
     dst_doc.save(temp_marked_path)

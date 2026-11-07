@@ -215,6 +215,9 @@
             <button onclick="openSafetyMarginModal()" id="btnOpenSafetyMargin" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Inspector de Margen de Seguridad y Lomo / Medianil">
               <i class="fa-solid fa-ruler-combined text-amber-200"></i> <span>Margen & Lomo</span>
             </button>
+            <button onclick="openPressOperatorSheet()" id="btnOpenPressSheet" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Ficha Técnica de Producción y Trazabilidad para el Maquinista (QR en Pliego)">
+              <i class="fa-solid fa-qrcode text-amber-300"></i> <span>Ficha Maquinista</span>
+            </button>
             <button id="downloadJsonBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-code"></i> JSON Oficial
             </button>
@@ -5366,6 +5369,14 @@
         if (overlay) overlay.classList.add('hidden');
       };
       tempImg.src = previewUrl;
+    }
+
+    function openPressOperatorSheet() {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo. Sube y analiza un PDF primero.');
+        return;
+      }
+      window.open(`/verify/${currentJobId}`, '_blank');
     }
   </script>
 </body>

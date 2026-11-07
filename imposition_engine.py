@@ -412,6 +412,8 @@ def generate_imposed_pdf(
     add_reg_crosses: bool = True,
     add_color_bar: bool = True,
     add_slug: bool = True,
+    job_id: Optional[str] = None,
+    base_url: str = "",
     user_cols: Optional[int] = None,
     user_rows: Optional[int] = None,
 ) -> Dict[str, Any]:
@@ -502,6 +504,8 @@ def generate_imposed_pdf(
                 add_slug=add_slug,
                 slug_text=f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · Cuadernillo · Pliego {k+1}/{sheets_needed} [Cara A] · Páginas [{p_front_left_idx+1} + {p_front_right_idx+1}]",
                 is_booklet=True,
+                job_id=job_id,
+                base_url=base_url,
             )
 
             # Lado Reverso
@@ -536,6 +540,8 @@ def generate_imposed_pdf(
                 add_slug=add_slug,
                 slug_text=f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · Cuadernillo · Pliego {k+1}/{sheets_needed} [Cara B] · Páginas [{p_back_left_idx+1} + {p_back_right_idx+1}]",
                 is_booklet=True,
+                job_id=job_id,
+                base_url=base_url,
             )
 
     # =========================================================================
@@ -608,6 +614,8 @@ def generate_imposed_pdf(
                     f"{total_poses_per_sheet} poses ({cols}×{rows}) · 100% · {pdf_state_label}"
                 ),
                 is_booklet=False,
+                job_id=job_id,
+                base_url=base_url,
             )
         else:
             sheets_count = math.ceil(num_src_pages / total_poses_per_sheet)
@@ -634,6 +642,8 @@ def generate_imposed_pdf(
                     add_slug=add_slug,
                     slug_text=f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · {pdf_path.name} · Pliego {sh_idx+1}/{sheets_count} · {total_poses_per_sheet} poses/pliego",
                     is_booklet=False,
+                    job_id=job_id,
+                    base_url=base_url,
                 )
 
     out_doc.save(str(output_path), deflate=True)
@@ -667,6 +677,8 @@ def _decorate_sheet(
     add_slug: bool,
     slug_text: str,
     is_booklet: bool = False,
+    job_id: Optional[str] = None,
+    base_url: str = "",
 ):
     """
     Inyecta marcas de corte vectoriales, cruces de registro, plegado, tiras densitométricas y slug.
@@ -757,12 +769,24 @@ def _decorate_sheet(
         full_slug = f"{slug_text} · {now_str}"
         slug_y = sheet_h_pt - (4.5 * PT_PER_MM)
         sheet.insert_text(
-            pymupdf.Point(12 * PT_PER_MM, slug_y),
+            pymupdf.Point(14 * PT_PER_MM, slug_y),
             full_slug,
             fontsize=6.5,
             fontname="helv",
             color=(0.25, 0.25, 0.25),
         )
+
+        # Inyectar Código QR de Trazabilidad para el Maquinista en el margen
+        if job_id:
+            try:
+                from traceability_engine import embed_traceability_qr
+                qr_sz = 9.0 * PT_PER_MM  # 9 mm
+                qr_x0 = 3.0 * PT_PER_MM
+                qr_y0 = sheet_h_pt - 10.5 * PT_PER_MM
+                qr_rect = pymupdf.Rect(qr_x0, qr_y0, qr_x0 + qr_sz, qr_y0 + qr_sz)
+                embed_traceability_qr(sheet, qr_rect, job_id=job_id, base_url=base_url)
+            except Exception:
+                pass
 
 
 def render_imposition_preview_image(

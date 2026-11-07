@@ -355,3 +355,4 @@ def render_safety_margin_preview(
     temp_doc.close()
     doc.close()
     return img_bytes
+

@@ -54,6 +54,11 @@ from safety_margin_engine import (
     inspect_safety_margins,
     render_safety_margin_preview,
 )
+from traceability_engine import (
+    generate_traceability_qr_bytes,
+    get_press_operator_data,
+    render_press_operator_html,
+)
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -1522,6 +1527,7 @@ async def download_mirror_bleed_pdf(job_id: str):
 @app.post("/api/add-printer-marks/{job_id}")
 async def add_printer_marks_endpoint(
     job_id: str,
+    request: Request,
     slug_margin_mm: float = 10.0,
     bleed_mm: float = 3.0
 ):
@@ -1559,7 +1565,9 @@ async def add_printer_marks_endpoint(
         str(output_path),
         slug_margin_mm=slug_margin_mm,
         bleed_mm=bleed_mm,
-        job_filename=filename
+        job_filename=filename,
+        job_id=safe_id,
+        base_url=str(request.base_url)
     )
 
     job_meta["has_printer_marks"] = True
@@ -2510,6 +2518,8 @@ async def generate_imposition_endpoint(job_id: str, request: Request):
             add_reg_crosses=add_reg,
             add_color_bar=add_color,
             add_slug=add_slug,
+            job_id=safe_id,
+            base_url=str(request.base_url),
         )
 
         job_meta["imposed_pdf_path"] = str(output_pdf)
@@ -2938,6 +2948,34 @@ async def preview_safety_margin_endpoint(
         return Response(content=img_bytes, media_type="image/jpeg")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generando previsualización de márgenes: {e}")
+
+
+# =============================================================================
+# ENDPOINTS: CÓDIGO QR DE TRAZABILIDAD Y FICHA DEL MAQUINISTA
+# =============================================================================
+
+@app.get("/verify/{job_id}", response_class=HTMLResponse)
+async def verify_press_operator_endpoint(job_id: str):
+    """Ficha Técnica de Producción y Trazabilidad en vivo para el Maquinista."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo de impresión no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    sheet_data = get_press_operator_data(job_data)
+    html_content = render_press_operator_html(sheet_data)
+    return HTMLResponse(content=html_content)
+
+
+@app.get("/api/qr/{job_id}")
+async def get_job_qr_endpoint(job_id: str, request: Request):
+    """Genera la imagen PNG del código QR de trazabilidad para este trabajo."""
+    safe_id = Path(job_id).name
+    qr_bytes = generate_traceability_qr_bytes(safe_id, base_url=str(request.base_url))
+    return Response(content=qr_bytes, media_type="image/png")
 
 
 if __name__ == "__main__":
