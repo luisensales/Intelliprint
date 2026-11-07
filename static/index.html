@@ -212,6 +212,9 @@
             <button onclick="openBatchHotfolderModal()" id="btnOpenBatch" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Procesamiento por Lote y Carpeta Caliente (Hot-Folder)">
               <i class="fa-solid fa-layer-group text-amber-300"></i> <span>Lote & Hot-Folder</span>
             </button>
+            <button onclick="openSafetyMarginModal()" id="btnOpenSafetyMargin" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Inspector de Margen de Seguridad y Lomo / Medianil">
+              <i class="fa-solid fa-ruler-combined text-amber-200"></i> <span>Margen & Lomo</span>
+            </button>
             <button id="downloadJsonBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-code"></i> JSON Oficial
             </button>
@@ -1629,6 +1632,149 @@
           IntelliPrint aplica perfiles ISO Coated v2 (FOGRA39) y corrección acumulativa con trazabilidad por pliego.
         </span>
         <button onclick="closeBatchHotfolderModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: INSPECTOR DE ZONA DE SEGURIDAD Y LOMO (GUTTER & SAFETY MARGIN) -->
+  <!-- ========================================================================= -->
+  <div id="safetyMarginModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="smModalTitle">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onclick="closeSafetyMarginModal()"></div>
+    <!-- Panel -->
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-5xl w-full border border-slate-200 overflow-hidden animate-fade-in flex flex-col max-h-[92vh]">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-amber-800 via-orange-800 to-slate-900 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
+            <i class="fa-solid fa-ruler-combined text-amber-300 text-lg"></i>
+          </div>
+          <div>
+            <h3 id="smModalTitle" class="text-sm font-bold flex items-center gap-2">
+              Inspector de Zona de Seguridad y Lomo / Medianil
+              <span id="smBadgeDocType" class="text-[10px] bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Hoja Suelta</span>
+            </h3>
+            <p class="text-xs text-amber-200 font-normal">Detección de textos y logos en peligro de guillotinado o deglución en el lomo de encuadernación</p>
+          </div>
+        </div>
+        <button onclick="closeSafetyMarginModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Main Body: 2 Columns Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-y-auto flex-1">
+        
+        <!-- Controls & Infractions Column (5 cols) -->
+        <div class="lg:col-span-5 p-5 space-y-4 border-r border-slate-200 bg-slate-50/70 overflow-y-auto">
+          <!-- Document Mode Selector -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <i class="fa-solid fa-book-open text-amber-600"></i> Tipo de Pieza / Encuadernación:
+            </label>
+            <select id="smBindingModeSelect" onchange="onSafetyMarginParamChange()" class="w-full text-xs font-semibold bg-white border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500">
+              <option value="auto">Auto-detectar (Páginas / Dimensiones)</option>
+              <option value="single_leaf">Hoja Suelta / Tarjeta (Sin lomo · 3 mm corte)</option>
+              <option value="bound_publication">Publicación Encuadernada (Con lomo/medianil)</option>
+            </select>
+            <p id="smModeDesc" class="text-[11px] text-slate-500 italic">Identificando si la pieza lleva lomo o es formato tarjeta...</p>
+          </div>
+
+          <!-- Margins Configuration -->
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Margen Seguridad Corte:</label>
+              <div class="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1.5">
+                <input type="number" id="smSafetyMarginInput" value="3.0" step="0.5" min="1.0" max="10.0" onchange="onSafetyMarginParamChange()" class="w-full text-xs font-bold outline-none">
+                <span class="text-xs text-slate-500">mm</span>
+              </div>
+            </div>
+
+            <div id="smGutterContainer">
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Margen Lomo / Medianil:</label>
+              <div class="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1.5">
+                <input type="number" id="smGutterMarginInput" value="8.0" step="0.5" min="4.0" max="25.0" onchange="onSafetyMarginParamChange()" class="w-full text-xs font-bold outline-none">
+                <span class="text-xs text-slate-500">mm</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Page Selector & Status Summary -->
+          <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-200">
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-bold text-slate-700">Página:</label>
+              <select id="smPageSelect" onchange="onSafetyMarginPageChange()" class="text-xs font-bold bg-white border border-slate-300 rounded-lg px-2.5 py-1">
+                <option value="0">Pág 1</option>
+              </select>
+            </div>
+            <div id="smPageStatusBadge" class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">
+              Conforme
+            </div>
+          </div>
+
+          <!-- Infractions List Container -->
+          <div class="space-y-2">
+            <span class="text-xs font-bold text-slate-700 flex items-center justify-between">
+              <span>Elementos Fuera de Margen:</span>
+              <span id="smInfractionCount" class="text-[11px] font-semibold text-slate-500">0 detectados</span>
+            </span>
+            <div id="smInfractionsList" class="space-y-2 max-h-64 overflow-y-auto pr-1">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview Column (7 cols) -->
+        <div class="lg:col-span-7 p-5 bg-slate-900 flex flex-col items-center justify-between min-h-[460px] relative overflow-hidden">
+          <!-- Legend Header -->
+          <div class="w-full flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-300 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 shrink-0">
+            <div class="flex items-center gap-1.5">
+              <span class="w-3.5 h-0.5 bg-rose-500 inline-block border-b border-dashed border-rose-300"></span>
+              <span>Línea de Corte (TrimBox)</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3.5 h-0.5 bg-emerald-500 inline-block border-b border-dashed border-emerald-300"></span>
+              <span>Zona Seguridad (3 mm)</span>
+            </div>
+            <div id="smLegendSpine" class="flex items-center gap-1.5">
+              <span class="w-3.5 h-1 bg-purple-500 inline-block"></span>
+              <span>Lomo / Medianil (8 mm)</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 bg-rose-500/60 border border-rose-400 inline-block rounded-xs"></span>
+              <span>Peligro</span>
+            </div>
+          </div>
+
+          <!-- Loading overlay -->
+          <div id="smLoadingOverlay" class="absolute inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center text-white text-xs gap-2 hidden z-10">
+            <i class="fa-solid fa-spinner fa-spin text-amber-400 text-xl"></i>
+            <span>Inspeccionando geometrías y textos...</span>
+          </div>
+
+          <!-- Preview image -->
+          <div class="my-auto py-2">
+            <img id="smPreviewImg" src="" alt="Previsualización de Márgenes" class="max-h-[420px] w-auto object-contain rounded-lg shadow-2xl border border-slate-700 transition hidden">
+          </div>
+
+          <div id="smEmptyNotice" class="text-slate-400 text-xs text-center py-12">
+            <i class="fa-solid fa-ruler-combined text-3xl mb-2 text-slate-600 block"></i>
+            Cargando previsualización de márgenes...
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-between px-6 py-3.5 bg-slate-50 border-t border-slate-200 shrink-0">
+        <span class="text-[11px] text-slate-500 flex items-center gap-1.5">
+          <i class="fa-solid fa-circle-info text-amber-600"></i>
+          Todo texto a menos de 1,5 mm del corte tiene alto riesgo de amputación por holgura de guillotina (±1 mm).
+        </span>
+        <button onclick="closeSafetyMarginModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition cursor-pointer">
           Cerrar
         </button>
       </div>
@@ -5018,6 +5164,208 @@
         btn.disabled = false;
         btn.innerHTML = origHtml;
       }
+    }
+
+    // =========================================================================
+    // INSPECTOR DE MARGEN DE SEGURIDAD Y LOMO (GUTTER & SAFETY MARGIN)
+    // =========================================================================
+    let currentSafetyMarginReport = null;
+    let selectedSafetyMarginPageIndex = 0;
+
+    function openSafetyMarginModal() {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo. Sube y analiza un PDF primero.');
+        return;
+      }
+      const modal = document.getElementById('safetyMarginModal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        loadSafetyMarginInspection();
+      }
+    }
+
+    function closeSafetyMarginModal() {
+      const modal = document.getElementById('safetyMarginModal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    function onSafetyMarginParamChange() {
+      loadSafetyMarginInspection();
+    }
+
+    function onSafetyMarginPageChange() {
+      const sel = document.getElementById('smPageSelect');
+      if (sel) {
+        selectedSafetyMarginPageIndex = parseInt(sel.value, 10) || 0;
+        renderSafetyMarginPageIssues(selectedSafetyMarginPageIndex);
+        updateSafetyMarginPreview(selectedSafetyMarginPageIndex);
+      }
+    }
+
+    async function loadSafetyMarginInspection() {
+      if (!currentJobId) return;
+
+      const overlay = document.getElementById('smLoadingOverlay');
+      if (overlay) overlay.classList.remove('hidden');
+
+      const bindingMode = document.getElementById('smBindingModeSelect')?.value || 'auto';
+      const safetyMarginMm = parseFloat(document.getElementById('smSafetyMarginInput')?.value || '3.0');
+      const gutterMarginMm = parseFloat(document.getElementById('smGutterMarginInput')?.value || '8.0');
+
+      try {
+        const resp = await fetch(`/api/safety-margin/inspect/${currentJobId}?safety_margin_mm=${safetyMarginMm}&gutter_margin_mm=${gutterMarginMm}&binding_mode=${bindingMode}`);
+        const data = await resp.json();
+
+        if (resp.ok) {
+          currentSafetyMarginReport = data;
+
+          const badgeDocType = document.getElementById('smBadgeDocType');
+          const modeDesc = document.getElementById('smModeDesc');
+          const gutterContainer = document.getElementById('smGutterContainer');
+          const legendSpine = document.getElementById('smLegendSpine');
+
+          if (badgeDocType) {
+            badgeDocType.textContent = data.has_spine ? 'Con Lomo / Revista' : 'Hoja Suelta / Tarjeta (Sin lomo)';
+            badgeDocType.className = data.has_spine
+              ? 'text-[10px] bg-purple-400 text-slate-950 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider'
+              : 'text-[10px] bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider';
+          }
+          if (modeDesc) {
+            modeDesc.textContent = data.binding_mode_description;
+          }
+          if (gutterContainer) {
+            if (data.has_spine) gutterContainer.classList.remove('opacity-30', 'pointer-events-none');
+            else gutterContainer.classList.add('opacity-30', 'pointer-events-none');
+          }
+          if (legendSpine) {
+            if (data.has_spine) legendSpine.classList.remove('hidden');
+            else legendSpine.classList.add('hidden');
+          }
+
+          const sel = document.getElementById('smPageSelect');
+          if (sel && data.pages) {
+            sel.innerHTML = data.pages.map((p, idx) => {
+              const spineTxt = p.spine_side ? ` · Lomo ${p.spine_side}` : '';
+              const issuesTxt = p.total_issues > 0 ? ` (${p.total_issues} avisos)` : ' (OK)';
+              return `<option value="${idx}">Página ${p.page_number}${spineTxt}${issuesTxt}</option>`;
+            }).join('');
+            if (selectedSafetyMarginPageIndex >= data.pages.length) {
+              selectedSafetyMarginPageIndex = 0;
+            }
+            sel.value = String(selectedSafetyMarginPageIndex);
+          }
+
+          renderSafetyMarginPageIssues(selectedSafetyMarginPageIndex);
+          updateSafetyMarginPreview(selectedSafetyMarginPageIndex);
+        } else {
+          alert('Error inspeccionando márgenes: ' + (data.detail || 'Fallo del servidor'));
+          if (overlay) overlay.classList.add('hidden');
+        }
+      } catch (err) {
+        console.error('Error al inspeccionar márgenes:', err);
+        if (overlay) overlay.classList.add('hidden');
+      }
+    }
+
+    function renderSafetyMarginPageIssues(pageIdx) {
+      if (!currentSafetyMarginReport || !currentSafetyMarginReport.pages) return;
+      const pageData = currentSafetyMarginReport.pages[pageIdx];
+      if (!pageData) return;
+
+      const badge = document.getElementById('smPageStatusBadge');
+      const countEl = document.getElementById('smInfractionCount');
+      const listEl = document.getElementById('smInfractionsList');
+
+      const issues = pageData.issues || [];
+
+      if (issues.length === 0) {
+        if (badge) {
+          badge.className = 'text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800';
+          badge.textContent = '✓ Conforme (Márgenes OK)';
+        }
+        if (countEl) countEl.textContent = '0 detectados';
+        if (listEl) {
+          listEl.innerHTML = `
+            <div class="p-4 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/50 text-center text-xs text-emerald-800 space-y-1">
+              <i class="fa-solid fa-circle-check text-emerald-600 text-base"></i>
+              <div class="font-bold">Todos los textos y elementos respetan la zona de seguridad.</div>
+              <div class="text-[10px] text-emerald-700">Sin riesgo de corte en guillotina ni pérdida en lomo.</div>
+            </div>
+          `;
+        }
+        return;
+      }
+
+      const hasCrit = issues.some(i => i.severity === 'CRITICAL');
+      if (badge) {
+        badge.className = hasCrit
+          ? 'text-[11px] font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800'
+          : 'text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800';
+        badge.textContent = hasCrit ? `⚠️ ${pageData.critical_count} en Riesgo Crítico` : `${pageData.warning_count} Advertencias`;
+      }
+      if (countEl) countEl.textContent = `${issues.length} elementos`;
+
+      if (listEl) {
+        listEl.innerHTML = issues.map(iss => {
+          const isCrit = iss.severity === 'CRITICAL';
+          const isSpine = iss.is_spine_edge;
+          const bgBorder = isCrit ? 'border-rose-300 bg-rose-50/40 text-rose-900' : 'border-amber-300 bg-amber-50/40 text-amber-900';
+          const icon = isCrit ? 'fa-triangle-exclamation text-rose-600' : 'fa-circle-exclamation text-amber-600';
+          const badgeTag = isSpine
+            ? '<span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-bold text-[9px]">LOMO</span>'
+            : `<span class="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-bold text-[9px] uppercase">${iss.side}</span>`;
+
+          return `
+            <div class="p-2.5 rounded-xl border ${bgBorder} text-xs flex items-start gap-2 shadow-2xs">
+              <i class="fa-solid ${icon} mt-0.5 shrink-0"></i>
+              <div class="space-y-0.5 flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-1">
+                  <span class="font-bold font-mono truncate text-slate-800 bg-white/70 px-1 rounded">${iss.content}</span>
+                  <div class="flex items-center gap-1 shrink-0">
+                    ${badgeTag}
+                    <strong class="${isCrit ? 'text-rose-700' : 'text-amber-700'}">${iss.distance_mm} mm</strong>
+                  </div>
+                </div>
+                <p class="text-[10px] text-slate-600">${iss.description}</p>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function updateSafetyMarginPreview(pageIdx) {
+      if (!currentJobId) return;
+
+      const overlay = document.getElementById('smLoadingOverlay');
+      const previewImg = document.getElementById('smPreviewImg');
+      const emptyNotice = document.getElementById('smEmptyNotice');
+
+      const bindingMode = document.getElementById('smBindingModeSelect')?.value || 'auto';
+      const safetyMarginMm = parseFloat(document.getElementById('smSafetyMarginInput')?.value || '3.0');
+      const gutterMarginMm = parseFloat(document.getElementById('smGutterMarginInput')?.value || '8.0');
+
+      const previewUrl = `/api/safety-margin/preview/${currentJobId}?page_index=${pageIdx}&safety_margin_mm=${safetyMarginMm}&gutter_margin_mm=${gutterMarginMm}&binding_mode=${bindingMode}&dpi=130&t=${Date.now()}`;
+
+      if (overlay) overlay.classList.remove('hidden');
+
+      const tempImg = new Image();
+      tempImg.onload = () => {
+        if (previewImg) {
+          previewImg.src = previewUrl;
+          previewImg.classList.remove('hidden');
+        }
+        if (emptyNotice) emptyNotice.classList.add('hidden');
+        if (overlay) overlay.classList.add('hidden');
+      };
+      tempImg.onerror = () => {
+        if (overlay) overlay.classList.add('hidden');
+      };
+      tempImg.src = previewUrl;
     }
   </script>
 </body>

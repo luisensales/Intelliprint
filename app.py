@@ -50,6 +50,10 @@ from hotfolder_engine import (
     APPROVED_DIR,
     REJECTED_DIR,
 )
+from safety_margin_engine import (
+    inspect_safety_margins,
+    render_safety_margin_preview,
+)
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -2848,6 +2852,92 @@ async def hotfolder_download_all_endpoint(category: str):
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+# =============================================================================
+# ENDPOINTS: INSPECTOR DE ZONA DE SEGURIDAD Y LOMO (GUTTER & SAFETY MARGIN)
+# =============================================================================
+
+@app.get("/api/safety-margin/inspect/{job_id}")
+async def inspect_safety_margin_endpoint(
+    job_id: str,
+    safety_margin_mm: float = 3.0,
+    gutter_margin_mm: float = 8.0,
+    binding_mode: str = "auto"
+):
+    """Inspecciona la proximidad de textos y elementos a los bordes de corte y lomo."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    target_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("batch_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not target_pdf or not Path(target_pdf).exists():
+        raise HTTPException(status_code=404, detail="Archivo PDF no encontrado.")
+
+    try:
+        report = inspect_safety_margins(
+            pdf_path=target_pdf,
+            safety_margin_mm=safety_margin_mm,
+            gutter_margin_mm=gutter_margin_mm,
+            binding_mode=binding_mode,
+        )
+        return report
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error inspeccionando márgenes de seguridad: {e}")
+
+
+@app.get("/api/safety-margin/preview/{job_id}")
+async def preview_safety_margin_endpoint(
+    job_id: str,
+    page_index: int = 0,
+    safety_margin_mm: float = 3.0,
+    gutter_margin_mm: float = 8.0,
+    binding_mode: str = "auto",
+    dpi: int = 120
+):
+    """Renderiza una previsualización de la página con guías de corte, seguridad, lomo y resaltado de textos."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    target_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("batch_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not target_pdf or not Path(target_pdf).exists():
+        raise HTTPException(status_code=404, detail="Archivo PDF no encontrado.")
+
+    try:
+        img_bytes = render_safety_margin_preview(
+            pdf_path=target_pdf,
+            page_index=page_index,
+            safety_margin_mm=safety_margin_mm,
+            gutter_margin_mm=gutter_margin_mm,
+            binding_mode=binding_mode,
+            dpi=dpi
+        )
+        return Response(content=img_bytes, media_type="image/jpeg")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando previsualización de márgenes: {e}")
 
 
 if __name__ == "__main__":
