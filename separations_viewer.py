@@ -23,6 +23,50 @@ DEFAULT_CMYK_ICC = ICC_DIR / "ISOcoated_v2_300_bas.icc"
 DEFAULT_RGB_ICC = ICC_DIR / "sRGB2014.icc"
 
 
+def apply_substrate_simulation(
+    img_rgb: Image.Image,
+    paper_type: str = "uncoated",
+    simulate_black: bool = True
+) -> Image.Image:
+    """
+    Aplica simulación física de sustrato (Soft Proofing):
+    1. Tono y blanco natural del papel (estucado, offset no estucado, papel prensa ahuesado, kraft).
+    2. Ganancia de punto (TVI - oscurecimiento de medios tonos por absorción capilar de fibras).
+    3. Simulación de tinta negra (Dmax reducida en papeles porosos, evitando negros irreales de monitor).
+    """
+    arr = np.array(img_rgb, dtype=np.float32) / 255.0
+
+    if paper_type == "newsprint":
+        # Papel prensa: pasta mecánica con lignina, tono ahuesado/grisáceo, alta ganancia de punto
+        paper_white = np.array([0.915, 0.885, 0.825], dtype=np.float32)
+        black_floor = np.array([0.22, 0.21, 0.20], dtype=np.float32) if simulate_black else np.array([0.05, 0.05, 0.05], dtype=np.float32)
+        gamma = 0.84  # TVI Curva E (~26% ganancia en 50%)
+    elif paper_type == "kraft":
+        # Cartoncillo kraft reciclado: fibra marrón natural, absorción directa
+        paper_white = np.array([0.845, 0.755, 0.635], dtype=np.float32)
+        black_floor = np.array([0.20, 0.18, 0.15], dtype=np.float32) if simulate_black else np.array([0.05, 0.05, 0.05], dtype=np.float32)
+        gamma = 0.87
+    elif paper_type == "uncoated":
+        # Offset blanco natural / no estucado (FOGRA52): sin blanqueantes ópticos agresivos, tono crema suave
+        paper_white = np.array([0.965, 0.950, 0.920], dtype=np.float32)
+        black_floor = np.array([0.16, 0.16, 0.15], dtype=np.float32) if simulate_black else np.array([0.05, 0.05, 0.05], dtype=np.float32)
+        gamma = 0.89  # TVI Curva C (~19-22% ganancia en 50%)
+    else:  # coated (estucado brillante / semimate FOGRA39/51)
+        # Papel estucado con capa de carbonato/caolín y abrillantador óptico
+        paper_white = np.array([0.992, 0.992, 0.998], dtype=np.float32)
+        black_floor = np.array([0.06, 0.06, 0.06], dtype=np.float32) if simulate_black else np.array([0.03, 0.03, 0.03], dtype=np.float32)
+        gamma = 1.00  # TVI Curva A (~14% compensado en perfil)
+
+    # Aplicar curva de ganancia de punto a la imagen (en medios tonos)
+    if gamma != 1.0:
+        arr = np.power(arr, gamma)
+
+    # Interpolar entre cota de negro y blanco de papel
+    result = black_floor + arr * (paper_white - black_floor)
+    result = np.clip(result * 255.0, 0, 255).astype(np.uint8)
+    return Image.fromarray(result)
+
+
 def render_page_separation(
     pdf_path: str | Path,
     page_index: int = 0,
@@ -34,9 +78,13 @@ def render_page_separation(
     view_mode: str = "color",  # "color" o "grayscale"
     dpi: int = 120,
     icc_cmyk_path: Optional[str | Path] = None,
+    simulate_paper: bool = False,
+    paper_type: str = "coated",
+    simulate_black_ink: bool = True,
 ) -> bytes:
     """
-    Renderiza una página PDF simulando la selección de planchas de separación CMYK y tintas planas.
+    Renderiza una página PDF simulando la selección de planchas de separación CMYK y tintas planas,
+    con soporte opcional de Soft Proofing (simulación de soporte de papel y tinta).
 
     Devuelve los bytes JPEG de la imagen resultante.
     """
@@ -148,17 +196,26 @@ def render_page_separation(
     cmyk_img = Image.fromarray(arr, "CMYK")
 
     # Conversión colorimétrica CMYK -> RGB con perfiles ICC
+    intent = ImageCms.Intent.ABSOLUTE_COLORIMETRIC if simulate_paper else ImageCms.Intent.RELATIVE_COLORIMETRIC
     try:
         rgb_img = ImageCms.profileToProfile(
             cmyk_img,
             str(cmyk_profile),
             str(DEFAULT_RGB_ICC),
-            renderingIntent=ImageCms.Intent.RELATIVE_COLORIMETRIC,
+            renderingIntent=intent,
             outputMode="RGB",
         )
     except Exception:
         # Fallback a conversión básica PIL si falla el transform ICC
         rgb_img = cmyk_img.convert("RGB")
+
+    # Soft Proofing: Simulación física de papel y tinta si está activada
+    if simulate_paper:
+        rgb_img = apply_substrate_simulation(
+            rgb_img,
+            paper_type=paper_type,
+            simulate_black=simulate_black_ink
+        )
 
     buf = io.BytesIO()
     rgb_img.save(buf, format="JPEG", quality=85)

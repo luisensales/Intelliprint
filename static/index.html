@@ -717,6 +717,42 @@
                   <div id="sepOverprintStatus" class="hidden text-xs mt-1"></div>
                 </div>
 
+                <!-- Soft Proofing (Simulación de Soporte y Papel) -->
+                <div class="border border-slate-200 rounded-xl p-3 bg-white space-y-2.5">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <i class="fa-solid fa-scroll text-amber-600"></i> Simulación de Papel (Soft Proof)
+                    </span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" id="sepSimulatePaperChk" onchange="toggleSoftProofing()" class="sr-only peer">
+                      <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-600"></div>
+                    </label>
+                  </div>
+                  <p class="text-[11px] text-slate-500 leading-tight">
+                    Reproduce en pantalla el tono de blanco natural del soporte físico, la absorción capilar de fibras y la ganancia de punto real.
+                  </p>
+
+                  <div id="softProofingOptions" class="hidden space-y-2 pt-2 border-t border-slate-100">
+                    <div>
+                      <label class="block text-[11px] font-semibold text-slate-700 mb-1">Tipo de sustrato físico:</label>
+                      <select id="sepPaperTypeSelect" onchange="updateSeparationPreview()" class="w-full text-[11px] border border-slate-200 rounded-md p-1.5 bg-slate-50 text-slate-800 outline-none focus:ring-2 focus:ring-amber-500 font-medium">
+                        <option value="uncoated" selected>Offset no estucado / natural (FOGRA52 ahuesado)</option>
+                        <option value="coated">Estucado brillante / semimate (FOGRA39/51)</option>
+                        <option value="newsprint">Papel prensa / periódico (Ahuesado alta absorción)</option>
+                        <option value="kraft">Papel Kraft / Cartoncillo reciclado</option>
+                      </select>
+                    </div>
+                    <label class="flex items-center gap-2 cursor-pointer select-none text-[11px] text-slate-700">
+                      <input type="checkbox" id="sepSimulateBlackInkChk" checked onchange="updateSeparationPreview()" class="rounded text-amber-600 focus:ring-amber-500">
+                      <span>Simular densidad de tinta negra y ganancia TVI</span>
+                    </label>
+                    <div class="p-2 bg-amber-50/70 border border-amber-200 rounded text-[10px] text-amber-900 leading-tight">
+                      <i class="fa-solid fa-lightbulb text-amber-600 mr-1"></i>
+                      En papeles porosos o prensa, el negro no alcanza el negro puro de monitor (Dmax reducida) y los medios tonos ganan peso por capilaridad.
+                    </div>
+                  </div>
+                </div>
+
                 <!-- Mode & Options -->
                 <div class="space-y-2 pt-1 border-t border-slate-200 text-xs">
                   <div class="flex items-center justify-between">
@@ -745,8 +781,13 @@
                   <span>Generando separación CMYK...</span>
                 </div>
 
-                <!-- Separation image -->
-                <img id="sepPreviewImg" src="" alt="Previsualización de separación" class="max-h-[560px] w-auto object-contain rounded shadow-lg transition-opacity duration-200 hidden">
+                <!-- Separation image container -->
+                <div class="relative flex items-center justify-center max-w-full">
+                  <img id="sepPreviewImg" src="" alt="Previsualización de separación" class="max-h-[560px] w-auto object-contain rounded shadow-lg transition-opacity duration-200 hidden">
+                  <div id="sepSoftProofBadge" class="hidden absolute top-2 right-2 bg-amber-500/95 text-slate-950 font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-md shadow-md backdrop-blur-xs flex items-center gap-1.5 border border-amber-300">
+                    <i class="fa-solid fa-scroll text-slate-900"></i> <span id="sepSoftProofBadgeText">Soft Proof: Offset natural</span>
+                  </div>
+                </div>
                 <div id="sepEmptyNotice" class="text-slate-400 text-xs text-center py-12">
                   <i class="fa-solid fa-layer-group text-3xl mb-2 text-slate-600 block"></i>
                   Sube un PDF para inspeccionar sus separaciones de color.
@@ -3337,13 +3378,31 @@
       const sel = document.getElementById('sepSimProfileSelect');
       const badge = document.getElementById('sepActiveProfileBadge');
       const note = document.getElementById('sepSimProfileNote');
+      const paperSel = document.getElementById('sepPaperTypeSelect');
       if (sel && sel.value !== 'default') {
         const text = sel.options[sel.selectedIndex].text;
         if (badge) badge.textContent = text;
         if (note) note.textContent = `Simulación personalizada para verificar condición de impresión: ${text}`;
+        if (paperSel) {
+          if (sel.value.toLowerCase().includes('uncoated')) paperSel.value = 'uncoated';
+          else if (sel.value.toLowerCase().includes('coated')) paperSel.value = 'coated';
+        }
       } else {
         if (badge) badge.textContent = sepInitialProfileName;
         if (note) note.textContent = `Simulación sincronizada con la opción de color elegida al subir el PDF: ${sepInitialProfileName}`;
+      }
+      updateSeparationPreview();
+    }
+
+    function toggleSoftProofing() {
+      const chk = document.getElementById('sepSimulatePaperChk');
+      const opts = document.getElementById('softProofingOptions');
+      if (opts) {
+        if (chk && chk.checked) {
+          opts.classList.remove('hidden');
+        } else {
+          opts.classList.add('hidden');
+        }
       }
       updateSeparationPreview();
     }
@@ -3386,13 +3445,36 @@
         const mode = document.getElementById('sepViewMode')?.value || 'color';
         const profileSelect = document.getElementById('sepSimProfileSelect');
         const selectedProfile = profileSelect ? profileSelect.value : 'default';
+        const simulatePaper = document.getElementById('sepSimulatePaperChk')?.checked || false;
+        const paperType = document.getElementById('sepPaperTypeSelect')?.value || 'uncoated';
+        const simulateBlack = document.getElementById('sepSimulateBlackInkChk')?.checked ?? true;
 
         const overlay = document.getElementById('sepLoadingOverlay');
         const imgEl = document.getElementById('sepPreviewImg');
         const notice = document.getElementById('sepEmptyNotice');
+        const badge = document.getElementById('sepSoftProofBadge');
+        const badgeText = document.getElementById('sepSoftProofBadgeText');
+
+        if (badge) {
+          if (simulatePaper && mode === 'color') {
+            const paperLabels = {
+              'uncoated': 'Soft Proof: Offset no estucado (FOGRA52)',
+              'coated': 'Soft Proof: Estucado brillante (FOGRA39/51)',
+              'newsprint': 'Soft Proof: Papel prensa / periódico',
+              'kraft': 'Soft Proof: Papel Kraft / reciclado'
+            };
+            if (badgeText) badgeText.textContent = paperLabels[paperType] || 'Soft Proof: Papel activo';
+            badge.classList.remove('hidden');
+          } else {
+            badge.classList.add('hidden');
+          }
+        }
 
         if (overlay) overlay.classList.remove('hidden');
         let url = `/api/separations/${currentJobId}?page=${page}&c=${c}&m=${m}&y=${y}&k=${k}&mode=${mode}&dpi=110&icc=${encodeURIComponent(selectedProfile)}&t=${Date.now()}`;
+        if (simulatePaper && mode === 'color') {
+          url += `&simulate_paper=true&paper_type=${encodeURIComponent(paperType)}&simulate_black=${simulateBlack}`;
+        }
         if (disabledSpotColors && disabledSpotColors.size > 0) {
           url += `&disabled_spots=${encodeURIComponent(Array.from(disabledSpotColors).join(','))}`;
         }

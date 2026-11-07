@@ -1846,13 +1846,16 @@ async def get_page_separation(
     mode: str = "color",
     dpi: int = 110,
     use_converted: bool = True,
-    icc: Optional[str] = None
+    icc: Optional[str] = None,
+    simulate_paper: bool = False,
+    paper_type: str = "coated",
+    simulate_black: bool = True,
 ):
     """
     Renderiza la simulación de separaciones de color CMYK para la página seleccionada.
     Permite activar/desactivar individualmente planchas de Cian, Magenta, Amarillo y Negro
     para verificar visualmente sobreimpresiones y calados como en Adobe Acrobat Output Preview.
-    Aplica el perfil de simulación ICC escogido en la página inicial o el indicado en el visor.
+    Aplica el perfil de simulación ICC escogido y soporta Soft Proofing (simulación de papel y tinta).
     """
     job_json_path = JOBS_DIR / f"{job_id}.json"
     if not job_json_path.exists():
@@ -1935,7 +1938,10 @@ async def get_page_separation(
             disabled_spots=disabled_spots_list,
             view_mode=mode,
             dpi=min(200, max(60, dpi)),
-            icc_cmyk_path=icc_cmyk_path
+            icc_cmyk_path=icc_cmyk_path,
+            simulate_paper=simulate_paper,
+            paper_type=paper_type,
+            simulate_black_ink=simulate_black,
         )
         return Response(content=img_bytes, media_type="image/jpeg")
     except Exception as e:
