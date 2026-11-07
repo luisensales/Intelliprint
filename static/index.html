@@ -191,6 +191,9 @@
             <a id="downloadCertBtn" href="#" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-file-shield"></i> Descargar Ficha en PDF
             </a>
+            <a id="downloadClientReportBtn" href="#" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-sm transition" title="Exportar informe pedagógico de 1 página con instrucciones para el diseñador/cliente">
+              <i class="fa-solid fa-chalkboard-user"></i> Informe Cliente
+            </a>
             <button onclick="openBatchFixModal()" id="btnBatchFix" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Aplica en lote las correcciones estándar recomendadas para imprenta">
               <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> <span>Taller en 1 Clic</span>
             </button>
@@ -795,12 +798,15 @@
                   </div>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                   <a id="signedDownloadPdfBtn" href="#" class="flex items-center justify-center gap-2 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow transition text-center">
-                    <i class="fa-solid fa-file-pdf text-base"></i> Descargar PDF Producción (con ICC)
+                    <i class="fa-solid fa-file-pdf text-base"></i> Descargar PDF Producción
                   </a>
                   <a id="signedDownloadCertBtn" href="#" class="flex items-center justify-center gap-2 p-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow transition text-center">
-                    <i class="fa-solid fa-file-shield text-base"></i> Descargar Ficha Técnica en PDF
+                    <i class="fa-solid fa-file-shield text-base"></i> Ficha Técnica Oficial (PDF)
+                  </a>
+                  <a id="signedDownloadClientReportBtn" href="#" target="_blank" class="flex items-center justify-center gap-2 p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow transition text-center">
+                    <i class="fa-solid fa-chalkboard-user text-base"></i> Informe para el Cliente
                   </a>
                 </div>
               </div>
@@ -1436,6 +1442,11 @@
         downloadCertBtn.href = `/api/download-certificate/${currentJobId}`;
       }
 
+      const downloadClientBtn = document.getElementById('downloadClientReportBtn');
+      if (downloadClientBtn && currentJobId) {
+        downloadClientBtn.href = `/api/download-client-report/${currentJobId}`;
+      }
+
       // Hide signed panel for new analysis until signed
       const panel = document.getElementById('signedConfirmationPanel');
       if (panel) panel.classList.add('hidden');
@@ -1963,6 +1974,10 @@
           summEl.innerHTML = `Registrado por <b>${name}</b> en el archivo oficial (ID: ${currentJobId}). Decisión: <i>${release.label}</i>.<br>Guardado en <code>${data.saved_location}</code>. Ya puedes descargar los PDFs oficiales:`;
           document.getElementById('signedDownloadPdfBtn').href = data.production_pdf_url || `/api/download-pdf/${currentJobId}`;
           document.getElementById('signedDownloadCertBtn').href = data.certificate_url || `/api/download-certificate/${currentJobId}`;
+          const signedClientBtn = document.getElementById('signedDownloadClientReportBtn');
+          if (signedClientBtn) {
+            signedClientBtn.href = data.client_report_url || `/api/download-client-report/${currentJobId}`;
+          }
           panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 

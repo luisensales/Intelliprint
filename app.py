@@ -19,6 +19,7 @@ from preflight_engine import IntelliPrintEngine
 from icc_manager import get_available_icc_profiles, detect_pdf_output_intent, apply_icc_to_pdf, ICC_DIR
 from spellcheck_engine import save_word_to_glossary
 from report_generator import generate_preflight_certificate_pdf
+from client_report_generator import generate_client_educational_report_pdf
 from color_converter import convert_rgb_images_to_cmyk, extract_embedded_icc_to_tempfile
 from separations_viewer import render_page_separation
 from overprint_fixer import apply_overprint_to_dark_text, apply_overprint_to_technical_inks, fix_white_overprint, fix_rich_black_small_text
@@ -356,6 +357,7 @@ async def release_production(
         "status": "success",
         "release_result": job_data["triple_result"]["release"],
         "certificate_url": f"/api/download-certificate/{job_id}",
+        "client_report_url": f"/api/download-client-report/{job_id}",
         "production_pdf_url": f"/api/download-pdf/{job_id}",
         "json_report_url": f"/api/report/{job_id}",
         "saved_location": f"jobs/{job_id}.json"
@@ -379,6 +381,37 @@ async def download_certificate_pdf(job_id: str):
         path=str(cert_path),
         media_type="application/pdf",
         filename=f"Ficha_Tecnica_IntelliPrint_{clean_name}_{job_id}.pdf"
+    )
+
+
+@app.get("/api/download-client-report/{job_id}")
+async def download_client_report_pdf(job_id: str):
+    """
+    Descarga el Informe Pedagógico para el Cliente y Diseñador (1 página A4).
+    Explica en lenguaje constructivo y claro qué incidencias existen y cómo resolverlas en InDesign / Illustrator.
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    report_path = JOBS_DIR / f"{safe_id}_guia_cliente.pdf"
+    try:
+        generate_client_educational_report_pdf(job_data, report_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando informe pedagógico para el cliente: {e}")
+
+    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    stem = Path(filename).stem
+    download_filename = f"Guia_Cliente_IntelliPrint_{stem}_{safe_id[:8]}.pdf"
+
+    return FileResponse(
+        path=str(report_path),
+        media_type="application/pdf",
+        filename=download_filename
     )
 
 @app.get("/api/report/{job_id}")
