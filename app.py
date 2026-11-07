@@ -1977,6 +1977,7 @@ async def batch_fix_endpoint(
     icc: bool = True,
     geometry: bool = True,
     mirror_bleed: bool = False,
+    cmyk_images: bool = True,
     fonts: bool = True,
     tac: bool = True,
     printer_marks: bool = False
@@ -2130,6 +2131,37 @@ async def batch_fix_endpoint(
                     if f.get("rule_id") != "BLEED_GEOMETRY_3MM"
                     and "sangrado" not in f.get("title", "").lower()
                     and "bleed" not in f.get("title", "").lower()
+                ]
+
+        # 4c. Conversión de imágenes RGB a CMYK (ISO Coated v2 / FOGRA39)
+        if cmyk_images:
+            step_cmyk_out = JOBS_DIR / f"{safe_id}_bstep_cmyk.pdf"
+            temp_files.append(step_cmyk_out)
+            dst_icc = ICC_DIR / "ISOcoated_v2_eci.icc"
+            if not dst_icc.exists():
+                dst_icc = ICC_DIR / "ISOcoated_v2_300_bas.icc"
+
+            cmyk_res = convert_rgb_images_to_cmyk(
+                pdf_path=str(current_in),
+                dst_icc_path=str(dst_icc),
+                output_path=str(step_cmyk_out)
+            )
+            if cmyk_res.get("success") and step_cmyk_out.exists():
+                current_in = step_cmyk_out
+                n_conv = cmyk_res.get("images_converted", 0)
+                title_txt = f"Conversión a CMYK ({n_conv} imágenes RGB convertidas)" if n_conv > 0 else "Espacio de Color CMYK (0 imágenes RGB)"
+                steps_applied.append({
+                    "action": "cmyk_images",
+                    "title": title_txt,
+                    "details": cmyk_res
+                })
+                if n_conv > 0:
+                    job_meta["has_cmyk_converted"] = True
+                job_data["findings"] = [
+                    f for f in job_data.get("findings", [])
+                    if f.get("rule_id") != "SOURCE_COLOR_DIAGNOSTIC"
+                    and "rgb" not in f.get("title", "").lower()
+                    and "rgb" not in f.get("message", "").lower()
                 ]
 
         # 5. OutputIntent ICC
