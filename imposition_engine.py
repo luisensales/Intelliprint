@@ -348,7 +348,7 @@ def generate_imposed_pdf(
                 add_reg_crosses=add_reg_crosses,
                 add_color_bar=add_color_bar,
                 add_slug=add_slug,
-                slug_text=f"IntelliPrint Cuadernillo · Pliego {k+1}/{sheets_needed} [Cara A] · Páginas [{p_front_left_idx+1} + {p_front_right_idx+1}]",
+                slug_text=f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · Cuadernillo · Pliego {k+1}/{sheets_needed} [Cara A] · Páginas [{p_front_left_idx+1} + {p_front_right_idx+1}]",
                 is_booklet=True,
             )
 
@@ -381,7 +381,7 @@ def generate_imposed_pdf(
                 add_reg_crosses=add_reg_crosses,
                 add_color_bar=add_color_bar,
                 add_slug=add_slug,
-                slug_text=f"IntelliPrint Cuadernillo · Pliego {k+1}/{sheets_needed} [Cara B] · Páginas [{p_back_left_idx+1} + {p_back_right_idx+1}]",
+                slug_text=f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · Cuadernillo · Pliego {k+1}/{sheets_needed} [Cara B] · Páginas [{p_back_left_idx+1} + {p_back_right_idx+1}]",
                 is_booklet=True,
             )
 
@@ -434,7 +434,7 @@ def generate_imposed_pdf(
                 add_reg_crosses=add_reg_crosses,
                 add_color_bar=add_color_bar,
                 add_slug=add_slug,
-                slug_text=f"IntelliPrint Imposición · {pdf_path.name} · {sheet_size.upper()} ({sheet_w_mm:.0f}×{sheet_h_mm:.0f} mm) · {total_poses_per_sheet} poses ({cols}×{rows}) · Escala 100%",
+                slug_text=f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · {pdf_path.name} · {sheet_size.upper()} ({sheet_w_mm:.0f}×{sheet_h_mm:.0f} mm) · {total_poses_per_sheet} poses ({cols}×{rows}) · Escala 100%",
                 is_booklet=False,
             )
         else:
@@ -470,7 +470,7 @@ def generate_imposed_pdf(
                     add_reg_crosses=add_reg_crosses,
                     add_color_bar=add_color_bar,
                     add_slug=add_slug,
-                    slug_text=f"IntelliPrint Imposición · {pdf_path.name} · Pliego {sh_idx+1}/{sheets_count} · {total_poses_per_sheet} poses/pliego",
+                    slug_text=f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · {pdf_path.name} · Pliego {sh_idx+1}/{sheets_count} · {total_poses_per_sheet} poses/pliego",
                     is_booklet=False,
                 )
 
@@ -645,3 +645,4 @@ def render_imposition_preview_image(
     finally:
         if temp_out.exists():
             temp_out.unlink()
+

@@ -122,8 +122,8 @@ def add_printer_marks_to_pdf(
             sx = start_x + i * (swatch_size + 2)
             np.draw_rect(pymupdf.Rect(sx, start_y, sx + swatch_size, start_y + swatch_size), color=black, fill=col, width=0.25)
 
-        # 4. Información de Trabajo
-        info_text = f"{doc_name} · Pág {idx + 1}/{total_pages} · {now_str} · IntelliPrint Prepress"
+        # 4. Información de Trabajo (Slug)
+        info_text = f"{doc_name} · Pág {idx + 1}/{total_pages} · {now_str} · IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII"
         np.insert_text(pymupdf.Point(margin, slug_pt / 2 + 2), info_text, fontsize=6.5, color=(0.2, 0.2, 0.2))
 
     temp_marked_path = str(output_path) + ".tmp.pdf"
