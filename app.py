@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +30,12 @@ from font_vectorizer import outline_fonts_in_pdf
 from mirror_bleed_generator import generate_mirror_bleed
 from printer_marks_generator import add_printer_marks_to_pdf
 from tac_limiter import limit_pdf_tac
+from imposition_engine import (
+    calculate_imposition_plan,
+    generate_imposed_pdf,
+    render_imposition_preview_image,
+    STANDARD_SHEET_SIZES_MM,
+)
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -2375,6 +2381,203 @@ async def download_batch_endpoint(job_id: str):
         media_type="application/pdf",
         filename=download_filename
     )
+
+
+# =============================================================================
+# IMPOSICIÓN DE PLIEGOS DE TALLER (STEP & REPEAT / BOOKLET SADDLE-STITCH)
+# =============================================================================
+
+@app.post("/api/imposition/calculate/{job_id}")
+async def calculate_imposition_endpoint(job_id: str, request: Request):
+    """Calcula el plan geométrico de imposición y aprovechamiento de pliego."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    target_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("batch_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not target_pdf or not Path(target_pdf).exists():
+        raise HTTPException(status_code=404, detail="Archivo PDF de origen no encontrado.")
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    sheet_size = body.get("sheet_size", "SRA3")
+    orientation = body.get("orientation", "auto")
+    mode = body.get("mode", "step_and_repeat")
+    gap_mm = float(body.get("gap_mm", 4.0))
+    bleed_mm = float(body.get("bleed_mm", 2.0))
+    sheet_margin_mm = float(body.get("sheet_margin_mm", 10.0))
+
+    try:
+        plan = calculate_imposition_plan(
+            pdf_path=target_pdf,
+            sheet_size=sheet_size,
+            orientation=orientation,
+            mode=mode,
+            gap_mm=gap_mm,
+            bleed_mm=bleed_mm,
+            sheet_margin_mm=sheet_margin_mm,
+        )
+        return plan
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error calculando imposición: {e}")
+
+
+@app.post("/api/imposition/generate/{job_id}")
+async def generate_imposition_endpoint(job_id: str, request: Request):
+    """Genera el pliego de imposición montado en formato PDF de alta resolución."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    target_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("batch_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not target_pdf or not Path(target_pdf).exists():
+        raise HTTPException(status_code=404, detail="Archivo PDF de origen no encontrado.")
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    sheet_size = body.get("sheet_size", "SRA3")
+    orientation = body.get("orientation", "auto")
+    mode = body.get("mode", "step_and_repeat")
+    gap_mm = float(body.get("gap_mm", 4.0))
+    bleed_mm = float(body.get("bleed_mm", 2.0))
+    sheet_margin_mm = float(body.get("sheet_margin_mm", 10.0))
+    add_marks = bool(body.get("add_marks", True))
+    add_reg = bool(body.get("add_reg_crosses", True))
+    add_color = bool(body.get("add_color_bar", True))
+    add_slug = bool(body.get("add_slug", True))
+
+    output_pdf = JOBS_DIR / f"{safe_id}_pliego_imposicion_{sheet_size.lower()}.pdf"
+
+    try:
+        result = generate_imposed_pdf(
+            pdf_path=target_pdf,
+            output_path=output_pdf,
+            sheet_size=sheet_size,
+            orientation=orientation,
+            mode=mode,
+            gap_mm=gap_mm,
+            bleed_mm=bleed_mm,
+            sheet_margin_mm=sheet_margin_mm,
+            add_marks=add_marks,
+            add_reg_crosses=add_reg,
+            add_color_bar=add_color,
+            add_slug=add_slug,
+        )
+
+        job_meta["imposed_pdf_path"] = str(output_pdf)
+        job_meta["last_imposition_plan"] = result
+        with open(job_json_path, "w", encoding="utf-8") as f:
+            json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+        result["download_url"] = f"/api/imposition/download/{job_id}"
+        result["preview_url"] = f"/api/imposition/preview/{job_id}?sheet_size={sheet_size}&orientation={orientation}&mode={mode}&gap_mm={gap_mm}&t={int(time.time())}"
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando pliego de imposición: {e}")
+
+
+@app.get("/api/imposition/download/{job_id}")
+async def download_imposition_endpoint(job_id: str):
+    """Descarga el pliego de imposición PDF generado."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    imposed_path = job_data.get("job_meta", {}).get("imposed_pdf_path")
+    if not imposed_path or not Path(imposed_path).exists():
+        raise HTTPException(status_code=404, detail="Pliego de imposición no encontrado. Genéralo primero.")
+
+    orig_filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    stem = Path(orig_filename).stem
+    sheet_size = job_data.get("job_meta", {}).get("last_imposition_plan", {}).get("sheet_size", "SRA3")
+    download_filename = f"Pliego_Imposicion_{sheet_size}_{stem}.pdf"
+
+    return FileResponse(
+        path=imposed_path,
+        media_type="application/pdf",
+        filename=download_filename
+    )
+
+
+@app.get("/api/imposition/preview/{job_id}")
+async def preview_imposition_endpoint(
+    job_id: str,
+    sheet_size: str = "SRA3",
+    orientation: str = "auto",
+    mode: str = "step_and_repeat",
+    gap_mm: float = 4.0,
+    bleed_mm: float = 2.0,
+    sheet_margin_mm: float = 10.0,
+    dpi: int = 80
+):
+    """Renderiza una imagen JPEG de previsualización del pliego impuesto."""
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    target_pdf = (
+        job_meta.get("last_fixed_pdf_path")
+        or job_meta.get("batch_fixed_pdf_path")
+        or job_meta.get("cmyk_converted_pdf_path")
+        or job_meta.get("overprint_fixed_pdf_path")
+        or job_meta.get("pdf_path")
+    )
+    if not target_pdf or not Path(target_pdf).exists():
+        raise HTTPException(status_code=404, detail="Archivo PDF no encontrado.")
+
+    try:
+        img_bytes = render_imposition_preview_image(
+            pdf_path=target_pdf,
+            sheet_size=sheet_size,
+            orientation=orientation,
+            mode=mode,
+            gap_mm=gap_mm,
+            bleed_mm=bleed_mm,
+            sheet_margin_mm=sheet_margin_mm,
+            dpi=dpi,
+        )
+        return Response(content=img_bytes, media_type="image/jpeg")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error renderizando previsualización de imposición: {e}")
 
 
 if __name__ == "__main__":

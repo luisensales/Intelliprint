@@ -203,6 +203,9 @@
             <button onclick="applyTacLimiter(this)" id="btnTacLimiter" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer" title="Limitar cobertura total de tinta al 300% (evita repintado)">
               <i class="fa-solid fa-droplet text-cyan-400"></i> <span>Limitar TAC 300%</span>
             </button>
+            <button onclick="openImpositionModal()" id="btnOpenImposition" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Montaje e imposición de pliegos de máquina (Paso y repetición N-Up / Cuadernillo grapado en SRA3, A3, A4)">
+              <i class="fa-solid fa-table-cells text-amber-300"></i> <span>Imposición Pliego</span>
+            </button>
             <button id="downloadJsonBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-code"></i> JSON Oficial
             </button>
@@ -1165,6 +1168,183 @@
         <button onclick="executeBatchFix(this)" id="batchRunBtn" class="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer">
           <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Aplicar correcciones seleccionadas
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       MODAL: IMPOSICIÓN DE PLIEGOS DE TALLER (Step & Repeat / Booklet)
+  ====================================================================== -->
+  <div id="impositionModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="impModalTitle">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onclick="closeImpositionModal()"></div>
+    <!-- Panel -->
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-5xl w-full border border-slate-200 overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-purple-800 via-indigo-800 to-slate-900 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
+            <i class="fa-solid fa-table-cells text-amber-300 text-base"></i>
+          </div>
+          <div>
+            <h3 id="impModalTitle" class="text-sm font-bold flex items-center gap-2">
+              Imposición y Montaje de Pliegos de Taller
+              <span class="text-[10px] bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Prepress Pro</span>
+            </h3>
+            <p class="text-xs text-purple-200 font-normal">Paso y Repetición (N-Up) · Cuadernillo Grapado · SRA3 / A3 / A4</p>
+          </div>
+        </div>
+        <button onclick="closeImpositionModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Main Body: 2 Columns Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-y-auto flex-1">
+        <!-- Controls Column (5 cols) -->
+        <div class="lg:col-span-5 p-5 space-y-4 border-r border-slate-200 bg-slate-50/70 overflow-y-auto">
+          <!-- 1. Modo de imposición -->
+          <div>
+            <label class="block text-xs font-bold text-slate-800 mb-1.5 flex items-center gap-1.5">
+              <i class="fa-solid fa-shapes text-indigo-600"></i> Modo de Montaje:
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="p-2.5 rounded-xl border border-slate-200 bg-white hover:border-indigo-400 cursor-pointer flex flex-col items-start gap-1 transition has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/40">
+                <div class="flex items-center gap-2">
+                  <input type="radio" name="impMode" value="step_and_repeat" checked onchange="onImpParamChange()" class="accent-indigo-600">
+                  <span class="text-xs font-bold text-slate-800">Paso y Repetición</span>
+                </div>
+                <span class="text-[10px] text-slate-500 pl-5">N-Up multi-pose (tarjetas, flyers, postales)</span>
+              </label>
+
+              <label class="p-2.5 rounded-xl border border-slate-200 bg-white hover:border-indigo-400 cursor-pointer flex flex-col items-start gap-1 transition has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/40">
+                <div class="flex items-center gap-2">
+                  <input type="radio" name="impMode" value="booklet" onchange="onImpParamChange()" class="accent-indigo-600">
+                  <span class="text-xs font-bold text-slate-800">Cuadernillo</span>
+                </div>
+                <span class="text-[10px] text-slate-500 pl-5">Grapa / Saddle-Stitch 2-Up encarado</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 2. Pliego y Orientación -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Formato de Pliego:</label>
+              <select id="impSheetSize" onchange="onImpParamChange()" class="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 font-medium">
+                <option value="SRA3" selected>SRA3 (320 × 450 mm)</option>
+                <option value="A3">A3 (297 × 420 mm)</option>
+                <option value="A4">A4 (210 × 297 mm)</option>
+                <option value="B3">B3 (350 × 500 mm)</option>
+                <option value="SRA4">SRA4 (225 × 320 mm)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Orientación de Pliego:</label>
+              <select id="impOrientation" onchange="onImpParamChange()" class="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 font-medium">
+                <option value="auto" selected>Auto (Máximo poses)</option>
+                <option value="landscape">Horizontal (Apaisado)</option>
+                <option value="portrait">Vertical</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 3. Calles de Corte y Sangrado -->
+          <div id="impGutterRow" class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Calle entre poses (Gap):</label>
+              <select id="impGapSelect" onchange="onImpParamChange()" class="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 font-medium">
+                <option value="4.0" selected>4 mm (Doble corte)</option>
+                <option value="0.0">0 mm (Corte compartido)</option>
+                <option value="2.0">2 mm (Corte mínimo)</option>
+                <option value="6.0">6 mm (Calle amplia)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Sangrado por pose:</label>
+              <select id="impBleedSelect" onchange="onImpParamChange()" class="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 font-medium">
+                <option value="2.0" selected>2 mm de sangre</option>
+                <option value="3.0">3 mm estándar</option>
+                <option value="0.0">0 mm (Corte neto)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 4. Elementos de Imprenta en el Pliego -->
+          <div class="space-y-2 pt-2 border-t border-slate-200">
+            <span class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">Elementos de Imprenta</span>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <label class="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" id="impMarksChk" checked onchange="onImpParamChange()" class="rounded accent-indigo-600">
+                <span class="text-slate-700 text-[11px]">Marcas de corte</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" id="impRegChk" checked onchange="onImpParamChange()" class="rounded accent-indigo-600">
+                <span class="text-slate-700 text-[11px]">Cruces de registro</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" id="impColorBarChk" checked onchange="onImpParamChange()" class="rounded accent-indigo-600">
+                <span class="text-slate-700 text-[11px]">Tira densitométrica</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" id="impSlugChk" checked onchange="onImpParamChange()" class="rounded accent-indigo-600">
+                <span class="text-slate-700 text-[11px]">Datos de pliego (Slug)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 5. Tarjeta de Aprovechamiento y Resumen -->
+          <div id="impMetricsCard" class="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2 text-xs text-indigo-950">
+            <div class="flex items-center justify-between">
+              <span class="font-bold flex items-center gap-1.5">
+                <i class="fa-solid fa-chart-pie text-indigo-600"></i> Rendimiento de Pliego:
+              </span>
+              <span id="impBadgePoses" class="font-black px-2 py-0.5 bg-indigo-600 text-white rounded-md text-[11px]">-- poses</span>
+            </div>
+            <div class="grid grid-cols-2 gap-1 text-[11px] pt-1 border-t border-indigo-100">
+              <div>Pose: <strong id="impTxtPoseSize">-- × -- mm</strong></div>
+              <div>Cuadrícula: <strong id="impTxtGrid">-- × --</strong></div>
+              <div>Aprovechamiento: <strong id="impTxtEfficiency">--%</strong></div>
+              <div>Pinza / Margen: <strong id="impTxtMargin">10 mm</strong></div>
+            </div>
+            <div id="impWarningBox" class="hidden text-[10px] text-amber-800 bg-amber-100/80 p-1.5 rounded border border-amber-300"></div>
+          </div>
+        </div>
+
+        <!-- Preview Column (7 cols) -->
+        <div class="lg:col-span-7 p-5 bg-slate-900 flex flex-col items-center justify-center min-h-[420px] relative overflow-hidden">
+          <!-- Loading overlay -->
+          <div id="impLoadingOverlay" class="absolute inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center text-white text-xs gap-2 hidden z-10">
+            <i class="fa-solid fa-spinner fa-spin text-indigo-400 text-xl"></i>
+            <span>Calculando imposición geométrica...</span>
+          </div>
+
+          <!-- Preview image -->
+          <img id="impPreviewImg" src="" alt="Previsualización de Pliego Impuesto" class="max-h-[460px] w-auto object-contain rounded-lg shadow-2xl border border-slate-700 transition hidden">
+
+          <div id="impEmptyNotice" class="text-slate-400 text-xs text-center py-12">
+            <i class="fa-solid fa-table-cells text-3xl mb-2 text-slate-600 block"></i>
+            Cargando previsualización del pliego...
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Buttons -->
+      <div class="flex items-center justify-between gap-3 px-6 py-3.5 bg-slate-50 border-t border-slate-200 shrink-0">
+        <button onclick="closeImpositionModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+          Cerrar
+        </button>
+
+        <div class="flex items-center gap-2.5">
+          <a id="impDownloadBtn" href="#" class="hidden inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer">
+            <i class="fa-solid fa-download"></i> Descargar Pliego PDF
+          </a>
+          <button id="impGenerateBtn" onclick="executeGenerateImposition(this)" class="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer">
+            <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Generar Pliego PDF
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -3734,6 +3914,196 @@
         resultContent.innerHTML = '<p class="font-bold text-red-800">Error de conexion al ejecutar el lote.</p>';
         btn.disabled = false; btn.innerHTML = origHtml;
         if (cancelBtn) cancelBtn.disabled = false;
+      }
+    }
+
+    // =========================================================================
+    // IMPOSICIÓN DE PLIEGOS DE TALLER (Step & Repeat / Booklet)
+    // =========================================================================
+
+    let impDebounce = null;
+
+    function openImpositionModal() {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo. Sube y analiza un PDF primero.');
+        return;
+      }
+      const modal = document.getElementById('impositionModal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+      const downloadBtn = document.getElementById('impDownloadBtn');
+      if (downloadBtn) downloadBtn.classList.add('hidden');
+      const genBtn = document.getElementById('impGenerateBtn');
+      if (genBtn) {
+        genBtn.disabled = false;
+        genBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Generar Pliego PDF';
+      }
+      refreshImpositionPlan();
+    }
+
+    function closeImpositionModal() {
+      const modal = document.getElementById('impositionModal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    function onImpParamChange() {
+      clearTimeout(impDebounce);
+      impDebounce = setTimeout(() => {
+        refreshImpositionPlan();
+      }, 150);
+    }
+
+    async function refreshImpositionPlan() {
+      if (!currentJobId) return;
+
+      const mode = document.querySelector('input[name="impMode"]:checked')?.value || 'step_and_repeat';
+      const sheetSize = document.getElementById('impSheetSize')?.value || 'SRA3';
+      const orientation = document.getElementById('impOrientation')?.value || 'auto';
+      const gapMm = parseFloat(document.getElementById('impGapSelect')?.value || '4.0');
+      const bleedMm = parseFloat(document.getElementById('impBleedSelect')?.value || '2.0');
+
+      const gutterRow = document.getElementById('impGutterRow');
+      if (gutterRow) {
+        if (mode === 'booklet') gutterRow.classList.add('opacity-40', 'pointer-events-none');
+        else gutterRow.classList.remove('opacity-40', 'pointer-events-none');
+      }
+
+      const overlay = document.getElementById('impLoadingOverlay');
+      if (overlay) overlay.classList.remove('hidden');
+
+      try {
+        const resp = await fetch(`/api/imposition/calculate/${currentJobId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sheet_size: sheetSize,
+            orientation: orientation,
+            mode: mode,
+            gap_mm: gapMm,
+            bleed_mm: bleedMm,
+            sheet_margin_mm: 10.0
+          })
+        });
+
+        const plan = await resp.json();
+        if (resp.ok) {
+          const badgePoses = document.getElementById('impBadgePoses');
+          const txtPoseSize = document.getElementById('impTxtPoseSize');
+          const txtGrid = document.getElementById('impTxtGrid');
+          const txtEff = document.getElementById('impTxtEfficiency');
+          const warningBox = document.getElementById('impWarningBox');
+
+          if (badgePoses) {
+            if (mode === 'booklet') {
+              badgePoses.textContent = `${plan.sheets_needed} pliegos (${plan.padded_pages} pág)`;
+            } else {
+              badgePoses.textContent = `${plan.grid.total_poses} poses`;
+            }
+          }
+          if (txtPoseSize && plan.pose_size_mm) {
+            txtPoseSize.textContent = `${plan.pose_size_mm[0]} × ${plan.pose_size_mm[1]} mm`;
+          }
+          if (txtGrid && plan.grid) {
+            txtGrid.textContent = `${plan.grid.cols} cols × ${plan.grid.rows} filas`;
+          }
+          if (txtEff) {
+            txtEff.textContent = `${plan.efficiency_percent}%`;
+          }
+          if (warningBox) {
+            if (plan.warning) {
+              warningBox.textContent = `⚠️ ${plan.warning}`;
+              warningBox.classList.remove('hidden');
+            } else {
+              warningBox.classList.add('hidden');
+            }
+          }
+
+          const previewImg = document.getElementById('impPreviewImg');
+          const emptyNotice = document.getElementById('impEmptyNotice');
+          const previewUrl = `/api/imposition/preview/${currentJobId}?sheet_size=${encodeURIComponent(sheetSize)}&orientation=${encodeURIComponent(orientation)}&mode=${encodeURIComponent(mode)}&gap_mm=${gapMm}&bleed_mm=${bleedMm}&dpi=80&t=${Date.now()}`;
+
+          const tempImg = new Image();
+          tempImg.onload = () => {
+            if (previewImg) {
+              previewImg.src = previewUrl;
+              previewImg.classList.remove('hidden');
+            }
+            if (emptyNotice) emptyNotice.classList.add('hidden');
+            if (overlay) overlay.classList.add('hidden');
+          };
+          tempImg.onerror = () => {
+            if (overlay) overlay.classList.add('hidden');
+          };
+          tempImg.src = previewUrl;
+        } else {
+          if (overlay) overlay.classList.add('hidden');
+        }
+      } catch (err) {
+        console.error('Error calculando imposición:', err);
+        if (overlay) overlay.classList.add('hidden');
+      }
+    }
+
+    async function executeGenerateImposition(btn) {
+      if (!currentJobId) return;
+
+      const mode = document.querySelector('input[name="impMode"]:checked')?.value || 'step_and_repeat';
+      const sheetSize = document.getElementById('impSheetSize')?.value || 'SRA3';
+      const orientation = document.getElementById('impOrientation')?.value || 'auto';
+      const gapMm = parseFloat(document.getElementById('impGapSelect')?.value || '4.0');
+      const bleedMm = parseFloat(document.getElementById('impBleedSelect')?.value || '2.0');
+      const marks = document.getElementById('impMarksChk')?.checked ?? true;
+      const reg = document.getElementById('impRegChk')?.checked ?? true;
+      const colorBar = document.getElementById('impColorBarChk')?.checked ?? true;
+      const slug = document.getElementById('impSlugChk')?.checked ?? true;
+
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generando pliego...';
+
+      try {
+        const resp = await fetch(`/api/imposition/generate/${currentJobId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sheet_size: sheetSize,
+            orientation: orientation,
+            mode: mode,
+            gap_mm: gapMm,
+            bleed_mm: bleedMm,
+            sheet_margin_mm: 10.0,
+            add_marks: marks,
+            add_reg_crosses: reg,
+            add_color_bar: colorBar,
+            add_slug: slug
+          })
+        });
+
+        const data = await resp.json();
+        if (resp.ok && data.status === 'success') {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400"></i> Pliego Generado';
+
+          const downloadBtn = document.getElementById('impDownloadBtn');
+          if (downloadBtn) {
+            downloadBtn.href = data.download_url;
+            downloadBtn.classList.remove('hidden');
+          }
+        } else {
+          alert('Error generando pliego: ' + (data.detail || 'Error del servidor'));
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      } catch (err) {
+        console.error('Error al generar pliego de imposición:', err);
+        alert('Error de conexión al generar el pliego.');
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
       }
     }
   </script>
