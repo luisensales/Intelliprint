@@ -1976,6 +1976,7 @@ async def batch_fix_endpoint(
     hairlines: bool = True,
     icc: bool = True,
     geometry: bool = True,
+    mirror_bleed: bool = False,
     fonts: bool = True,
     tac: bool = True,
     printer_marks: bool = False
@@ -2102,6 +2103,28 @@ async def batch_fix_endpoint(
                     "title": "Cajas ISO y Sangrado 3 mm",
                     "details": geom_res
                 })
+                job_data["findings"] = [
+                    f for f in job_data.get("findings", [])
+                    if f.get("rule_id") != "BLEED_GEOMETRY_3MM"
+                    and "sangrado" not in f.get("title", "").lower()
+                    and "bleed" not in f.get("title", "").lower()
+                ]
+
+        # 4b. Sangrado Sintético por Reflejo perimetral de píxeles (Mirror Bleed)
+        if mirror_bleed:
+            step_mb_out = JOBS_DIR / f"{safe_id}_bstep_mirrorbleed.pdf"
+            temp_files.append(step_mb_out)
+            mb_res = generate_mirror_bleed(str(current_in), str(step_mb_out), bleed_mm=3.0)
+            if mb_res.get("success") and step_mb_out.exists():
+                current_in = step_mb_out
+                steps_applied.append({
+                    "action": "mirror_bleed",
+                    "title": "Sangrado Sintético por Reflejo 3 mm (Mirror Bleed)",
+                    "details": mb_res
+                })
+                job_summary = job_data.setdefault("job_summary", {})
+                job_summary["bleed_status"] = "PASS"
+                job_summary["bleed_detected_mm"] = 3.0
                 job_data["findings"] = [
                     f for f in job_data.get("findings", [])
                     if f.get("rule_id") != "BLEED_GEOMETRY_3MM"

@@ -1024,9 +1024,20 @@
 
         <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
           <div class="flex items-center gap-3">
+            <input type="checkbox" id="batchChkMirrorBleed" class="rounded accent-emerald-600 w-4 h-4">
+            <div>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-indigo-700 transition">5. Sangrado Sintético por Reflejo (Mirror Bleed 3 mm)</p>
+              <p class="text-[11px] text-slate-500">Genera sangre reflectiva perimetral a 300 ppp para documentos sin sangrado de fondo</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded border border-indigo-200 shrink-0 ml-2">Taller</span>
+        </label>
+
+        <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
+          <div class="flex items-center gap-3">
             <input type="checkbox" id="batchChkIcc" checked class="rounded accent-emerald-600 w-4 h-4">
             <div>
-              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">5. Incrustar OutputIntent ISO Coated v2 (FOGRA39)</p>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">6. Incrustar OutputIntent ISO Coated v2 (FOGRA39)</p>
               <p class="text-[11px] text-slate-500">Declara la condición de impresión estándar para el RIP de la imprenta</p>
             </div>
           </div>
@@ -1037,7 +1048,7 @@
           <div class="flex items-center gap-3">
             <input type="checkbox" id="batchChkTac" checked class="rounded accent-emerald-600 w-4 h-4">
             <div>
-              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">6. Limitar Cobertura de Tinta (TAC ≤ 300%)</p>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">7. Limitar Cobertura de Tinta (TAC ≤ 300%)</p>
               <p class="text-[11px] text-slate-500">Reduce píxeles CMYK con cobertura excesiva para evitar repintado</p>
             </div>
           </div>
@@ -1048,7 +1059,7 @@
           <div class="flex items-center gap-3">
             <input type="checkbox" id="batchChkMarks" class="rounded accent-emerald-600 w-4 h-4">
             <div>
-              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">7. Añadir Marcas de Imprenta y Registro (+10 mm)</p>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">8. Añadir Marcas de Imprenta y Registro (+10 mm)</p>
               <p class="text-[11px] text-slate-500">Inyecta marcas de corte, cruces de registro y tira CMYK (opcional, para pruebas)</p>
             </div>
           </div>
@@ -3489,13 +3500,14 @@
 
     async function executeBatchFix(btn) {
       if (!currentJobId) return;
-      const trapping  = document.getElementById('batchChkTrapping')?.checked ?? true;
-      const hairlines = document.getElementById('batchChkHairlines')?.checked ?? true;
-      const fonts     = document.getElementById('batchChkFonts')?.checked ?? true;
-      const geometry  = document.getElementById('batchChkGeometry')?.checked ?? true;
-      const icc       = document.getElementById('batchChkIcc')?.checked ?? true;
-      const tac       = document.getElementById('batchChkTac')?.checked ?? true;
-      const marks     = document.getElementById('batchChkMarks')?.checked ?? false;
+      const trapping    = document.getElementById('batchChkTrapping')?.checked ?? true;
+      const hairlines   = document.getElementById('batchChkHairlines')?.checked ?? true;
+      const fonts       = document.getElementById('batchChkFonts')?.checked ?? true;
+      const geometry    = document.getElementById('batchChkGeometry')?.checked ?? true;
+      const mirrorBleed = document.getElementById('batchChkMirrorBleed')?.checked ?? false;
+      const icc         = document.getElementById('batchChkIcc')?.checked ?? true;
+      const tac         = document.getElementById('batchChkTac')?.checked ?? true;
+      const marks       = document.getElementById('batchChkMarks')?.checked ?? false;
 
       const origHtml = btn.innerHTML;
       btn.disabled = true;
@@ -3504,7 +3516,16 @@
       if (cancelBtn) cancelBtn.disabled = true;
 
       try {
-        const params = new URLSearchParams({ trapping, hairlines, fonts, geometry, icc, tac, printer_marks: marks });
+        const params = new URLSearchParams({
+          trapping,
+          hairlines,
+          fonts,
+          geometry,
+          mirror_bleed: mirrorBleed,
+          icc,
+          tac,
+          printer_marks: marks
+        });
         const resp = await fetch(`/api/batch-fix/${currentJobId}?${params.toString()}`, { method: 'POST' });
         const data = await resp.json();
 
