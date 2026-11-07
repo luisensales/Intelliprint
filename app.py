@@ -2020,25 +2020,37 @@ async def batch_fix_endpoint(
             rb_res = fix_rich_black_small_text(cur_trap_src, str(rb_out))
             cur_trap_src2 = str(rb_out) if (rb_res.get("success") and rb_res.get("texts_fixed", 0) > 0) else cur_trap_src
 
-            trap_res = apply_overprint_to_dark_text(cur_trap_src2, str(step1_out), dark_k_threshold=0.99)
+            # Sobreimpresión de capas técnicas y barnices en calado
+            varnish_out = JOBS_DIR / f"{safe_id}_bvarnish_tmp.pdf"
+            temp_files.append(varnish_out)
+            varnish_res = apply_overprint_to_technical_inks(cur_trap_src2, str(varnish_out))
+            cur_trap_src3 = str(varnish_out) if (varnish_res.get("success") and varnish_res.get("ops_fixed", 0) > 0) else cur_trap_src2
+
+            trap_res = apply_overprint_to_dark_text(cur_trap_src3, str(step1_out), dark_k_threshold=0.99)
             if trap_res.get("success") and step1_out.exists():
                 current_in = step1_out
                 steps_applied.append({
                     "action": "trapping",
-                    "title": "Auto-Trapping y Sobreimpresión 100% K",
-                    "details": trap_res
+                    "title": "Auto-Trapping y Sobreimpresión 100% K / Barnices",
+                    "details": {
+                        "text_overprint": trap_res,
+                        "varnish_fixed": varnish_res.get("ops_fixed", 0) if varnish_res.get("success") else 0
+                    }
                 })
                 job_data["findings"] = [
                     f for f in job_data.get("findings", [])
-                    if f.get("rule_id") not in ("WHITE_OVERPRINT", "RICH_BLACK_SMALL_TEXT", "BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100")
+                    if f.get("rule_id") not in ("WHITE_OVERPRINT", "RICH_BLACK_SMALL_TEXT", "BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "VARNISH_KNOCKOUT")
                     and "blanco" not in f.get("title", "").lower()
-                    and not (("calado" in f.get("title", "").lower() or "knockout" in f.get("title", "").lower()) and "barniz" not in f.get("title", "").lower())
+                    and "barniz" not in f.get("title", "").lower()
+                    and not ("calado" in f.get("title", "").lower() or "knockout" in f.get("title", "").lower())
                 ]
                 stats = job_data.get("job_summary", {}).get("overprint_stats", {})
                 stats["white_overprint"] = 0
                 stats["rich_black_small_text"] = 0
                 stats["black_100_overprint"] = stats.get("black_100_overprint", 0) + stats.get("black_100_knockout", 0)
                 stats["black_100_knockout"] = 0
+                stats["varnish_overprint"] = stats.get("varnish_overprint", 0) + stats.get("varnish_knockout", 0)
+                stats["varnish_knockout"] = 0
 
         # 2. Corrector de Hairlines (< 0.25 pt)
         if hairlines:
