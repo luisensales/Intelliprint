@@ -83,7 +83,7 @@ DEFAULT_BUILTIN_PROFILES = [
     {
         "id": "PANTALLA_RGB",
         "name": "Web, Pantalla y Documento Digital (RGB)",
-        "destination": "Publicación Web, Visualización en Pantalla y Móvil (sRGB)",
+        "destination": "Publicación Web, Visualización en Pantalla y Móvil (sRGB) · Sin sangre (0 mm)",
         "target_dpi": 96,
         "min_bleed_mm": 0.0,
         "max_tac": 400,

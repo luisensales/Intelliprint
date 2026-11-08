@@ -226,7 +226,10 @@
         <!-- 2. Target Profile -->
         <div class="space-y-2">
           <div class="flex items-center justify-between">
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">2. Perfil de Destino (IntelliPrint)</label>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">
+              2. Perfil de Destino (IntelliPrint)
+              <span class="text-[10px] text-slate-400 font-normal lowercase block sm:inline sm:ml-2">· Normativa y tolerancias (sangre, TAC, ppp)</span>
+            </label>
             <button type="button" onclick="openProfileManagerModal()" class="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border border-indigo-200 rounded text-[11px] font-bold transition shadow-xs cursor-pointer" title="Crear y editar perfiles de preflight personalizados">
               <i class="fa-solid fa-sliders text-indigo-600"></i> <span>⚙️ Gestionar Perfiles</span>
             </button>
@@ -253,7 +256,7 @@
                   <span class="font-bold text-slate-800">Web, Pantalla y Documento Digital (RGB)</span>
                   <span class="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded border border-emerald-200">RGB / Web</span>
                 </div>
-                <span class="block text-[11px] text-slate-500 mt-0.5">≥96 ppp · Sin sangre · Espacio sRGB · No apto para imprenta</span>
+                <span class="block text-[11px] text-slate-500 mt-0.5">≥96 ppp · Sin sangre (0 mm) · Espacio sRGB · No apto para imprenta</span>
               </div>
             </label>
             <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
@@ -286,7 +289,10 @@
 
         <!-- 3. ICC Color Policy -->
         <div class="space-y-2">
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">3. Perfil de Color (ICC)</label>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">
+            3. Perfil de Color (ICC)
+            <span class="text-[10px] text-slate-400 font-normal lowercase block sm:inline sm:ml-2">· Declaración física de salida (OutputIntent)</span>
+          </label>
           <div class="space-y-2.5">
             <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
               <input type="radio" name="icc_option" value="preserve" checked class="mt-1 text-blue-600 focus:ring-blue-500">
