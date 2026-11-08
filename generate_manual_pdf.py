@@ -130,9 +130,9 @@ def build_manual_pdf():
 
     y_cov = 160.0
     if p_full_logo.exists():
-        # Logo sin fondo oscuro centrado armónicamente
+        # Logo sin fondo oscuro centrado armónicamente (viewBox 920x300)
         w_logo = 320.0
-        h_logo = w_logo * (300.0 / 1140.0)  # ~84 pt
+        h_logo = w_logo * (300.0 / 920.0)  # ~104 pt
         x_logo = (PAGE_W - w_logo) / 2.0
         p_cov.insert_image(pymupdf.Rect(x_logo, y_cov, x_logo + w_logo, y_cov + h_logo), filename=str(p_full_logo), keep_proportion=True)
         y_cov += h_logo + 25.0
