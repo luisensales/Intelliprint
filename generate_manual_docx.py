@@ -508,6 +508,17 @@ def build_manual_docx():
         "que permiten subsanar los problemas en un solo clic, sin recurrir a costosas idas y vueltas con el cliente."
     )
 
+    add_heading_2_styled(doc, "1.2. Identidad Visual, Nuevo Logotipo 'iP' y Portales Institucionales")
+    add_body_p(
+        doc,
+        "La imagen corporativa de IntelliPrint ha sido renovada con un monograma de vanguardia 'iP' cuyos trazos combinan el punto en amarillo "
+        "proceso (#FFD700), fuste blanco puro y bucle descendente en cian (#00A3FF) y magenta (#E6007E). La tipografía corporativa establece un marcado "
+        "contraste entre la palabra 'Intelli' (peso Light 300 en blanco) y 'Print' (peso Heavy 700 en cian de proceso). Además, todos los logotipos "
+        "de la plataforma web y documentos PDF son interactivos y enlazan directamente a los portales web de CPIFP Salesianos Urnieta LHIPI "
+        "(https://salesianosurnieta.com/), CIFP Mendizabala LHII (https://www.mendizabala.eus/) y al Departamento de Educación del Gobierno Vasco "
+        "(https://www.euskadi.eus/gobierno-vasco/departamento-educacion/)."
+    )
+
     add_callout(
         doc,
         title="Impacto Medioambiental y Económico",
@@ -570,13 +581,13 @@ def build_manual_docx():
         "recuento de imágenes rasterizadas y el perfil de salida (OutputIntent) incrustado en el PDF original."
     )
 
-    add_heading_2_styled(doc, "3.2. Selección de Perfiles de Verificación")
+    add_heading_2_styled(doc, "3.2. Selección de Perfiles de Verificación (Paso 2)")
     add_body_p(
         doc,
-        "El preflight adapta sus umbrales al tipo de producto que se desea imprimir mediante el selector de perfil:"
+        "El preflight adapta sus umbrales al tipo de producto que se desea imprimir mediante el selector de perfil de destino:"
     )
 
-    tbl_profiles = doc.add_table(rows=6, cols=3)
+    tbl_profiles = doc.add_table(rows=7, cols=3)
     tbl_profiles.alignment = WD_TABLE_ALIGNMENT.CENTER
     tbl_profiles.autofit = False
     tbl_profiles.columns[0].width = Inches(1.8)
@@ -598,11 +609,12 @@ def build_manual_docx():
         r.font.color.rgb = RGBColor(255, 255, 255)
 
     profile_data = [
-        ("Offset Comercial 300%", "300%", "Papel estucado (couché) brillante o mate según ISO 12647-2 (FOGRA39 / FOGRA51)."),
-        ("Impresión Digital Estándar", "320%", "Prensas digitales láser y tóner seco. Admite mayor densidad de fusión."),
-        ("Prensa y Papel Periódico", "240%", "Papel prensa estándar de alta porosidad y absorción rápida (evita repintado)."),
-        ("Packaging y Cartoncillo", "300%", "Estuches, cajas y packaging con tintas directas y trazados de troquelado."),
-        ("Gran Formato y Cartelería", "320%", "Lonas, vinilos y displays donde la resolución mínima admitida es de 150 DPI."),
+        ("Offset Comercial 300%", "300%", "Papel estucado (couché) brillante o mate según ISO 12647-2 (≥300 DPI, 3 mm de sangre, CMYK)."),
+        ("Impresión Digital Estándar", "320%", "Prensas digitales láser y tóner seco. Admite mayor densidad de fusión (≥200 DPI, 2 mm de sangre)."),
+        ("Prensa y Papel Periódico", "240%", "Papel prensa estándar de alta porosidad y absorción rápida (≥170 DPI, 2 mm de sangre, CMYK)."),
+        ("Packaging y Cartoncillo", "280%", "Estuches, cajas y envases con tintas directas y trazados de troquelado (≥300 DPI, 5 mm de sangre)."),
+        ("Gran Formato y Cartelería", "320%", "Lonas, vinilos y displays en cuatricromía CMYK (≥150 DPI, 5 mm de sangre requerida)."),
+        ("Web, Pantalla y Doc. Digital", "400%", "PDFs digitales y web: 0.0 mm de sangrado estricto, espacio RGB / sRGB nativo, 96 DPI objetivo."),
     ]
 
     for i, row in enumerate(profile_data, 1):
@@ -622,10 +634,18 @@ def build_manual_docx():
 
     add_body_p(doc, "")
 
-    add_heading_2_styled(doc, "3.3. Gestión del Espacio de Color y Perfiles ICC")
+    add_heading_2_styled(doc, "3.3. Gestión del Espacio de Color y Perfiles ICC (Paso 3)")
     add_bullet_styled(doc, "Preservar Perfil Existente: ", "Respeta el perfil embebido por el diseñador si ya cumple con los estándares.")
     add_bullet_styled(doc, "Asignar Perfil Estándar: ", "Inyecta la etiqueta OutputIntent oficial si el documento viene 'huérfano' sin perfil definido.")
-    add_bullet_styled(doc, "Catálogo ICC Integrado: ", "Permite forzar la conversión hacia perfiles certificados de la ECI: ISO Coated v2 300% (FOGRA39), PSO Coated v3 (FOGRA51), PSO Uncoated v3 (FOGRA52), sRGB o Adobe RGB.")
+    add_bullet_styled(doc, "Catálogo ICC Integrado: ", "Permite forzar la conversión hacia perfiles certificados de la ECI: ISO Coated v2 300% (FOGRA39), PSO Coated v3 (FOGRA51), PSO Uncoated v3 (FOGRA52), sRGB2014 o Adobe RGB.")
+
+    add_callout(
+        doc,
+        title="Distinción Crítica de Taller: Paso 2 vs Paso 3",
+        text="El Paso 2 (Perfil de Destino) es el inspector y baremo de control de calidad: evalúa tolerancias (DPI, sangre, TAC, hairlines) y NO incrusta perfiles en el PDF. "
+             "El Paso 3 (Perfil de Color ICC) es la declaración física de salida (OutputIntent): define qué archivo .icc físico se incrusta en el documento cuando se ejecutan conversiones o correcciones automáticas.",
+        style="blue"
+    )
 
     add_heading_2_styled(doc, "3.4. Creador y Editor de Perfiles Personalizados (Custom Profiles Editor)")
     add_body_p(
@@ -835,15 +855,37 @@ def build_manual_docx():
         "transforma la aplicación en un aula virtual de aprendizaje experimental para el alumnado."
     )
 
-    add_heading_2_styled(doc, "8.1. Banco de Retos Prácticos de Taller")
+    add_heading_2_styled(doc, "8.1. Banco de Retos Prácticos de Taller (20 Casos Oficiales FP)")
     add_body_p(
         doc,
-        "El profesor o estudiante puede cargar con un solo clic casos de estudio preparados por el equipo docente:"
+        "El profesor o estudiante puede cargar con un solo clic casos de estudio preparados por el equipo docente, organizados en 3 categorías:"
     )
+
+    add_body_p(doc, "Categoría 1: Iniciación FP (Grado Medio / 1º Grado Superior) · 7 Retos:")
     add_bullet_styled(doc, "Reto 1 (Iniciación FP): ", "Tarjeta corporativa con textos de 6 pt en 4 tintas (Rich Black 300%) y sin sangrado exterior (0 mm).")
-    add_bullet_styled(doc, "Reto 2 (Intermedio): ", "Folleto publicitario nocturno con TAC del 365% (riesgo severo de repintado) y filetes de 0.06 pt no insolables en CTP.")
-    add_bullet_styled(doc, "Reto 3 (Avanzado): ", "Estuche cosmético de packaging con código EAN-13 en cuatricromía y textos legales a 1.2 mm del troquel.")
-    add_bullet_styled(doc, "Reto 4 (Avanzado): ", "Revista técnica de 16 páginas con textos invadiendo el medianil/lomo y fotos en sRGB.")
+    add_bullet_styled(doc, "Reto 2 (Iniciación FP): ", "Flyer nocturno en espacio RGB sRGB sin convertir a CMYK y colores fuera de gama.")
+    add_bullet_styled(doc, "Reto 3 (Iniciación FP): ", "Tríptico envolvente con fondos oscuros al corte (0 mm) y textos sobre líneas de plegado.")
+    add_bullet_styled(doc, "Reto 4 (Iniciación FP): ", "Cartel promocional A3 con imágenes web a 72 DPI escaladas al 400% con pixelado visible.")
+    add_bullet_styled(doc, "Reto 5 (Iniciación FP): ", "Marcapáginas cultural con tipografías no incrustadas con riesgo de sustitución en RIP.")
+    add_bullet_styled(doc, "Reto 6 (Iniciación FP): ", "Adhesivo promocional sin cajas de página TrimBox ni BleedBox para mesa de corte.")
+    add_bullet_styled(doc, "Reto 7 (Iniciación FP): ", "Cupón descuento con texto legal minúsculo (4.5 pt) tramado en gris al 40% K.")
+
+    add_body_p(doc, "Categoría 2: Intermedio FP (Taller de Impresión Offset / Digital) · 7 Retos:")
+    add_bullet_styled(doc, "Reto 8 (Intermedio FP): ", "Folleto publicitario con TAC 365% (riesgo de repintado) y filetes pelo de 0.06 pt no insolables en CTP.")
+    add_bullet_styled(doc, "Reto 9 (Intermedio FP): ", "Catálogo comercial con 5 tintas planas Pantone directas presupuestado para 4 colores CMYK.")
+    add_bullet_styled(doc, "Reto 10 (Intermedio FP): ", "Dossier corporativo con logotipo blanco en sobreimpresión (/OP true) que desaparece en plancha.")
+    add_bullet_styled(doc, "Reto 11 (Intermedio FP): ", "Carta de menú con texto amarillo sobre azul sin reventado (trapping) vulnerable a descalce.")
+    add_bullet_styled(doc, "Reto 12 (Intermedio FP): ", "Orla de diploma con filetes guilloche de 0.08 pt y TAC de 330% sobre papel verjurado absorbente.")
+    add_bullet_styled(doc, "Reto 13 (Intermedio FP): ", "Manual técnico con texto 100% K en calado (knockout) perforando las masas inferiores.")
+    add_bullet_styled(doc, "Reto 14 (Intermedio FP): ", "Calendario de sobremesa con descompensación lateral extrema de llaves de tintero CIP3.")
+
+    add_body_p(doc, "Categoría 3: Avanzado FP (Packaging, Imposición y Acabados Especiales) · 6 Retos:")
+    add_bullet_styled(doc, "Reto 15 (Avanzado FP): ", "Estuche cosmético de packaging con código EAN-13 en 4 tintas y textos a 1.2 mm del troquel.")
+    add_bullet_styled(doc, "Reto 16 (Avanzado FP): ", "Revista técnica de 16 páginas con textos invadiendo el medianil/lomo sin compensar trepa.")
+    add_bullet_styled(doc, "Reto 17 (Avanzado FP): ", "Etiqueta enológica con barniz UVI serigráfico en calado eliminando la cuatricromía inferior.")
+    add_bullet_styled(doc, "Reto 18 (Avanzado FP): ", "Prospecto farmacéutico con código QR en Rich Black sobre papel biblia de 45 g/m² empastado.")
+    add_bullet_styled(doc, "Reto 19 (Avanzado FP): ", "Pliego SRA3 montado a mano con 8 tarjetas pegadas a corte cero sin marcas ni tira FOGRA.")
+    add_bullet_styled(doc, "Reto 20 (Avanzado FP): ", "Envase alimentario con solapa de encolado cubierta de tinta y barniz destruyendo el pegado PUR.")
 
     add_heading_2_styled(doc, "8.2. Simulador Visual de Consecuencias Físicas en Máquina")
     add_body_p(
@@ -947,7 +989,13 @@ def build_manual_docx():
          "En la ventana 'Lote & Hot-Folder', haga clic en 'Iniciar Hot-Folder'. A partir de ese instante, cualquier archivo PDF depositado en la carpeta compartida hotfolder/in/ será procesado en segundo plano de manera continua."),
 
         ("5. ¿Cumple IntelliPrint con las normas internacionales del sector?",
-         "Sí. Todas las tolerancias y reglas de comprobación y corrección están parametrizadas con base en las normas ISO 12647-2 (Offset en pliegos), ISO 15930 (Estándares PDF/X-1a y PDF/X-4), ISO/IEC 15420 (GS1 para códigos de barras) y las recomendaciones del Ghent Workgroup (GWG).")
+         "Sí. Todas las tolerancias y reglas de comprobación y corrección están parametrizadas con base en las normas ISO 12647-2 (Offset en pliegos), ISO 15930 (Estándares PDF/X-1a y PDF/X-4), ISO/IEC 15420 (GS1 para códigos de barras) y las recomendaciones del Ghent Workgroup (GWG)."),
+
+        ("6. ¿Qué diferencia real hay entre el Paso 2 (Perfil de Destino) y el Paso 3 (Perfil ICC)? ¿El Paso 2 ya incrusta un perfil?",
+         "No. El Paso 2 actúa estrictamente como el conjunto de reglas y tolerancias de preflight (DPI mínimo admisible, sangrado obligatorio, límite de TAC, hairlines y espacios cromáticos admitidos). El Paso 2 no modifica ni incrusta nada en el PDF original. La incrustación de un perfil físico de color solo ocurre en el Paso 3, donde el usuario elige conservar el perfil nativo del documento o forzar la asignación de un archivo .icc del catálogo al ejecutar procesos de normalización o corrección ('Taller en 1 Clic', 'Convertir a CMYK', etc.)."),
+
+        ("7. ¿Por qué el perfil 'Web, Pantalla y Documento Digital (RGB)' no exige sangrado exterior?",
+         "Los documentos diseñados para visualización digital, navegación web, tablets o presentaciones en pantalla no atraviesan una fase de plegado o corte con guillotina mecánica en taller. Por tanto, exigir sangrado exterior generaría márgenes indeseados en los visores PDF. En este perfil, el sangrado requerido es de exactamente 0.0 mm, se aceptan y recomiendan imágenes en espacio sRGB / RGB, la resolución base se ajusta a 96 ppp y el TAC no está restringido a la absorción del papel físico.")
     ]
 
     for q, a in faqs:

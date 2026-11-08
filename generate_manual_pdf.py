@@ -191,26 +191,24 @@ def build_manual_pdf():
             [
                 ("1.1. Filosofía de Taller: Objetivo Cero Errores y Cero Desperdicio",
                  "IntelliPrint es una solución informática avanzada de ingeniería gráfica concebida para auditar, normalizar, corregir e imponer documentos PDF antes de su envío a las prensas de impresión offset y digital. En la industria gráfica actual, más del 70% de las paradas no planificadas de máquina y repeticiones de tirada se deben a defectos inadvertidos en los archivos suministrados por clientes: falta de sangre, tipografías compuestas en 4 tintas (Rich Black), exceso de tinta (TAC > 300%), líneas invisibles para el láser CTP o códigos de barras borrosos."),
-                ("1.2. Ahorro Económico y Sostenibilidad",
-                 "Corregir un error de preimpresión en el ordenador cuesta menos de 1 minuto. Corregirlo en máquina implica tirar cientos de pliegos de papel a la papelera, desperdiciar planchas de aluminio CTP y gastar horas de operario. IntelliPrint actúa como un cortafuegos que reduce la maculatura y optimiza la huella ecológica."),
-                ("1.3. Arquitectura del Sistema",
-                 "Desarrollado en Python (FastAPI, PyMuPDF, PikePDF, OpenCV, Pillow) y frontend ultrarrápido en HTML5/Tailwind sin dependencias pesadas. Funciona en local o en la nube desplegado en contenedores Docker.")
+                ("1.2. Identidad Visual 'iP' y Enlaces Institucionales",
+                 "Incorpora el logotipo de vanguardia 'iP' en degradado proceso CMY junto al bloque tipográfico de contraste con 'Intelli' en Light 300 blanco y 'Print' en Heavy 700 cian (#00A3FF). Todos los logotipos institucionales en web y PDF son interactivos y enlazan a Salesianos Urnieta, Mendizabala LHII y Gobierno Vasco."),
+                ("1.3. Ahorro Económico, Sostenibilidad y Arquitectura",
+                 "Corregir un error de preimpresión en el ordenador cuesta menos de 1 minuto frente a cientos de pliegos desperdiciados en máquina. Desarrollado en Python (FastAPI, PyMuPDF, OpenCV, Pillow) y frontend ultrarrápido en HTML5/Tailwind.")
             ],
             "CALLOUT_EMERALD:Cero Desperdicio: IntelliPrint conecta la ingeniería de software con la física de taller para evitar maculatura y devoluciones."
         ),
         (
             "2. PRIMEROS PASOS Y CONFIGURACIÓN DEL PREFLIGHT",
             [
-                ("2.1. Conexión y Estado del Servidor",
-                 "Acceda a http://localhost:8000 o a la dirección IP asignada en su red de centro. Compruebe en la cabecera que el indicador verde 'Motor Activo' está encendido, lo que certifica la disponibilidad de las librerías de análisis y del catálogo de perfiles ICC."),
-                ("2.2. Modo Cabina de Máquina D50 y Pantalla Completa",
-                 "El botón [🌙 Cabina D50] activa un tema oscuro antirreflejo de alto contraste según norma ISO 3664 (iluminante D50 / 5000 K) para proteger la adaptación cromática del maquinista en el pupitre. El botón [⛶] activa el modo de pantalla completa para monitores táctiles."),
-                ("2.3. Carga del PDF e Inspección Preliminar",
-                 "Arrastre el PDF a la caja de carga o búsquelo con 'Seleccionar PDF'. Inmediatamente el sistema efectúa una lectura preliminar indicando peso, número de páginas, formato exacto en mm, número de fotos y OutputIntent original."),
-                ("2.4. Perfiles de Verificación Estándar",
-                 "Seleccione el perfil adecuado al destino de su trabajo gráfico: Offset Comercial (300% TAC), Impresión Digital Estándar (320%), Prensa (240%), Packaging y Cartoncillo (5 mm de sangre) o Gran Formato (150 DPI)."),
-                ("2.5. Editor de Perfiles de Preflight Personalizados",
-                 "Pulsando [⚙️ Gestionar Perfiles] o [+ Crear Perfil], profesores y jefes de taller pueden definir tolerancias a medida: DPI mínimo, sangrado de 0 a 10 mm, límite TAC, línea pelo y reglas de color, con exportación e importación en archivo JSON.")
+                ("2.1. Conexión, Modo Cabina D50 e Inspección Preliminar",
+                 "Acceso web inmediato sin cliente pesado. Conmutador [🌙 Cabina D50] para protección cromática según ISO 3664 y modo pantalla completa [⛶]. Al arrastrar el PDF, la lectura rápida reporta peso, páginas, recorte en mm, fotos y OutputIntent."),
+                ("2.2. Los 6 Perfiles de Verificación Estándar (Paso 2)",
+                 "Offset Comercial (300% TAC, 3 mm sangre), Digital Estándar (320% TAC, 2 mm), Prensa (240% TAC, 2 mm), Packaging (280% TAC, 5 mm de troquel), Gran Formato (150 DPI, 5 mm) y Web / Pantalla RGB (0.0 mm de sangre, 96 DPI, sRGB nativo sin restricción de TAC)."),
+                ("2.3. Distinción Fundamental: Paso 2 (Destino) vs Paso 3 (Perfil ICC)",
+                 "El Paso 2 (Perfil de Destino) es el inspector y baremo de calidad; NO incrusta perfiles en el PDF original. El Paso 3 (Perfil de Color ICC) define qué archivo .icc físico se inyecta como OutputIntent al generar el PDF normalizado o reparado."),
+                ("2.4. Editor de Perfiles de Preflight Personalizados FP",
+                 "Permite a docentes y jefes de taller configurar tolerancias a medida (DPI, sangrado de 0 a 10 mm, límite de TAC, hairlines y reglas booleanas de fuentes y Pantone) con exportación e importación en archivos JSON.")
             ],
             None
         ),
@@ -269,28 +267,28 @@ def build_manual_pdf():
         (
             "6. TRAZABILIDAD QR DEL MAQUINISTA Y MODO DIDÁCTICO FP",
             [
-                ("6.1. Código QR en el Margen Técnico (Slug)",
-                 "Al imponer pliegos o colocar marcas, se inyecta en el rebaje inferior un código QR 100% K de 9x9 mm junto a la identificación IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII. Al enfocarlo con el móvil, el maquinista abre la ficha /verify/{job_id}."),
-                ("6.2. Ficha Móvil para el Maquinista a Pie de Máquina",
-                 "Consola ultra-rápida que informa del semáforo de tirada, cuerpos de tinta necesarios (CMYK + Pantones), perfil ICC a cargar en consola, TAC máximo, comprobación de sangrado y botones de descarga directa del certificado y pliego."),
-                ("6.3. Modo Didáctico y Banco de Retos Prácticos FP",
-                 "Entorno formativo con 4 retos prediseñados: Tarjeta con Rich Black y sin sangre, Folleto con TAC 365% y líneas pelo, Estuche cosmético con código en 4 tintas y Revista con invasión de lomo. Cargar el reto genera el PDF sintético y lanza el preflight."),
-                ("6.4. Simulador Físico de Taller y Ficha Oficial del Alumno",
-                 "Sliders interactivos que simulan descalce de planchas offset, repintado en pila, oscilación de guillotina y pérdida en plancha CTP. Incluye cuestionario de 5 preguntas técnicas y emisión de la Ficha Oficial de Práctica en PDF con sellos oficiales.")
+                ("6.1. Código QR en el Margen Técnico (Slug) y Ficha Móvil",
+                 "Al imponer pliegos se inyecta en el rebaje un código QR 100% K de 9x9 mm. El maquinista enfoca la cámara y abre la consola web móvil (/verify/{job_id}) a pie de máquina en 1 segundo con semáforo, tintas y descargas directas."),
+                ("6.2. Banco Didáctico Ampliado de 20 Retos Oficiales FP",
+                 "20 casos de estudio reales organizados en 3 categorías: Iniciación FP (7 retos: Rich Black, RGB sRGB, sin sangre, 72 DPI, fuentes no embebidas, sin TrimBox, texto tramado), Intermedio FP (7 retos: TAC 365%, 5 Pantones, blanco sobreimpreso, trapping, orla fina, negro knockout, tinteros CIP3) y Avanzado FP (6 retos: código 4 tintas, lomo medianil, barniz calado, QR farmacia, SRA3 sin calles, solapa pegado)."),
+                ("6.3. Simulador Físico de Consecuencias en Taller",
+                 "Sliders interactivos que simulan descalce de planchas offset, repintado en pila por exceso de tinta, oscilación y filete blanco de guillotina, y pérdida de líneas en insoladora CTP."),
+                ("6.4. Quiz Técnico y Ficha Oficial del Alumno (PDF A4)",
+                 "Cuestionario de 5 preguntas de normativa ISO con baremo de notas y emisión automática de la Ficha Oficial de Práctica en PDF A4 con sellos y casillas para firmas docentes.")
             ],
             "CALLOUT_PURPLE:Formación Profesional: El simulador físico enseña a los estudiantes de Artes Gráficas las consecuencias mecánicas reales que provocan los fallos de PDF en el taller."
         ),
         (
             "7. DOCUMENTACIÓN DE SALIDA Y PREGUNTAS FRECUENTES (FAQ)",
             [
-                ("7.1. Certificado Técnico de Preflight (PDF A4)",
-                 "Documento formal de control de calidad para el archivo técnico de la imprenta, con sello institucional, huella SHA-256 de seguridad, datos colorimétricos y veredicto de tirada."),
-                ("7.2. Guía Pedagógica para el Diseñador y Cliente (PDF A4)",
-                 "Informe cordial redactado sin lenguaje agresivo que explica al cliente qué fallos tiene su archivo y cómo solucionarlos paso a paso en InDesign, Illustrator o Photoshop."),
-                ("7.3. Ficha de Tinteros CIP3 y Lámina Técnica FOGRA (PDF A4)",
-                 "Hojas especializadas descargables para el taller: plano de apertura de llaves de tintero (1 a 32 zonas) y póster de referencia de la tira FOGRA ISO 12647-2 con macroexplicación del balance de grises."),
-                ("7.4. Respuestas a Preguntas Frecuentes de Taller",
-                 "¿Por qué Rich Black falla en texto fino? Porque cualquier descalce de 0.05 mm genera halos de color. ¿La sangre reflejada altera el diseño? No, solo prolonga simétricamente los 3 mm exteriores al corte. ¿Cumple normas ISO? Sí, está calibrado según ISO 12647-2, ISO 15930 (PDF/X), CIP3 PPF v3.0 e ISO/IEC 15420 (GS1).")
+                ("7.1. Certificado Técnico de Preflight, Guía Cliente y CIP3 (PDF A4)",
+                 "Certificado formal para el archivo de taller con huella SHA-256; Guía didáctica para el cliente con tutoriales de corrección en InDesign/Photoshop; y hoja de llaves de tintero CIP3."),
+                ("7.2. ¿Qué diferencia real hay entre el Paso 2 y el Paso 3?",
+                 "El Paso 2 (Perfil de Destino) es el inspector de reglas y tolerancias; NO incrusta perfiles en el PDF. El Paso 3 (Perfil ICC) define qué perfil físico viaja como OutputIntent al normalizar el archivo."),
+                ("7.3. ¿Por qué el perfil 'Web / Pantalla' no tiene sangre?",
+                 "Los documentos para pantallas digitales no sufren corte mecánico ni plegado físico. Exige 0.0 mm de sangre, admite y recomienda modo RGB a 96 DPI y desactiva el límite de TAC."),
+                ("7.4. Respuestas Técnicas de Taller y Normativa ISO",
+                 "Rich Black en texto fino causa descalce por vibración mecánica; la sangre reflejada prolonga los 3 mm exteriores sin tocar el diseño; y el sistema cumple ISO 12647-2, ISO 15930, CIP3 e ISO 15420.")
             ],
             None
         )

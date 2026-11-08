@@ -80,11 +80,17 @@
 ## 1. ¿QUÉ ES INTELLIPRINT?
 
 ### 1.1. Misión y Filosofía de Taller Gráfico
-**IntelliPrint** es una plataforma integral de ingeniería de software gráfico diseñada para auditar, normalizar, corregir e imponer documentos PDF antes de su entrada a las prensas de impresión offset y digital.
+**IntelliPrint** es una plataforma integral de ingeniería de software gráfico diseñada para auditar, normalizar, corregir e imponer documentos PDF antes de su entrada a las prensas de impresión offset y digital, así como para la validación de publicaciones digitales interactivas y web.
 
-Nacida en el entorno productivo y educativo de la Formación Profesional de Artes Gráficas del País Vasco (desarrollada conjuntamente por **CPIFP Salesianos Urnieta LHIPI** y **CIFP Mendizabala LHII**, con respaldo del **Departamento de Educación del Gobierno Vasco / Eusko Jaurlaritza**), su filosofía radica en el concepto de **"Cero Errores y Cero Desperdicio"**.
+Nacida en el entorno productivo y educativo de la Formación Profesional de Artes Gráficas del País Vasco (desarrollada conjuntamente por [**CPIFP Salesianos Urnieta LHIPI**](https://salesianosurnieta.com/) y [**CIFP Mendizabala LHII**](https://www.mendizabala.eus/), con respaldo del [**Departamento de Educación del Gobierno Vasco / Eusko Jaurlaritza**](https://www.euskadi.eus/gobierno-vasco/departamento-educacion/)), su filosofía radica en el concepto de **"Cero Errores y Cero Desperdicio"**.
 
 En la industria gráfica tradicional, más del 70% de las incidencias en máquina (repintados, paradas de tirada por descalce de texto fino, filetes blancos por falta de sangre, códigos de barras ilegibles en supermercados o amputación de textos por guillotina) se originan por fallos en los artes finales suministrados por agencias y diseñadores externos. IntelliPrint actúa como un cortafuegos inteligente entre el diseño y la máquina de imprimir.
+
+### 1.2. Identidad Visual y Logotipo Corporativo
+La identidad visual de IntelliPrint refleja la unión entre la precisión de la preimpresión técnica y la innovación educativa:
+- **Monograma Simbólico "iP":** Ícono vanguardista de diseño plano estilizado que integra el punto de la 'i' en amarillo proceso (`#FFD700`), el fuste vertical blanco puro (`#FFFFFF`) y el bucle descendente de la 'p' en un degradado armónico de cian proceso (`#00A3FF`) y magenta (`#E6007E`), evocando la síntesis sustractiva de la cuatricromía.
+- **Logotipo Tipográfico de Alto Contraste:** Composición equilibrada formada por la palabra `Intelli` en peso fino tipográfico (*Light 300*) en blanco puro y `Print` en peso sólido (*Heavy 700*) en cian de proceso (`#00A3FF`).
+- **Navegación e Interactividad Institucional:** Todos los logotipos presentes en la interfaz web, fichas móviles de taller y certificados PDF incorporan hipervínculos interactivos a los portales oficiales de las instituciones colaboradoras y a la página de inicio.
 
 ### 1.2. Objetivos de Producción y Formación Profesional
 1. **Reducción de Maculatura y Desperdicio:** Minimizar el consumo inútil de papel, tinta, planchas CTP y energía, reduciendo el impacto medioambiental.
@@ -137,17 +143,24 @@ Nada más seleccionar el archivo, el sistema realiza una lectura instantánea si
 - Cantidad de imágenes rasterizadas embebidas.
 - Perfil de salida (*OutputIntent*) detectado en el PDF original.
 
-### 3.3. Selección de Perfiles de Verificación Estándar
-En el desplegable "Perfil de Destino", elija el estándar de calidad adecuado al destino del producto:
-- **Offset Comercial (ISO Coated v2 / 300% TAC):** Para folletos, catálogos y revistas de alta calidad en papel estucado (≥300 DPI, 3 mm de sangre, TAC ≤300%).
-- **Impresión Digital Estándar:** Para tiradas cortas en prensa láser/tóner o inkjet de producción (≥200 DPI, 2 mm de sangre, TAC ≤320%).
-- **Prensa y Papel Periódico (TAC 240%):** Para publicaciones en papel prensa de alta absorción.
-- **Packaging y Cartoncillo:** Para estuches, cajas y packaging con tintas especiales y troquel (5 mm de sangre).
-- **Gran Formato y Cartelería:** Para lonas y vinilos donde la distancia de visualización admite 150 DPI.
+### 3.3. Selección de Perfiles de Verificación Estándar (Paso 2)
+En el bloque **"2. PERFIL DE DESTINO (INTELLIPRINT)"**, elija el estándar técnico con el que desea auditar el archivo. El catálogo oficial incluye 6 perfiles predeterminados:
+1. **Offset Comercial (ISO Coated v2 / 300% TAC):** Para folletos, catálogos, revistas y papelería corporativa de alta calidad en papel estucado brillante o mate según ISO 12647-2 (≥300 DPI, 3.0 mm de sangre, TAC ≤300%, espacio CMYK).
+2. **Impresión Digital Estándar:** Para tiradas cortas bajo demanda en prensas digitales láser/tóner o inkjet de producción continua (≥200 DPI, 2.0 mm de sangre, TAC ≤320%, espacio CMYK).
+3. **Prensa y Papel Periódico:** Para rotativa y publicaciones en papel prensa de alta porosidad y absorción rápida (≥170 DPI, 2.0 mm de sangre, TAC ≤240%, espacio CMYK).
+4. **Packaging y Cartoncillo:** Para estuches, envases cosméticos, cajas plegables y productos con troquel complejo (≥300 DPI, 5.0 mm de sangrado mínimo, TAC ≤280%, espacio CMYK).
+5. **Gran Formato y Cartelería:** Para lonas publicitarias, vallas, vinilos, displays y roll-ups donde la mayor distancia de visualización admite densidades reducidas (≥150 DPI, 5.0 mm de sangrado, TAC ≤320%, espacio CMYK).
+6. **Web, Pantalla y Documento Digital (RGB):** Para catálogos interactivos, memorias corporativas para web, e-books o presentaciones digitales. A diferencia de los perfiles de imprenta, **este perfil exige estrictamente 0.0 mm de sangrado exterior**, admite y prioriza el espacio de color **RGB (sRGB)**, sitúa la resolución óptima en **96 DPI / ppp** y desactiva restricciones de TAC de tinta física (hasta 400%).
 
-### 3.4. Gestión de Espacios de Color y Perfiles ICC (Output Intent)
-- **Conservar perfil del documento:** Respeta el OutputIntent incrustado originalmente en el PDF.
-- **Elegir de icc_profiles/:** Asigna forzosamente un perfil del catálogo interno (*ISO Coated v2 300% ECI*, *PSO Coated v3 FOGRA51*, *PSO Uncoated v3 FOGRA52*, etc.).
+### 3.4. Gestión de Espacios de Color y Perfiles ICC (Paso 3)
+En el bloque **"3. PERFIL DE COLOR (ICC)"**, configure la intención de salida colorimétrica (*Output Intent*):
+- **Conservar perfil del documento:** Respeta el diccionario de salida (*OutputIntent*) que traía embebido originalmente el PDF. Recomendado cuando el archivo ya ha sido exportado correctamente desde maquetación.
+- **Elegir de icc_profiles/:** Asigna forzosamente un perfil ICC físico del catálogo (*ISO Coated v2 300% ECI*, *PSO Coated v3 FOGRA51*, *PSO Uncoated v3 FOGRA52*, *sRGB2014.icc*, etc.). Este perfil será el que se incruste en el documento al ejecutar las herramientas de normalización o "Taller en 1 Clic".
+
+> [!IMPORTANT]
+> **¿Qué diferencia existe entre el Paso 2 y el Paso 3?**
+> - **El Paso 2 (Perfil de Destino)** es el **inspector o baremo normativo**. Establece las reglas y tolerancias para buscar fallos (resolución mínima, sangrado requerido, límite de TAC, hairlines o espacios no permitidos). **El Paso 2 NO incrusta ni altera ningún perfil dentro del PDF**.
+> - **El Paso 3 (Perfil de Color ICC)** es la **declaración física de salida**. Determina qué perfil de color específico (`.icc`) viajará incrustado como *OutputIntent* en el archivo resultante cuando se ejecute la conversión cromática o la reparación en un clic.
 
 ### 3.5. Creador y Editor de Perfiles de Preflight Personalizados (Custom Profiles Editor)
 Pulsando el botón **`[ ⚙️ Gestionar Perfiles ]`** o **`[ + Crear Perfil Personalizado ]`**, los docentes y jefes de taller pueden definir criterios de inspección exactos para su parque de maquinaria:
@@ -327,12 +340,34 @@ Accediendo desde el botón superior **`[ 🎓 Alumnos FP ]`**, se abre el entorn
 [ 🎯 1. Retos Prácticos FP ] [ ⚙️ 2. Simulador Físico ] [ 📝 3. Autoevaluación FP ] [ 📄 4. Ficha Alumno PDF ]
 ```
 
-### 7.1. Banco de Retos Prácticos Reales (Casos de Estudio FP)
-Contiene ejercicios prediseñados listos para cargar con 1 clic:
-- **Reto 1: Tarjeta Corporativa con Rich Black y Sin Sangrado (Iniciación FP)**
-- **Reto 2: Folleto Promocional con TAC 365% y Líneas Pelo CTP (Intermedio)**
-- **Reto 3: Estuche Packaging con Código de Barras en 4 Tintas (Avanzado)**
-- **Reto 4: Portada de Revista con Textos en el Medianil / Lomo (Avanzado)**
+### 7.1. Banco de Retos Prácticos Reales (20 Casos de Estudio FP)
+IntelliPrint incorpora un catálogo ampliado de **20 retos prácticos oficiales** basados en incidencias reales extraídas de talleres gráficos y de packaging, distribuidos en tres niveles pedagógicos progresivos:
+
+#### A. Categoría 1: Iniciación FP (Grado Medio / 1º Grado Superior) · 7 Retos
+1. **Reto 1: Tarjeta Corporativa con Rich Black y Sin Sangrado:** Tarjeta 85x55 mm con tipografía de 6 pt en 4 tintas (Rich Black 300%) y fondos al corte con 0 mm de sangre.
+2. **Reto 2: Flyer Nocturno en Espacio de Color RGB sin Separación:** Flyer publicitario A6 con fotografías sRGB sin convertir y colores saturados fuera de gamut offset.
+3. **Reto 3: Tríptico Envolvente con Fondos al Corte y Cajas al Ras:** Folleto A4 plegado con 0 mm de sangre y cajas de texto invadiendo las líneas de plegado.
+4. **Reto 4: Cartel Promocional con Imágenes Web a 72 DPI:** Cartel A3 con imagen descargada de internet escalada al 400% y pixelado visible.
+5. **Reto 5: Marcapáginas Cultural con Tipografías No Incrustadas:** Archivo con fuentes referenciadas externamente que disparan riesgo de reflow y sustitución en RIP.
+6. **Reto 6: Adhesivo Promocional sin Cajas de Página (TrimBox/BleedBox):** PDF con solo MediaBox, carente de cajas geométricas de corte para mesa Kongsberg.
+7. **Reto 7: Cupón Descuento con Texto Legal en Gris Tramado al 40%:** Textos legales minúsculos de 4.5 pt rotos por trama de semitono dispersa.
+
+#### B. Categoría 2: Intermedio FP (Taller de Impresión Offset / Digital) · 7 Retos
+8. **Reto 8: Folleto Promocional con TAC 365% y Líneas Pelo CTP:** Fondo nocturno saturado con TAC extremo (365%) y filetes dorados ultrafinos de 0.06 pt.
+9. **Reto 9: Catálogo Comercial con 5 Tintas Planas Pantone Directas:** Catálogo presupuestado para 4 colores que incluye 5 tintas directas no convertidas.
+10. **Reto 10: Dossier Corporativo con Blanco en Sobreimpresión (White Overprint):** Logotipo blanco con atributo `/OP true` que desaparece al calar en CTP.
+11. **Reto 11: Carta de Menú con Texto Amarillo sobre Azul sin Reventado (Trapping):** Tipografía amarilla sobre fondo azul oscuro propensa a filetes blancos por vibración.
+12. **Reto 12: Orla de Diploma con Filetes Guilloche de 0.08 pt y TAC Elevado:** Trazos de seguridad ultrafinos y masa de tinta del 330% sobre papel verjurado absorbente.
+13. **Reto 13: Manual de Taller con Texto 100% K en Calado (Knockout):** Textos negros que calan las masas de color de fondo dejando huecos en CMY.
+14. **Reto 14: Calendario de Sobremesa con Descompensación de Tinteros CIP3:** Gran masa oscura en el lateral izquierdo y blanco puro en el derecho con riesgo de emulsión agua-tinta.
+
+#### C. Categoría 3: Avanzado FP (Packaging, Imposición y Acabados) · 6 Retos
+15. **Reto 15: Estuche Packaging con Código de Barras EAN-13 en 4 Tintas:** Código de barras comercial tramado en cuatricromía y textos legales a 1.2 mm del troquel.
+16. **Reto 16: Portada y Pliegos de Revista con Textos en el Medianil/Lomo:** Publicación grapada con textos dentro de la zona de grapa (8 mm) sin compensar la trepa.
+17. **Reto 17: Etiqueta de Vino con Barniz UVI Calando en vez de Sobreimprimir:** Capa de barniz serigráfico selectivo con calado que perfora la tinta inferior.
+18. **Reto 18: Prospecto Farmacéutico con Código QR en 4 Tintas sobre Papel Fino:** Código QR denso en Rich Black sobre papel biblia de 45 g/m² que empasta los módulos.
+19. **Reto 19: Pliego de Imposición SRA3 sin Calles de Corte ni Marcas de Taller:** Montaje artesanal con 8 tarjetas pegadas a corte cero sin marcas ni tira de calibración.
+20. **Reto 20: Envase Alimentario con Masa de Tinta y Barniz en la Solapa de Pegado:** Solapa de encolado (*Glue Flap*) saturada de tinta y barniz que destruye la adherencia de cola PUR.
 
 ### 7.2. Simulador Físico de Consecuencias en Taller
 Permite al alumnado experimentar visualmente qué le ocurriría al trabajo físico en el taller mediante simulaciones interactivas con deslizadores:
@@ -392,6 +427,12 @@ Desde la botonera de resultados o la ficha de verificación, IntelliPrint genera
 
 **5. ¿Cumple IntelliPrint con las normas internacionales de Artes Gráficas?**
 > Sí. Todas las tolerancias y reglas de comprobación y corrección están parametrizadas con base en las normas **ISO 12647-2** (Offset en pliegos y tiras de control), **ISO 15930** (Estándares PDF/X-1a y PDF/X-4), **ISO/IEC 15420** (especificaciones GS1 para códigos de barras), **CIP3/CIP4 PPF v3.0** y las especificaciones del **Ghent Workgroup (GWG)**.
+
+**6. ¿Qué diferencia real hay entre el Paso 2 (Perfil de Destino) y el Paso 3 (Perfil ICC)? ¿El Paso 2 ya incrusta un perfil?**
+> **No.** El Paso 2 actúa estrictamente como el **conjunto de reglas y tolerancias de inspección** (DPI mínimo admisible, sangrado obligatorio, límite de TAC, hairlines y espacios cromáticos admitidos). El Paso 2 no modifica ni incrusta nada en el PDF original. La incrustación de un perfil físico de color solo ocurre en el **Paso 3**, donde el usuario elige conservar el perfil nativo del documento o forzar la asignación de un archivo `.icc` del catálogo al ejecutar procesos de normalización o corrección ("Taller en 1 Clic", "Convertir a CMYK", etc.).
+
+**7. ¿Por qué el perfil 'Web, Pantalla y Documento Digital (RGB)' no exige sangrado exterior?**
+> Los documentos diseñados para visualización digital, navegación web, tablets o presentaciones en pantalla no atraviesan una fase de plegado o corte con guillotina mecánica en taller. Por tanto, exigir sangrado exterior generaría márgenes indeseados en los visores PDF. En este perfil, el sangrado requerido es de exactamente **0.0 mm**, se aceptan y recomiendan imágenes en espacio **sRGB / RGB**, la resolución base se ajusta a **96 ppp** y el TAC no está restringido a la absorción del papel físico.
 
 ---
 
