@@ -31,6 +31,9 @@
             <button id="headerNewPdfBtn" onclick="resetToNewAnalysis()" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-xs transition ml-2 cursor-pointer" title="Comenzar desde el principio con otro PDF">
               <i class="fa-solid fa-plus-circle"></i> Nuevo PDF
             </button>
+            <button onclick="openDidacticModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-lg shadow-xs transition ml-2 cursor-pointer" title="Modo Didáctico y Simulador de Taller para Alumnos FP">
+              <i class="fa-solid fa-graduation-cap text-amber-300"></i> Modo Didáctico FP
+            </button>
           </div>
           <p class="text-xs text-slate-400">Sistema Avanzado de Preflight mediante Redes Neuronales & Análisis PDF</p>
         </div>
@@ -217,6 +220,9 @@
             </button>
             <button onclick="openPressOperatorSheet()" id="btnOpenPressSheet" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Ficha Técnica de Producción y Trazabilidad para el Maquinista (QR en Pliego)">
               <i class="fa-solid fa-qrcode text-amber-300"></i> <span>Ficha Maquinista</span>
+            </button>
+            <button onclick="openDidacticModal()" id="btnDidactic" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-700 to-purple-700 hover:from-indigo-800 hover:to-purple-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Modo Didáctico y Simulador de Taller FP para Alumnos">
+              <i class="fa-solid fa-graduation-cap text-amber-300"></i> <span>Modo Alumnos FP</span>
             </button>
             <button id="downloadJsonBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-code"></i> JSON Oficial
@@ -1781,6 +1787,223 @@
           Cerrar
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal: Modo Didáctico y Simulador de Taller FP -->
+  <div id="didacticModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeDidacticModal()"></div>
+
+    <!-- Panel -->
+    <div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-amber-300 text-lg">
+            <i class="fa-solid fa-graduation-cap"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold tracking-tight text-white">Modo Didáctico · Simulador de Taller Gráfico FP</h3>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">FP Artes Gráficas</span>
+            </div>
+            <p class="text-xs text-indigo-200/80">CPIFP Salesianos Urnieta LHIPI · CIFP Mendizabala LHII · Hezkuntza Saila (Gobierno Vasco)</p>
+          </div>
+        </div>
+        <button onclick="closeDidacticModal()" class="w-8 h-8 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="flex items-center gap-2 px-6 py-2.5 bg-slate-100 border-b border-slate-200 text-xs font-semibold shrink-0">
+        <button id="didTabBtnScenarios" onclick="switchDidacticTab('scenarios')" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white shadow-xs transition flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-bullseye"></i> 1. Retos Prácticos FP
+        </button>
+        <button id="didTabBtnSimulator" onclick="switchDidacticTab('simulator')" class="px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-gears"></i> 2. Simulador Físico de Taller
+        </button>
+        <button id="didTabBtnQuiz" onclick="switchDidacticTab('quiz')" class="px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-clipboard-question"></i> 3. Autoevaluación FP
+        </button>
+        <button id="didTabBtnWorksheet" onclick="switchDidacticTab('worksheet')" class="px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-file-pdf"></i> 4. Ficha Alumno PDF
+        </button>
+      </div>
+
+      <!-- Body / Tab Content -->
+      <div class="p-6 overflow-y-auto flex-1 bg-slate-50 space-y-6">
+
+        <!-- TAB 1: RETOS PRÁCTICOS -->
+        <div id="didTabScenarios" class="space-y-4">
+          <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-start gap-3">
+            <i class="fa-solid fa-circle-info text-indigo-600 text-lg mt-0.5"></i>
+            <div>
+              <h4 class="text-xs font-bold text-indigo-900">Banco de Casos Prácticos Reales de Taller</h4>
+              <p class="text-xs text-indigo-800 mt-0.5">
+                Selecciona uno de los retos preparados por el equipo docente. IntelliPrint generará un PDF real con las incidencias descritas y ejecutará el preflight para que analices el informe como maquinista y preimpresor.
+              </p>
+            </div>
+          </div>
+
+          <div id="scenariosGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- TAB 2: SIMULADOR FÍSICO DE TALLER -->
+        <div id="didTabSimulator" class="hidden space-y-4">
+          <!-- Simulator subtabs -->
+          <div class="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
+            <button id="simSubRegister" onclick="switchSimEffect('register')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-xs cursor-pointer">
+              <i class="fa-solid fa-layer-group"></i> Descalce de Registro (Rich Black)
+            </button>
+            <button id="simSubSetoff" onclick="switchSimEffect('setoff')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer">
+              <i class="fa-solid fa-droplet"></i> Repintado en Pila (Exceso TAC)
+            </button>
+            <button id="simSubGuillotine" onclick="switchSimEffect('guillotine')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer">
+              <i class="fa-solid fa-scissors"></i> Guillotina y Sangre (Filete Blanco)
+            </button>
+            <button id="simSubCtp" onclick="switchSimEffect('ctp')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer">
+              <i class="fa-solid fa-microscope"></i> Plancha CTP (Líneas Finas)
+            </button>
+          </div>
+
+          <!-- Simulation Area -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <!-- Controls Column -->
+            <div class="space-y-4 flex flex-col justify-between">
+              <div class="space-y-4">
+                <div id="simTitleBox">
+                  <h4 id="simTitle" class="text-sm font-bold text-slate-900">Descalce de Registro en 4 Tintas (Rich Black)</h4>
+                  <p id="simSubtitle" class="text-xs text-slate-500 mt-1">Efecto óptico de desajuste de planchas offset sobre texto fino.</p>
+                </div>
+
+                <!-- Dynamic Controls -->
+                <div id="simControlsContainer" class="space-y-3">
+                  <!-- Injected via JS -->
+                </div>
+
+                <!-- Pedagogical Explanation -->
+                <div class="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-1.5">
+                  <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-700 flex items-center gap-1">
+                    <i class="fa-solid fa-chalkboard-user"></i> Fundamento de Artes Gráficas
+                  </span>
+                  <p id="simPedagogyText" class="text-xs text-slate-700 leading-relaxed"></p>
+                </div>
+              </div>
+
+              <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 flex items-start gap-2">
+                <i class="fa-solid fa-triangle-exclamation text-amber-600 mt-0.5"></i>
+                <span id="simWorkshopRiskText"></span>
+              </div>
+            </div>
+
+            <!-- Preview Image Column -->
+            <div class="lg:col-span-2 flex flex-col items-center justify-center bg-slate-950 p-4 rounded-xl border border-slate-800 min-h-[260px] relative">
+              <div id="simImageLoading" class="hidden absolute inset-0 bg-slate-950/60 flex items-center justify-center z-10">
+                <i class="fa-solid fa-spinner fa-spin text-white text-2xl"></i>
+              </div>
+              <img id="simPreviewImg" class="max-w-full h-auto rounded shadow-lg border border-slate-700" alt="Simulación de taller">
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: AUTOEVALUACIÓN FP -->
+        <div id="didTabQuiz" class="hidden space-y-4">
+          <div class="bg-purple-50 border border-purple-200 rounded-xl p-4 flex items-start gap-3">
+            <i class="fa-solid fa-graduation-cap text-purple-600 text-lg mt-0.5"></i>
+            <div>
+              <h4 class="text-xs font-bold text-purple-900">Cuestionario Técnico de Autoevaluación en Preimpresión</h4>
+              <p class="text-xs text-purple-800 mt-0.5">
+                Demuestra tus conocimientos técnicos respondiendo a las siguientes preguntas clave de producción gráfica. Al finalizar, obtendrás tu nota de 0 a 10 con justificación basada en normas ISO.
+              </p>
+            </div>
+          </div>
+
+          <div id="quizQuestionsContainer" class="space-y-4">
+            <!-- Questions rendered via JS -->
+          </div>
+
+          <div class="flex items-center justify-between pt-2">
+            <button onclick="submitStudentQuiz()" class="px-5 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer">
+              <i class="fa-solid fa-check-double text-amber-300"></i> Calificar Autoevaluación
+            </button>
+            <button onclick="resetStudentQuiz()" class="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition cursor-pointer">
+              Reiniciar Cuestionario
+            </button>
+          </div>
+
+          <!-- Quiz Results Container -->
+          <div id="quizResultsContainer" class="hidden space-y-4 pt-4 border-t border-slate-200">
+            <!-- Results rendered via JS -->
+          </div>
+        </div>
+
+        <!-- TAB 4: FICHA ALUMNO PDF -->
+        <div id="didTabWorksheet" class="hidden space-y-4">
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start gap-3">
+            <i class="fa-solid fa-award text-emerald-600 text-lg mt-0.5"></i>
+            <div>
+              <h4 class="text-xs font-bold text-emerald-900">Emisión de Ficha Oficial de Evaluación y Práctica FP</h4>
+              <p class="text-xs text-emerald-800 mt-0.5">
+                Genera un informe PDF oficial en A4 con membrete institucional de Salesianos Urnieta, CIFP Mendizabala LHII y Gobierno Vasco para entregar al profesor o archivar en el porfolio del estudiante.
+              </p>
+            </div>
+          </div>
+
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm max-w-xl mx-auto space-y-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Nombre Completo del Estudiante:</label>
+              <input type="text" id="wsStudentName" placeholder="Ej: Mikel Etxebarria" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Centro Educativo:</label>
+              <input type="text" id="wsSchoolName" value="CPIFP Salesianos Urnieta / CIFP Mendizabala LHII" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Reto / Caso de Taller Asociado:</label>
+              <select id="wsScenarioSelect" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                <!-- Rendered dynamically -->
+              </select>
+            </div>
+
+            <div id="wsQuizNotice" class="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600">
+              <i class="fa-solid fa-info-circle text-indigo-500 mr-1"></i>
+              <span>Si completas el cuestionario de la Pestaña 3, tu calificación y desglose de aciertos se incluirán automáticamente en la ficha oficial.</span>
+            </div>
+
+            <div class="pt-2">
+              <button onclick="generateOfficialWorksheet()" id="btnGenerateWorksheet" class="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-file-arrow-down text-amber-300"></i> Generar Ficha Oficial (PDF A4)
+              </button>
+            </div>
+
+            <div id="wsDownloadContainer" class="hidden text-center pt-2">
+              <a id="wsDownloadLink" href="#" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow transition">
+                <i class="fa-solid fa-download"></i> Descargar Ficha Generada (PDF)
+              </a>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-between px-6 py-3.5 bg-slate-50 border-t border-slate-200 shrink-0">
+        <span class="text-[11px] text-slate-500 flex items-center gap-1.5">
+          <i class="fa-solid fa-shield-halved text-indigo-600"></i>
+          Módulo Pedagógico FP basado en especificaciones ISO 12647-2, ISO 15930 y Ghent Workgroup.
+        </span>
+        <button onclick="closeDidacticModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+          Cerrar
+        </button>
+      </div>
+
     </div>
   </div>
 
@@ -5377,6 +5600,523 @@
         return;
       }
       window.open(`/verify/${currentJobId}`, '_blank');
+    }
+
+    // =========================================================================
+    // MODO DIDÁCTICO Y SIMULADOR DE TALLER FP
+    // =========================================================================
+
+    let cachedScenarios = [];
+    let cachedQuizQuestions = [];
+    let lastQuizResult = null;
+    let currentSimEffect = 'register';
+
+    const simConfig = {
+      register: {
+        title: 'Descalce de Registro en 4 Tintas (Rich Black)',
+        subtitle: 'Efecto óptico de desajuste micrométrico de planchas offset sobre texto fino.',
+        pedagogy: 'En impresión offset y digital de pliegos, cuando un texto inferior a 8 pt se diseña en cuatricromía (C+M+Y+K), cualquier vibración, higrometría del papel o juego de pinzas provoca desfases entre planchas. El texto adquiere halos de color y se vuelve ilegible. La norma exige 100% K puro sobreimpreso.',
+        risk: 'Riesgo en taller: Devolución de tirada por texto borroso no conforme a especificaciones comerciales.',
+        controls: `
+          <div>
+            <div class="flex justify-between text-xs font-semibold text-slate-700 mb-1">
+              <span>Desfase de Planchas Offset:</span>
+              <span id="lblShiftVal" class="text-indigo-600 font-bold">+0.20 mm</span>
+            </div>
+            <input type="range" id="rngShift" min="1" max="10" value="4" step="1" oninput="onShiftSliderChange(this.value)" class="w-full accent-indigo-600">
+            <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
+              <span>0.05 mm (Mínimo)</span>
+              <span>0.50 mm (Descalce Severo)</span>
+            </div>
+          </div>
+        `
+      },
+      setoff: {
+        title: 'Repintado / Maculado en Pila de Salida (TAC > 300%)',
+        subtitle: 'Saturación de capa de tinta en papel estucado e imposibilidad de secado.',
+        pedagogy: 'La norma ISO 12647-2 limita la Cobertura Total de Tinta (TAC) a 300% en pliegos offset para papel estucado (FOGRA39/51). Por encima de este umbral, el barniz y vehículo oleoso no penetran en el poro del estucado; al apilarse los pliegos a la salida de máquina, la tinta húmeda mancha el dorso del pliego superior.',
+        risk: 'Riesgo en taller: Bloqueo de secado, pegado de hojas y maculado irrecuperable de la tirada.',
+        controls: `
+          <div>
+            <div class="flex justify-between text-xs font-semibold text-slate-700 mb-1">
+              <span>Cobertura Total de Tinta (TAC):</span>
+              <span id="lblTacVal" class="text-rose-600 font-bold">360%</span>
+            </div>
+            <input type="range" id="rngTac" min="260" max="380" value="360" step="10" oninput="onTacSliderChange(this.value)" class="w-full accent-rose-600">
+            <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
+              <span>280% (Dentro de Norma ISO)</span>
+              <span>380% (Peligro Crítico)</span>
+            </div>
+          </div>
+        `
+      },
+      guillotine: {
+        title: 'Desvío de Guillotina y Filete Blanco (Sangrado 0 mm)',
+        subtitle: 'Tolerancia de corte del pisón y cuchilla sobre pilas de papel.',
+        pedagogy: 'Una guillotina industrial corta pilas de 500 a 1000 pliegos con una oscilación mecánica inevitable de ±0.5 a 1.5 mm. Si el diseño no tiene 3 mm de sangre exterior (Bleed), la cuchilla al desfasarse cortará sobre el soporte virgen dejando visible un antiestético filete blanco en el contorno.',
+        risk: 'Riesgo en taller: Producto final defectuoso con filos blancos desparejos en tarjetas y folletos.',
+        controls: `
+          <div class="space-y-3">
+            <div class="flex items-center gap-2">
+              <input type="checkbox" id="chkHasBleed" onchange="updateSimPreview()" class="w-4 h-4 text-emerald-600 rounded">
+              <label for="chkHasBleed" class="text-xs font-bold text-slate-700">¿El documento incluye +3 mm de Sangre?</label>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs font-semibold text-slate-700 mb-1">
+                <span>Desvío de Cuchilla Guillotina:</span>
+                <span id="lblCutVal" class="text-amber-600 font-bold">1.5 mm</span>
+              </div>
+              <input type="range" id="rngCut" min="0.2" max="2.5" value="1.5" step="0.1" oninput="onCutSliderChange(this.value)" class="w-full accent-amber-600">
+              <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                <span>0.2 mm (Preciso)</span>
+                <span>2.5 mm (Desvío Elevado)</span>
+              </div>
+            </div>
+          </div>
+        `
+      },
+      ctp: {
+        title: 'Pérdida de Trazo en Plancha CTP (Líneas Finas / Hairlines)',
+        subtitle: 'Límite de resolución óptica del láser térmico a 2400 DPI.',
+        pedagogy: 'Los láseres de insolación térmica CTP no pueden polimerizar de forma estable trazos con un ancho inferior a 0.25 pt (aprox. 0.088 mm). Durante el procesado y tiraje, el arrastre de los rodillos dadores de agua y tinta desgasta la emulsión débil, haciendo desaparecer las líneas en el pliego.',
+        risk: 'Riesgo en taller: Pérdida total de filetes decorativos, tramas sutiles o marcas de diseño.',
+        controls: `
+          <div>
+            <div class="flex justify-between text-xs font-semibold text-slate-700 mb-1">
+              <span>Grosor de Trazo Vectorial:</span>
+              <span id="lblStrokeVal" class="text-purple-600 font-bold">0.08 pt</span>
+            </div>
+            <input type="range" id="rngStroke" min="0.04" max="0.40" value="0.08" step="0.02" oninput="onStrokeSliderChange(this.value)" class="w-full accent-purple-600">
+            <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
+              <span>0.04 pt (Pérdida Total en CTP)</span>
+              <span>0.30 pt (Apto para Imprenta)</span>
+            </div>
+          </div>
+        `
+      }
+    };
+
+    function openDidacticModal() {
+      const modal = document.getElementById('didacticModal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+
+      if (cachedScenarios.length === 0) {
+        loadDidacticScenarios();
+      }
+      if (cachedQuizQuestions.length === 0) {
+        loadQuizQuestions();
+      }
+
+      switchSimEffect(currentSimEffect);
+    }
+
+    function closeDidacticModal() {
+      const modal = document.getElementById('didacticModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function switchDidacticTab(tabKey) {
+      const tabs = ['scenarios', 'simulator', 'quiz', 'worksheet'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`didTabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        const pane = document.getElementById(`didTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        if (t === tabKey) {
+          if (btn) {
+            btn.className = 'px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white shadow-xs transition flex items-center gap-1.5 cursor-pointer';
+          }
+          if (pane) pane.classList.remove('hidden');
+        } else {
+          if (btn) {
+            btn.className = 'px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition flex items-center gap-1.5 cursor-pointer';
+          }
+          if (pane) pane.classList.add('hidden');
+        }
+      });
+    }
+
+    async function loadDidacticScenarios() {
+      try {
+        const res = await fetch('/api/didactic/scenarios');
+        const data = await res.json();
+        cachedScenarios = data.scenarios || [];
+        renderScenariosGrid(cachedScenarios);
+        populateScenarioSelect(cachedScenarios);
+      } catch (err) {
+        console.error('Error cargando retos didácticos:', err);
+      }
+    }
+
+    function renderScenariosGrid(scenarios) {
+      const container = document.getElementById('scenariosGrid');
+      if (!container) return;
+
+      container.innerHTML = scenarios.map(s => `
+        <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
+                ${s.level}
+              </span>
+              <span class="text-[10px] font-semibold text-slate-500">
+                <i class="fa-solid fa-book-open text-slate-400 mr-1"></i>${s.doc_type}
+              </span>
+            </div>
+
+            <h4 class="text-sm font-bold text-slate-900 leading-snug">${s.title}</h4>
+            <p class="text-xs text-slate-600">${s.description}</p>
+
+            <div class="pt-2 border-t border-slate-100 space-y-1.5">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Incidencias a diagnosticar:</span>
+              <ul class="space-y-1">
+                ${s.target_errors.map(err => `
+                  <li class="text-[11px] text-slate-700 flex items-start gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0"></span>
+                    <span>${err}</span>
+                  </li>
+                `).join('')}
+              </ul>
+            </div>
+
+            <div class="pt-2">
+              <span class="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                <i class="fa-solid fa-stamp"></i> ${s.iso_norm}
+              </span>
+            </div>
+          </div>
+
+          <div class="pt-4 mt-2">
+            <button onclick="loadDidacticScenario('${s.id}', this)" class="w-full py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-2 cursor-pointer">
+              <i class="fa-solid fa-play text-amber-300"></i> Cargar Reto en IntelliPrint
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function populateScenarioSelect(scenarios) {
+      const sel = document.getElementById('wsScenarioSelect');
+      if (!sel) return;
+      sel.innerHTML = scenarios.map(s => `
+        <option value="${s.id}">${s.title}</option>
+      `).join('');
+    }
+
+    async function loadDidacticScenario(scenarioId, btnEl) {
+      let origHtml = '';
+      if (btnEl) {
+        origHtml = btnEl.innerHTML;
+        btnEl.disabled = true;
+        btnEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-amber-300"></i> Generando PDF y Analizando...';
+      }
+
+      try {
+        const res = await fetch(`/api/didactic/load-scenario/${scenarioId}`, { method: 'POST' });
+        if (!res.ok) {
+          const err = await res.json();
+          alert('Error: ' + (err.detail || 'Fallo al cargar el reto didáctico'));
+          return;
+        }
+
+        const data = await res.json();
+        currentReport = data.report;
+        currentJobId = data.job_id;
+
+        closeDidacticModal();
+
+        renderResults(currentReport);
+        loadingState.classList.add('hidden');
+        setupSection.classList.add('hidden');
+        resultsSection.classList.remove('hidden');
+
+        const headerBtn = document.getElementById('headerNewPdfBtn');
+        if (headerBtn) headerBtn.classList.remove('hidden');
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      } catch (err) {
+        alert('Error al conectar con el servidor: ' + err.message);
+      } finally {
+        if (btnEl) {
+          btnEl.disabled = false;
+          btnEl.innerHTML = origHtml;
+        }
+      }
+    }
+
+    function switchSimEffect(effect) {
+      currentSimEffect = effect;
+      const effects = ['register', 'setoff', 'guillotine', 'ctp'];
+
+      effects.forEach(e => {
+        const btn = document.getElementById(`simSub${e.charAt(0).toUpperCase() + e.slice(1)}`);
+        if (btn) {
+          if (e === effect) {
+            btn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-xs cursor-pointer';
+          } else {
+            btn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer';
+          }
+        }
+      });
+
+      const conf = simConfig[effect];
+      if (!conf) return;
+
+      document.getElementById('simTitle').textContent = conf.title;
+      document.getElementById('simSubtitle').textContent = conf.subtitle;
+      document.getElementById('simPedagogyText').textContent = conf.pedagogy;
+      document.getElementById('simWorkshopRiskText').textContent = conf.risk;
+      document.getElementById('simControlsContainer').innerHTML = conf.controls;
+
+      updateSimPreview();
+    }
+
+    function onShiftSliderChange(val) {
+      const mm = (parseInt(val) * 0.05).toFixed(2);
+      const lbl = document.getElementById('lblShiftVal');
+      if (lbl) lbl.textContent = `+${mm} mm`;
+      updateSimPreview();
+    }
+
+    function onTacSliderChange(val) {
+      const lbl = document.getElementById('lblTacVal');
+      if (lbl) lbl.textContent = `${val}%`;
+      updateSimPreview();
+    }
+
+    function onCutSliderChange(val) {
+      const lbl = document.getElementById('lblCutVal');
+      if (lbl) lbl.textContent = `${parseFloat(val).toFixed(1)} mm`;
+      updateSimPreview();
+    }
+
+    function onStrokeSliderChange(val) {
+      const lbl = document.getElementById('lblStrokeVal');
+      if (lbl) lbl.textContent = `${parseFloat(val).toFixed(2)} pt`;
+      updateSimPreview();
+    }
+
+    function updateSimPreview() {
+      const img = document.getElementById('simPreviewImg');
+      const loader = document.getElementById('simImageLoading');
+      if (!img) return;
+
+      let url = '';
+      if (currentSimEffect === 'register') {
+        const shift = document.getElementById('rngShift')?.value || 4;
+        url = `/api/didactic/simulate/register?shift_px=${shift}&t=${Date.now()}`;
+      } else if (currentSimEffect === 'setoff') {
+        const tac = document.getElementById('rngTac')?.value || 360;
+        url = `/api/didactic/simulate/setoff?tac=${tac}&t=${Date.now()}`;
+      } else if (currentSimEffect === 'guillotine') {
+        const hasBleed = document.getElementById('chkHasBleed')?.checked || false;
+        const drift = document.getElementById('rngCut')?.value || 1.5;
+        url = `/api/didactic/simulate/guillotine?has_bleed=${hasBleed}&cut_drift_mm=${drift}&t=${Date.now()}`;
+      } else if (currentSimEffect === 'ctp') {
+        const stroke = document.getElementById('rngStroke')?.value || 0.08;
+        url = `/api/didactic/simulate/ctp?stroke_pt=${stroke}&t=${Date.now()}`;
+      }
+
+      if (loader) loader.classList.remove('hidden');
+
+      const temp = new Image();
+      temp.onload = () => {
+        img.src = url;
+        if (loader) loader.classList.add('hidden');
+      };
+      temp.onerror = () => {
+        if (loader) loader.classList.add('hidden');
+      };
+      temp.src = url;
+    }
+
+    async function loadQuizQuestions() {
+      try {
+        const res = await fetch('/api/didactic/quiz/questions');
+        const data = await res.json();
+        cachedQuizQuestions = data.questions || [];
+        renderQuizQuestions(cachedQuizQuestions);
+      } catch (err) {
+        console.error('Error cargando preguntas del quiz:', err);
+      }
+    }
+
+    function renderQuizQuestions(questions) {
+      const container = document.getElementById('quizQuestionsContainer');
+      if (!container) return;
+
+      container.innerHTML = questions.map((q, qIdx) => `
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+          <div class="flex items-start gap-2">
+            <span class="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+              ${qIdx + 1}
+            </span>
+            <div class="flex-1">
+              <h5 class="text-xs font-bold text-slate-800">${q.question}</h5>
+              <span class="text-[10px] text-slate-400 font-medium">Referencia: ${q.iso_ref}</span>
+            </div>
+          </div>
+
+          <div class="space-y-2 pl-8">
+            ${q.options.map((opt, optIdx) => `
+              <label class="flex items-start gap-2 text-xs text-slate-700 p-2 rounded-lg hover:bg-slate-50 cursor-pointer border border-transparent hover:border-slate-200 transition">
+                <input type="radio" name="quiz_${q.id}" value="${optIdx}" class="mt-0.5 accent-purple-600">
+                <span>${opt}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function submitStudentQuiz() {
+      const answers = {};
+      let answeredCount = 0;
+
+      cachedQuizQuestions.forEach(q => {
+        const checked = document.querySelector(`input[name="quiz_${q.id}"]:checked`);
+        if (checked) {
+          answers[q.id] = parseInt(checked.value);
+          answeredCount++;
+        }
+      });
+
+      if (answeredCount === 0) {
+        alert('Por favor, responde al menos una pregunta antes de calificar.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/didactic/quiz/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answers })
+        });
+        const data = await res.json();
+        lastQuizResult = data;
+        renderQuizResults(data);
+
+        const notice = document.getElementById('wsQuizNotice');
+        if (notice) {
+          notice.innerHTML = `
+            <i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>
+            <span class="font-bold text-emerald-800">Calificación registrada: ${data.score} / 10 (${data.level}). Se incluirá en la ficha oficial.</span>
+          `;
+          notice.className = 'p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900';
+        }
+
+      } catch (err) {
+        alert('Error al calificar el cuestionario: ' + err.message);
+      }
+    }
+
+    function renderQuizResults(results) {
+      const container = document.getElementById('quizResultsContainer');
+      if (!container) return;
+
+      container.classList.remove('hidden');
+
+      const isPass = results.score >= 5.0;
+      const scoreColor = isPass ? 'text-emerald-600' : 'text-rose-600';
+      const bgHeader = isPass ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200';
+
+      container.innerHTML = `
+        <div class="p-4 rounded-xl border ${bgHeader} flex flex-col md:flex-row items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <div class="text-3xl font-black ${scoreColor}">
+              ${results.score.toFixed(1)} <span class="text-xs font-medium text-slate-500">/ 10</span>
+            </div>
+            <div>
+              <h4 class="text-sm font-bold text-slate-900">${results.level}</h4>
+              <p class="text-xs text-slate-600">Aciertos: ${results.correct_answers} de ${results.total_questions} preguntas · Evaluado: ${results.evaluated_at}</p>
+            </div>
+          </div>
+          <button onclick="switchDidacticTab('worksheet')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow transition flex items-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-file-pdf"></i> Emitir Ficha Alumno en PDF
+          </button>
+        </div>
+
+        <div class="space-y-3 pt-2">
+          <h5 class="text-xs font-bold uppercase tracking-wider text-slate-600">Desglose Técnico y Justificación Pedagógica:</h5>
+          ${results.feedback.map(fb => `
+            <div class="p-3.5 rounded-lg border ${fb.is_correct ? 'bg-emerald-50/50 border-emerald-200' : 'bg-rose-50/50 border-rose-200'} space-y-1.5">
+              <div class="flex items-start justify-between gap-2">
+                <span class="text-xs font-bold ${fb.is_correct ? 'text-emerald-800' : 'text-rose-800'} flex items-center gap-1.5">
+                  <i class="fa-solid ${fb.is_correct ? 'fa-circle-check text-emerald-600' : 'fa-circle-xmark text-rose-600'}"></i>
+                  ${fb.question}
+                </span>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded ${fb.is_correct ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
+                  ${fb.is_correct ? 'CORRECTO' : 'REVISAR'}
+                </span>
+              </div>
+              <p class="text-xs text-slate-700 pl-5 leading-relaxed">${fb.explanation}</p>
+              <div class="text-[10px] text-slate-400 pl-5">Normativa aplicable: ${fb.iso_ref}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+      container.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function resetStudentQuiz() {
+      cachedQuizQuestions.forEach(q => {
+        const radios = document.querySelectorAll(`input[name="quiz_${q.id}"]`);
+        radios.forEach(r => r.checked = false);
+      });
+      const container = document.getElementById('quizResultsContainer');
+      if (container) container.classList.add('hidden');
+      lastQuizResult = null;
+    }
+
+    async function generateOfficialWorksheet() {
+      const studentName = document.getElementById('wsStudentName')?.value || 'Estudiante FP';
+      const schoolName = document.getElementById('wsSchoolName')?.value || 'CPIFP Salesianos Urnieta / CIFP Mendizabala LHII';
+      const scenarioId = document.getElementById('wsScenarioSelect')?.value || 'reto_tarjeta_richblack';
+      const btn = document.getElementById('btnGenerateWorksheet');
+
+      let orig = '';
+      if (btn) {
+        orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-amber-300"></i> Generando Ficha Oficial...';
+      }
+
+      try {
+        const res = await fetch('/api/didactic/worksheet/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_name: studentName,
+            school_name: schoolName,
+            scenario_id: scenarioId,
+            quiz_results: lastQuizResult
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          alert('Error: ' + (err.detail || 'Fallo al generar la ficha'));
+          return;
+        }
+
+        const data = await res.json();
+        const dlContainer = document.getElementById('wsDownloadContainer');
+        const dlLink = document.getElementById('wsDownloadLink');
+        if (dlContainer && dlLink) {
+          dlLink.href = data.download_url;
+          dlContainer.classList.remove('hidden');
+          window.open(data.download_url, '_blank');
+        }
+
+      } catch (err) {
+        alert('Error conectando con el servidor: ' + err.message);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = orig;
+        }
+      }
     }
   </script>
 </body>

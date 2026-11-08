@@ -59,6 +59,17 @@ from traceability_engine import (
     get_press_operator_data,
     render_press_operator_html,
 )
+from didactic_engine import (
+    SCENARIOS_CATALOG,
+    QUESTIONS_FP,
+    generate_scenario_pdf,
+    simulate_register_misalignment,
+    simulate_setoff_stain,
+    simulate_guillotine_shift,
+    simulate_ctp_hairline,
+    evaluate_student_quiz,
+    generate_student_worksheet_pdf,
+)
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -2976,6 +2987,174 @@ async def get_job_qr_endpoint(job_id: str, request: Request):
     safe_id = Path(job_id).name
     qr_bytes = generate_traceability_qr_bytes(safe_id, base_url=str(request.base_url))
     return Response(content=qr_bytes, media_type="image/png")
+
+
+# =============================================================================
+# ENDPOINTS: MODO DIDÁCTICO / SIMULADOR PARA ALUMNOS FP
+# =============================================================================
+
+@app.get("/api/didactic/scenarios")
+async def get_didactic_scenarios_endpoint():
+    """Retorna la lista de retos de taller FP disponibles para práctica."""
+    return {"scenarios": SCENARIOS_CATALOG}
+
+
+@app.post("/api/didactic/load-scenario/{scenario_id}")
+async def load_didactic_scenario_endpoint(scenario_id: str):
+    """
+    Genera un PDF sintético con errores reales de taller para el reto indicado,
+    lo procesa con el motor de preflight y devuelve el reporte completo para análisis en clase.
+    """
+    scenario = next((s for s in SCENARIOS_CATALOG if s["id"] == scenario_id), None)
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Reto didáctico no encontrado.")
+
+    job_id = f"fp_{uuid.uuid4().hex[:6]}"
+    job_folder = UPLOAD_DIR / job_id
+    job_folder.mkdir(parents=True, exist_ok=True)
+
+    filename = f"{scenario_id}.pdf"
+    file_path = job_folder / filename
+
+    try:
+        generate_scenario_pdf(scenario_id, file_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando PDF de reto didáctico: {e}")
+
+    file_size_mb = round(file_path.stat().st_size / (1024 * 1024), 2)
+    with open(file_path, "rb") as f:
+        pdf_sha256 = hashlib.sha256(f.read()).hexdigest()
+
+    try:
+        report = engine.run_preflight(
+            pdf_path=str(file_path),
+            profile_id="OFFSET_300",
+            icc_choice="preserve"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error durante el preflight del reto didáctico: {e}")
+
+    report["job_meta"] = {
+        "job_id": job_id,
+        "filename": filename,
+        "file_size_mb": file_size_mb,
+        "sha256": pdf_sha256,
+        "profile_id": "OFFSET_300",
+        "icc_option": "preserve",
+        "selected_icc": None,
+        "pdf_path": str(file_path),
+        "is_didactic_scenario": True,
+        "scenario_id": scenario_id,
+        "scenario_title": scenario["title"]
+    }
+
+    job_json_path = JOBS_DIR / f"{job_id}.json"
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+
+    return {
+        "job_id": job_id,
+        "scenario": scenario,
+        "report": report
+    }
+
+
+@app.get("/api/didactic/simulate/register")
+async def simulate_register_endpoint(shift_px: int = 4):
+    """Genera la imagen PNG interactiva de descalce de registro en 4 tintas."""
+    buf = simulate_register_misalignment(shift_px)
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.get("/api/didactic/simulate/setoff")
+async def simulate_setoff_endpoint(tac: int = 360):
+    """Genera la imagen PNG interactiva de repintado/maculado en pila."""
+    buf = simulate_setoff_stain(tac)
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.get("/api/didactic/simulate/guillotine")
+async def simulate_guillotine_endpoint(has_bleed: bool = False, cut_drift_mm: float = 1.5):
+    """Genera la imagen PNG interactiva de oscilación de cuchilla y filete blanco."""
+    buf = simulate_guillotine_shift(has_bleed, cut_drift_mm)
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.get("/api/didactic/simulate/ctp")
+async def simulate_ctp_endpoint(stroke_pt: float = 0.08):
+    """Genera la imagen PNG interactiva de pérdida de emulsión CTP en líneas finas."""
+    buf = simulate_ctp_hairline(stroke_pt)
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.get("/api/didactic/quiz/questions")
+async def get_quiz_questions_endpoint():
+    """Retorna las preguntas del cuestionario de autoevaluación FP."""
+    clean_questions = []
+    for q in QUESTIONS_FP:
+        clean_questions.append({
+            "id": q["id"],
+            "question": q["question"],
+            "options": q["options"],
+            "iso_ref": q["iso_ref"]
+        })
+    return {"questions": clean_questions}
+
+
+@app.post("/api/didactic/quiz/evaluate")
+async def evaluate_quiz_endpoint(payload: dict):
+    """Evalúa las respuestas del alumno y devuelve nota y fundamentación técnica."""
+    answers = payload.get("answers", {})
+    results = evaluate_student_quiz(answers)
+    return results
+
+
+@app.post("/api/didactic/worksheet/generate")
+async def generate_worksheet_endpoint(payload: dict):
+    """Genera la Ficha Oficial de Evaluación del Alumno en PDF A4."""
+    student_name = payload.get("student_name", "Estudiante FP")
+    school_name = payload.get("school_name", "CPIFP Salesianos Urnieta / CIFP Mendizabala LHII")
+    scenario_id = payload.get("scenario_id", "reto_tarjeta_richblack")
+    quiz_results = payload.get("quiz_results")
+
+    scenario_info = next((s for s in SCENARIOS_CATALOG if s["id"] == scenario_id), SCENARIOS_CATALOG[0])
+
+    ws_id = f"worksheet_{uuid.uuid4().hex[:8]}"
+    worksheet_dir = BASE_DIR / "worksheets"
+    worksheet_dir.mkdir(parents=True, exist_ok=True)
+    out_path = worksheet_dir / f"{ws_id}.pdf"
+
+    try:
+        generate_student_worksheet_pdf(
+            student_name=student_name,
+            school_name=school_name,
+            scenario_info=scenario_info,
+            quiz_results=quiz_results,
+            output_pdf_path=out_path,
+            assets_dir=ASSETS_DIR
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando hoja de práctica PDF: {e}")
+
+    return {
+        "success": True,
+        "worksheet_id": ws_id,
+        "download_url": f"/api/didactic/worksheet/download/{ws_id}.pdf"
+    }
+
+
+@app.get("/api/didactic/worksheet/download/{filename}")
+async def download_worksheet_endpoint(filename: str):
+    """Descarga el PDF de la Ficha de Evaluación del Alumno."""
+    safe_name = Path(filename).name
+    target_path = BASE_DIR / "worksheets" / safe_name
+    if not target_path.exists():
+        raise HTTPException(status_code=404, detail="Ficha didáctica no encontrada.")
+    return FileResponse(
+        target_path,
+        media_type="application/pdf",
+        filename=f"IntelliPrint_Ficha_Evaluacion_{safe_name}"
+    )
 
 
 if __name__ == "__main__":

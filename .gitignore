@@ -12,6 +12,8 @@ uploads/*
 !uploads/.gitkeep
 jobs/*
 !jobs/.gitkeep
+worksheets/*
+!worksheets/.gitkeep
 hotfolder/in/*
 !hotfolder/in/.gitkeep
 hotfolder/processing/*
