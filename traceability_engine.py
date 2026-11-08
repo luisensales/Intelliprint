@@ -242,15 +242,15 @@ def render_press_operator_html(d: Dict[str, Any]) -> str:
   <!-- Top Brand Banner -->
   <header class="bg-slate-900 text-white px-4 py-3 border-b border-slate-800">
     <div class="max-w-md mx-auto flex items-center justify-between">
-      <div class="flex items-center gap-2.5">
-        <img src="/asset/Logo-intelliprint-imago.svg" alt="IntelliPrint" class="h-8 w-auto rounded-lg shrink-0">
+      <a href="/" class="flex items-center gap-2.5 hover:opacity-90 transition group" title="Ir a IntelliPrint">
+        <img src="/asset/Logo-intelliprint-imago.svg" alt="IntelliPrint" class="h-8 w-auto rounded-lg shrink-0 group-hover:scale-105 transition-transform duration-150">
         <div>
           <h1 class="text-sm flex items-baseline tracking-normal">
             <span class="text-white font-light tracking-wide" style="font-weight: 300;">Intelli</span><span class="text-cyan-400 font-bold ml-0.5" style="font-weight: 700;">Print</span>
           </h1>
           <p class="text-[10px] text-slate-400">Ficha Técnica de Producción y Trazabilidad</p>
         </div>
-      </div>
+      </a>
       <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded font-mono font-bold text-amber-300">
         #{d.get('job_id')}
       </span>
@@ -374,8 +374,12 @@ def render_press_operator_html(d: Dict[str, Any]) -> str:
 
     <!-- Institutional Footer -->
     <div class="text-center pt-4 text-[10px] text-slate-400 space-y-1">
-      <p class="font-semibold text-slate-600">IntelliPrint · Proyecto de Innovación en FP Gráfica</p>
-      <p>Salesianos Urnieta · CIFP Mendizabala LHII · Eusko Jaurlaritza</p>
+      <p class="font-semibold text-slate-600"><a href="/" class="hover:underline">IntelliPrint</a> · Proyecto de Innovación en FP Gráfica</p>
+      <p class="space-x-1">
+        <a href="https://salesianosurnieta.com/" target="_blank" rel="noopener noreferrer" class="hover:underline text-slate-500 font-medium">Salesianos Urnieta</a> · 
+        <a href="https://www.mendizabala.eus/" target="_blank" rel="noopener noreferrer" class="hover:underline text-slate-500 font-medium">CIFP Mendizabala LHII</a> · 
+        <a href="https://www.euskadi.eus/gobierno-vasco/departamento-de-educacion/" target="_blank" rel="noopener noreferrer" class="hover:underline text-slate-500 font-medium">Eusko Jaurlaritza</a>
+      </p>
     </div>
 
   </main>

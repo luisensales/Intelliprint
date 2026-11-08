@@ -1334,11 +1334,19 @@ def generate_student_worksheet_pdf(
     if p_sales.exists() and p_mendi.exists() and p_edu.exists():
         capsule = pymupdf.Rect(325, 12, 567, 58)
         page.draw_rect(capsule, fill=(1, 1, 1), radius=0.08)
-        page.insert_image(pymupdf.Rect(332, 16, 400, 54), filename=str(p_sales), keep_proportion=True)
+        r_sales = pymupdf.Rect(332, 16, 400, 54)
+        page.insert_image(r_sales, filename=str(p_sales), keep_proportion=True)
         page.draw_line(pymupdf.Point(404, 18), pymupdf.Point(404, 52), color=(0.88, 0.88, 0.88), width=0.6)
-        page.insert_image(pymupdf.Rect(408, 16, 478, 54), filename=str(p_mendi), keep_proportion=True)
+        r_mendi = pymupdf.Rect(408, 16, 478, 54)
+        page.insert_image(r_mendi, filename=str(p_mendi), keep_proportion=True)
         page.draw_line(pymupdf.Point(482, 18), pymupdf.Point(482, 52), color=(0.88, 0.88, 0.88), width=0.6)
-        page.insert_image(pymupdf.Rect(486, 16, 560, 54), filename=str(p_edu), keep_proportion=True)
+        r_edu = pymupdf.Rect(486, 16, 560, 54)
+        page.insert_image(r_edu, filename=str(p_edu), keep_proportion=True)
+
+        # Enlaces interactivos en los logotipos de la ficha PDF
+        page.insert_link({"kind": pymupdf.LINK_URI, "from": r_sales, "uri": "https://salesianosurnieta.com/"})
+        page.insert_link({"kind": pymupdf.LINK_URI, "from": r_mendi, "uri": "https://www.mendizabala.eus/"})
+        page.insert_link({"kind": pymupdf.LINK_URI, "from": r_edu, "uri": "https://www.euskadi.eus/gobierno-vasco/departamento-de-educacion/"})
 
     # 2. Bloque de Datos del Alumno y Práctica
     y = 86.0

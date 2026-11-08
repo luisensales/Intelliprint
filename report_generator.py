@@ -64,11 +64,19 @@ def _draw_header(page, assets_dir, p):
     if p_sales.exists() and p_mendi.exists() and p_edu.exists():
         capsule = pymupdf.Rect(310, 13, 567, 62)
         page.draw_rect(capsule, fill=(1, 1, 1), radius=0.08)
-        page.insert_image(pymupdf.Rect(318, 17, 390, 58), filename=str(p_sales), keep_proportion=True)
+        r_sales = pymupdf.Rect(318, 17, 390, 58)
+        page.insert_image(r_sales, filename=str(p_sales), keep_proportion=True)
         page.draw_line(pymupdf.Point(395, 20), pymupdf.Point(395, 55), color=(0.88, 0.88, 0.88), width=0.6)
-        page.insert_image(pymupdf.Rect(400, 17, 474, 58), filename=str(p_mendi), keep_proportion=True)
+        r_mendi = pymupdf.Rect(400, 17, 474, 58)
+        page.insert_image(r_mendi, filename=str(p_mendi), keep_proportion=True)
         page.draw_line(pymupdf.Point(479, 20), pymupdf.Point(479, 55), color=(0.88, 0.88, 0.88), width=0.6)
-        page.insert_image(pymupdf.Rect(484, 17, 560, 58), filename=str(p_edu), keep_proportion=True)
+        r_edu = pymupdf.Rect(484, 17, 560, 58)
+        page.insert_image(r_edu, filename=str(p_edu), keep_proportion=True)
+
+        # Enlaces interactivos en los logotipos de la cabecera PDF
+        page.insert_link({"kind": pymupdf.LINK_URI, "from": r_sales, "uri": "https://salesianosurnieta.com/"})
+        page.insert_link({"kind": pymupdf.LINK_URI, "from": r_mendi, "uri": "https://www.mendizabala.eus/"})
+        page.insert_link({"kind": pymupdf.LINK_URI, "from": r_edu, "uri": "https://www.euskadi.eus/gobierno-vasco/departamento-de-educacion/"})
 
 
 def _draw_footer(page, p, job_id, page_num, total_pages):

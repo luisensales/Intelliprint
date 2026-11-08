@@ -102,12 +102,22 @@ def build_manual_pdf():
         capsule = pymupdf.Rect(MARGIN_X, 25, PAGE_W - MARGIN_X, 85)
         p_cov.draw_rect(capsule, fill=(1, 1, 1), radius=0.08)
 
-        # 3 logos alineados
-        p_cov.insert_image(pymupdf.Rect(MARGIN_X + 15, 32, MARGIN_X + 150, 78), filename=str(p_sales), keep_proportion=True)
+        # 3 logos alineados con enlaces interactivos
+        r_sales = pymupdf.Rect(MARGIN_X + 15, 32, MARGIN_X + 150, 78)
+        p_cov.insert_image(r_sales, filename=str(p_sales), keep_proportion=True)
+        p_cov.insert_link({"kind": pymupdf.LINK_URI, "from": r_sales, "uri": "https://salesianosurnieta.com/"})
+
         p_cov.draw_line(pymupdf.Point(MARGIN_X + 160, 36), pymupdf.Point(MARGIN_X + 160, 74), color=(0.85, 0.85, 0.85), width=0.8)
-        p_cov.insert_image(pymupdf.Rect(MARGIN_X + 175, 32, MARGIN_X + 315, 78), filename=str(p_mendi), keep_proportion=True)
+
+        r_mendi = pymupdf.Rect(MARGIN_X + 175, 32, MARGIN_X + 315, 78)
+        p_cov.insert_image(r_mendi, filename=str(p_mendi), keep_proportion=True)
+        p_cov.insert_link({"kind": pymupdf.LINK_URI, "from": r_mendi, "uri": "https://www.mendizabala.eus/"})
+
         p_cov.draw_line(pymupdf.Point(MARGIN_X + 325, 36), pymupdf.Point(MARGIN_X + 325, 74), color=(0.85, 0.85, 0.85), width=0.8)
-        p_cov.insert_image(pymupdf.Rect(MARGIN_X + 340, 32, MARGIN_X + 490, 78), filename=str(p_edu), keep_proportion=True)
+
+        r_edu = pymupdf.Rect(MARGIN_X + 340, 32, MARGIN_X + 490, 78)
+        p_cov.insert_image(r_edu, filename=str(p_edu), keep_proportion=True)
+        p_cov.insert_link({"kind": pymupdf.LINK_URI, "from": r_edu, "uri": "https://www.euskadi.eus/gobierno-vasco/departamento-de-educacion/"})
 
     # Logo central IntelliPrint
     p_full_logo = ASSETS_DIR / "Logo-intelliprint.png"
