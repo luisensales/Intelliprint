@@ -1560,7 +1560,7 @@
           <!-- Preview image -->
           <img id="impPreviewImg" src="" alt="Previsualización de Pliego Impuesto" class="max-h-[460px] w-auto object-contain rounded-lg shadow-2xl border border-slate-700 transition hidden">
 
-          <div id="impEmptyNotice" class="text-slate-400 text-xs text-center py-12">
+          <div id="impEmptyNotice" class="text-slate-400 text-xs text-center py-12 hidden">
             <i class="fa-solid fa-table-cells text-3xl mb-2 text-slate-600 block"></i>
             Cargando previsualización del pliego...
           </div>
@@ -5490,6 +5490,14 @@
         genBtn.disabled = false;
         genBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Generar Pliego PDF';
       }
+      // Resetear la zona de preview al abrir el modal
+      const previewImg = document.getElementById('impPreviewImg');
+      const emptyNotice = document.getElementById('impEmptyNotice');
+      if (previewImg) previewImg.classList.add('hidden');
+      if (emptyNotice) {
+        emptyNotice.innerHTML = '<i class="fa-solid fa-table-cells text-3xl mb-2 text-slate-600 block"></i>Cargando previsualización del pliego...';
+        emptyNotice.classList.remove('hidden');
+      }
       refreshImpositionPlan();
     }
 
@@ -5586,16 +5594,25 @@
           const emptyNotice = document.getElementById('impEmptyNotice');
           const previewUrl = `/api/imposition/preview/${currentJobId}?sheet_size=${encodeURIComponent(sheetSize)}&orientation=${encodeURIComponent(orientation)}&mode=${encodeURIComponent(mode)}&gap_mm=${gapMm}&gap_x_mm=${gapXMm}&gap_y_mm=${gapYMm}&bleed_mm=${bleedMm}&dpi=80&t=${Date.now()}`;
 
+          // Ocultar el texto de espera inmediatamente: ya tenemos plan válido
+          if (emptyNotice) emptyNotice.classList.add('hidden');
+          // Mostrar overlay de carga mientras descarga la imagen previsualización
+          if (overlay) overlay.classList.remove('hidden');
+
           const tempImg = new Image();
           tempImg.onload = () => {
             if (previewImg) {
               previewImg.src = previewUrl;
               previewImg.classList.remove('hidden');
             }
-            if (emptyNotice) emptyNotice.classList.add('hidden');
             if (overlay) overlay.classList.add('hidden');
           };
           tempImg.onerror = () => {
+            // Error cargando imagen: mostrar aviso en el area de preview
+            if (emptyNotice) {
+              emptyNotice.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-2xl mb-2 text-amber-500 block"></i><span class="text-amber-400">Error al generar la previsualización.</span>';
+              emptyNotice.classList.remove('hidden');
+            }
             if (overlay) overlay.classList.add('hidden');
           };
           tempImg.src = previewUrl;
