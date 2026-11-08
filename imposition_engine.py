@@ -38,10 +38,13 @@ PT_PER_MM = 72.0 / 25.4
 MM_PER_PT = 25.4 / 72.0
 
 STANDARD_SHEET_SIZES_MM: Dict[str, Tuple[float, float]] = {
-    "SRA3": (320.0, 450.0),  # Estándar imprenta digital (Ancho x Alto en vertical)
+    "SRA3": (320.0, 450.0),    # Estándar imprenta digital (Ancho x Alto en vertical)
+    "500X700": (500.0, 700.0), # Pliego 500 × 700 mm (B2 Offset comercial)
+    "50X70": (500.0, 700.0),   # Alias 50 × 70 cm
+    "B2": (500.0, 700.0),      # Formato B2 Offset
     "A3": (297.0, 420.0),
     "A4": (210.0, 297.0),
-    "B3": (350.0, 500.0),   # Medio pliego offset pequeño formato
+    "B3": (350.0, 500.0),      # Medio pliego offset pequeño formato
     "SRA4": (225.0, 320.0),
 }
 
