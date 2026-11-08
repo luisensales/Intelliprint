@@ -95,29 +95,32 @@
 
         <!-- 2. Target Profile -->
         <div class="space-y-2">
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">2. Perfil de Destino (IntelliPrint)</label>
-          <div class="space-y-2.5">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">2. Perfil de Destino (IntelliPrint)</label>
+            <button type="button" onclick="openProfileManagerModal()" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer" title="Crear y editar perfiles de preflight personalizados">
+              <i class="fa-solid fa-sliders"></i> <span>Gestionar Perfiles</span>
+            </button>
+          </div>
+          <div id="targetProfilesContainer" class="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
             <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
               <input type="radio" name="profile" value="OFFSET_300" checked class="mt-1 text-blue-600 focus:ring-blue-500">
               <div class="text-xs">
-                <span class="font-bold text-slate-800">Offset 300</span>
-                <span class="block text-[11px] text-slate-500 mt-0.5">≥300 ppp efectivos · 3 mm sangre · CMYK incrustado · Control sobreimpresión</span>
+                <span class="font-bold text-slate-800">Offset Comercial 300%</span>
+                <span class="block text-[11px] text-slate-500 mt-0.5">≥300 ppp efectivos · 3 mm sangre · TAC ≤300% · CMYK</span>
               </div>
             </label>
-
             <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
               <input type="radio" name="profile" value="DIGITAL_200" class="mt-1 text-blue-600 focus:ring-blue-500">
               <div class="text-xs">
-                <span class="font-bold text-slate-800">Digital 200</span>
-                <span class="block text-[11px] text-slate-500 mt-0.5">≥200 ppp efectivos · 3 mm sangre · CMYK incrustado · Tintas directas</span>
+                <span class="font-bold text-slate-800">Impresión Digital Estándar</span>
+                <span class="block text-[11px] text-slate-500 mt-0.5">≥200 ppp efectivos · 3 mm sangre · TAC ≤320% · CMYK</span>
               </div>
             </label>
-
             <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
               <input type="radio" name="profile" value="PANTALLA_RGB" class="mt-1 text-blue-600 focus:ring-blue-500">
               <div class="text-xs">
-                <span class="font-bold text-slate-800">Pantalla RGB</span>
-                <span class="block text-[11px] text-slate-500 mt-0.5">Muestreo por pantalla (96 ppp base) · Sin sangrado · ICC sRGB/RGB</span>
+                <span class="font-bold text-slate-800">Gran Formato y Cartelería</span>
+                <span class="block text-[11px] text-slate-500 mt-0.5">≥150 ppp · 5 mm sangre · Lonas y vinilos</span>
               </div>
             </label>
           </div>
@@ -2168,6 +2171,164 @@
     </div>
   </div>
 
+  <!-- Modal: Editor y Gestor de Perfiles de Preflight -->
+  <div id="profileManagerModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeProfileManagerModal()"></div>
+
+    <!-- Panel -->
+    <div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-amber-300 text-lg">
+            <i class="fa-solid fa-sliders"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold tracking-tight text-white">Editor de Perfiles de Preflight Personalizados</h3>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">FP & Taller</span>
+            </div>
+            <p class="text-xs text-slate-300">Configuración a medida de umbrales: Sangre, TAC, DPI, Líneas finas y Espacios de color</p>
+          </div>
+        </div>
+        <button onclick="closeProfileManagerModal()" class="w-8 h-8 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-6 overflow-y-auto flex-1 bg-slate-50 space-y-6">
+
+        <!-- Top Actions -->
+        <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <div>
+            <h4 class="text-xs font-bold text-slate-900">Perfiles de Taller Registrados</h4>
+            <p class="text-[11px] text-slate-500">Selecciona un perfil para ver o editar sus tolerancias o crea uno nuevo a medida.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="initNewProfileForm()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+              <i class="fa-solid fa-plus"></i> Nuevo Perfil
+            </button>
+            <button onclick="exportProfilesJson()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition flex items-center gap-1.5 cursor-pointer">
+              <i class="fa-solid fa-download"></i> Exportar JSON
+            </button>
+            <label class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition flex items-center gap-1.5 cursor-pointer">
+              <i class="fa-solid fa-upload"></i> Importar
+              <input type="file" id="importProfileFileInput" accept=".json" onchange="importProfilesJson(event)" class="hidden">
+            </label>
+          </div>
+        </div>
+
+        <!-- Two Columns: List & Form -->
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+          <!-- Left List (2 cols) -->
+          <div class="lg:col-span-2 space-y-2">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Catálogo de Perfiles:</span>
+            <div id="pmProfilesList" class="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Right Form (3 cols) -->
+          <div class="lg:col-span-3 bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h4 id="pmFormTitle" class="text-xs font-bold text-slate-900">Configurar Tolerancias del Perfil</h4>
+              <span id="pmProfileTypeBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">Nuevo</span>
+            </div>
+
+            <input type="hidden" id="pmProfileId" value="">
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Nombre del Perfil:</label>
+                <input type="text" id="pmNameInput" placeholder="Ej: Packaging Mendizabala 5mm" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Destino / Aplicación:</label>
+                <input type="text" id="pmDestinationInput" placeholder="Ej: Estuches y Cajas con Troquel" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Resolución Mínima (DPI):</label>
+                <input type="number" id="pmDpiInput" value="300" min="72" max="600" step="10" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Sangrado Mínimo (mm):</label>
+                <input type="number" id="pmBleedInput" value="3.0" min="0" max="15" step="0.5" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Límite TAC (% Tinta):</label>
+                <input type="number" id="pmTacInput" value="300" min="200" max="400" step="10" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Línea Mínima CTP (pt):</label>
+                <input type="number" id="pmHairlineInput" value="0.25" min="0.10" max="1.0" step="0.05" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Zona Seguridad (mm):</label>
+                <input type="number" id="pmSafetyInput" value="3.0" min="1.0" max="15.0" step="0.5" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Espacio de Color:</label>
+                <select id="pmColorFamilySelect" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                  <option value="CMYK">CMYK (Imprenta)</option>
+                  <option value="RGB">RGB (Digital / Web)</option>
+                  <option value="GRAY">Escala de Grises</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1 border-t border-slate-100">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="pmAllowSpotsCheck" checked class="w-4 h-4 text-indigo-600 rounded">
+                <span class="text-slate-700 font-medium">Permitir tintas directas / Pantone</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="pmRequireFontsCheck" checked class="w-4 h-4 text-indigo-600 rounded">
+                <span class="text-slate-700 font-medium">Exigir fuentes 100% incrustadas</span>
+              </label>
+            </div>
+
+            <!-- Form Buttons -->
+            <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+              <button type="button" id="pmBtnDelete" onclick="deleteCurrentCustomProfile()" class="hidden px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg border border-rose-200 transition cursor-pointer">
+                <i class="fa-solid fa-trash mr-1"></i> Eliminar
+              </button>
+              <div class="flex items-center gap-2 ml-auto">
+                <button type="button" onclick="closeProfileManagerModal()" class="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg border border-slate-300 transition cursor-pointer">
+                  Cancelar
+                </button>
+                <button type="button" onclick="saveCustomProfileFromForm()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-floppy-disk"></i> Guardar Perfil
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-between px-6 py-3.5 bg-slate-50 border-t border-slate-200 shrink-0">
+        <span class="text-[11px] text-slate-500 flex items-center gap-1.5">
+          <i class="fa-solid fa-shield-halved text-indigo-600"></i>
+          Los perfiles personalizados quedan guardados en el servidor y disponibles en el selector principal de preflight.
+        </span>
+        <button onclick="closeProfileManagerModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+          Cerrar
+        </button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Footer -->
   <footer class="bg-white border-t border-slate-200 py-6 mt-auto">
     <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
@@ -2226,6 +2387,40 @@
       }
     }
     loadIccCatalog();
+
+    // Load Target Profiles (Standard + Custom)
+    let cachedTargetProfiles = [];
+    async function loadTargetProfiles() {
+      const container = document.getElementById('targetProfilesContainer');
+      if (!container) return;
+      try {
+        const res = await fetch('/api/profiles');
+        const data = await res.json();
+        cachedTargetProfiles = data.profiles || [];
+
+        const currentlyChecked = document.querySelector('input[name="profile"]:checked')?.value || 'OFFSET_300';
+
+        container.innerHTML = cachedTargetProfiles.map(p => {
+          const isChecked = (p.id === currentlyChecked) ? 'checked' : '';
+          const customBadge = p.is_custom 
+            ? '<span class="ml-1 text-[9px] font-bold px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded border border-purple-200">Personalizado</span>' 
+            : '';
+          const desc = p.destination || `≥${p.target_dpi || 300} ppp · ${p.min_bleed_mm || 3} mm sangre · TAC ≤${p.max_tac || 300}% · ${p.color_family || 'CMYK'}`;
+          return `
+            <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
+              <input type="radio" name="profile" value="${p.id}" ${isChecked} class="mt-1 text-blue-600 focus:ring-blue-500">
+              <div class="text-xs">
+                <span class="font-bold text-slate-800">${p.name}</span>${customBadge}
+                <span class="block text-[11px] text-slate-500 mt-0.5">${desc}</span>
+              </div>
+            </label>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('Error cargando perfiles de destino:', err);
+      }
+    }
+    loadTargetProfiles();
 
     // Toggle ICC select disabled state
     document.querySelectorAll('input[name="icc_option"]').forEach(radio => {
@@ -6297,6 +6492,264 @@
     function closeManualModal() {
       const modal = document.getElementById('manualModal');
       if (modal) modal.classList.add('hidden');
+    }
+
+    // =========================================================================
+    // MODAL DEL EDITOR DE PERFILES DE PREFLIGHT (CUSTOM PROFILES)
+    // =========================================================================
+
+    let currentSelectedProfileId = null;
+
+    function openProfileManagerModal() {
+      const modal = document.getElementById('profileManagerModal');
+      if (modal) modal.classList.remove('hidden');
+      refreshProfileManagerList();
+    }
+
+    function closeProfileManagerModal() {
+      const modal = document.getElementById('profileManagerModal');
+      if (modal) modal.classList.add('hidden');
+      loadTargetProfiles();
+    }
+
+    async function refreshProfileManagerList() {
+      try {
+        const res = await fetch('/api/profiles');
+        const data = await res.json();
+        cachedTargetProfiles = data.profiles || [];
+        renderProfileManagerList(cachedTargetProfiles);
+
+        if (cachedTargetProfiles.length > 0) {
+          const target = cachedTargetProfiles.find(p => p.id === currentSelectedProfileId) || cachedTargetProfiles[0];
+          loadProfileIntoForm(target);
+        }
+      } catch (err) {
+        console.error('Error refrescando perfiles:', err);
+      }
+    }
+
+    function renderProfileManagerList(profiles) {
+      const container = document.getElementById('pmProfilesList');
+      if (!container) return;
+
+      container.innerHTML = profiles.map(p => {
+        const isSelected = p.id === currentSelectedProfileId;
+        const activeBorder = isSelected ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-200 bg-white hover:border-slate-300';
+        const badge = p.is_custom 
+          ? '<span class="text-[9px] font-bold px-1.5 py-0.2 bg-purple-100 text-purple-700 rounded border border-purple-200">Personalizado</span>' 
+          : '<span class="text-[9px] font-bold px-1.5 py-0.2 bg-blue-50 text-blue-700 rounded border border-blue-200">Estándar</span>';
+
+        return `
+          <div onclick="selectProfileInManager('${p.id}')" class="p-3 rounded-lg border ${activeBorder} cursor-pointer transition flex flex-col justify-between">
+            <div class="flex items-start justify-between gap-1">
+              <span class="text-xs font-bold text-slate-800 leading-snug">${p.name}</span>
+              ${badge}
+            </div>
+            <p class="text-[10px] text-slate-500 mt-1 line-clamp-1">${p.destination || ''}</p>
+            <div class="flex flex-wrap gap-1 mt-2 text-[9px] text-slate-600 font-mono">
+              <span class="bg-slate-100 px-1.5 py-0.5 rounded">DPI:${p.target_dpi}</span>
+              <span class="bg-slate-100 px-1.5 py-0.5 rounded">Sangre:${p.min_bleed_mm}mm</span>
+              <span class="bg-slate-100 px-1.5 py-0.5 rounded">TAC:≤${p.max_tac}%</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function selectProfileInManager(profileId) {
+      currentSelectedProfileId = profileId;
+      const target = cachedTargetProfiles.find(p => p.id === profileId);
+      if (target) {
+        loadProfileIntoForm(target);
+        renderProfileManagerList(cachedTargetProfiles);
+      }
+    }
+
+    function loadProfileIntoForm(p) {
+      currentSelectedProfileId = p.id;
+      document.getElementById('pmProfileId').value = p.is_custom ? p.id : '';
+      document.getElementById('pmNameInput').value = p.name || '';
+      document.getElementById('pmDestinationInput').value = p.destination || '';
+      document.getElementById('pmDpiInput').value = p.target_dpi || 300;
+      document.getElementById('pmBleedInput').value = p.min_bleed_mm || 3.0;
+      document.getElementById('pmTacInput').value = p.max_tac || 300;
+      document.getElementById('pmHairlineInput').value = p.min_hairline_pt || 0.25;
+      document.getElementById('pmSafetyInput').value = p.safety_margin_mm || 3.0;
+      document.getElementById('pmColorFamilySelect').value = p.color_family || 'CMYK';
+      document.getElementById('pmAllowSpotsCheck').checked = (p.allow_spot_colors !== false);
+      document.getElementById('pmRequireFontsCheck').checked = (p.require_fonts_embedded !== false);
+
+      const delBtn = document.getElementById('pmBtnDelete');
+      const titleEl = document.getElementById('pmFormTitle');
+      const badgeEl = document.getElementById('pmProfileTypeBadge');
+
+      if (p.is_custom) {
+        if (delBtn) delBtn.classList.remove('hidden');
+        if (titleEl) titleEl.textContent = 'Editar Perfil Personalizado';
+        if (badgeEl) {
+          badgeEl.textContent = 'Personalizado';
+          badgeEl.className = 'text-[10px] font-semibold px-2 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200';
+        }
+      } else {
+        if (delBtn) delBtn.classList.add('hidden');
+        if (titleEl) titleEl.textContent = 'Ver Perfil Estándar (Modifica y pulsa Guardar para crear una copia)';
+        if (badgeEl) {
+          badgeEl.textContent = 'Estándar ISO';
+          badgeEl.className = 'text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200';
+        }
+      }
+    }
+
+    function initNewProfileForm() {
+      currentSelectedProfileId = null;
+      document.getElementById('pmProfileId').value = '';
+      document.getElementById('pmNameInput').value = 'Nuevo Perfil de Taller';
+      document.getElementById('pmDestinationInput').value = 'Configuración personalizada de preimpresión';
+      document.getElementById('pmDpiInput').value = 300;
+      document.getElementById('pmBleedInput').value = 3.0;
+      document.getElementById('pmTacInput').value = 300;
+      document.getElementById('pmHairlineInput').value = 0.25;
+      document.getElementById('pmSafetyInput').value = 3.0;
+      document.getElementById('pmColorFamilySelect').value = 'CMYK';
+      document.getElementById('pmAllowSpotsCheck').checked = true;
+      document.getElementById('pmRequireFontsCheck').checked = true;
+
+      const delBtn = document.getElementById('pmBtnDelete');
+      if (delBtn) delBtn.classList.add('hidden');
+
+      const titleEl = document.getElementById('pmFormTitle');
+      if (titleEl) titleEl.textContent = 'Crear Nuevo Perfil Personalizado';
+
+      const badgeEl = document.getElementById('pmProfileTypeBadge');
+      if (badgeEl) {
+        badgeEl.textContent = 'Nuevo';
+        badgeEl.className = 'text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200';
+      }
+
+      renderProfileManagerList(cachedTargetProfiles);
+    }
+
+    async function saveCustomProfileFromForm() {
+      const pId = document.getElementById('pmProfileId').value.trim();
+      const payload = {
+        name: document.getElementById('pmNameInput').value.trim(),
+        destination: document.getElementById('pmDestinationInput').value.trim(),
+        target_dpi: parseInt(document.getElementById('pmDpiInput').value) || 300,
+        min_bleed_mm: parseFloat(document.getElementById('pmBleedInput').value) || 3.0,
+        max_tac: parseInt(document.getElementById('pmTacInput').value) || 300,
+        min_hairline_pt: parseFloat(document.getElementById('pmHairlineInput').value) || 0.25,
+        safety_margin_mm: parseFloat(document.getElementById('pmSafetyInput').value) || 3.0,
+        color_family: document.getElementById('pmColorFamilySelect').value,
+        allow_spot_colors: document.getElementById('pmAllowSpotsCheck').checked,
+        require_fonts_embedded: document.getElementById('pmRequireFontsCheck').checked,
+      };
+
+      if (!payload.name) {
+        alert('Por favor, indica un nombre para el perfil.');
+        return;
+      }
+
+      try {
+        let res;
+        if (pId && pId.startsWith('CUSTOM_')) {
+          res = await fetch(`/api/profiles/custom/${pId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          res = await fetch('/api/profiles/custom', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        if (!res.ok) {
+          const err = await res.json();
+          alert('Error guardando perfil: ' + (err.detail || 'Fallo desconocido'));
+          return;
+        }
+
+        const data = await res.json();
+        currentSelectedProfileId = data.profile.id;
+        await refreshProfileManagerList();
+        await loadTargetProfiles();
+        alert(`Perfil "${payload.name}" guardado correctamente.`);
+
+      } catch (err) {
+        alert('Error al conectar con el servidor: ' + err.message);
+      }
+    }
+
+    async function deleteCurrentCustomProfile() {
+      const pId = document.getElementById('pmProfileId').value.trim();
+      if (!pId || !pId.startsWith('CUSTOM_')) {
+        alert('Este perfil no se puede eliminar.');
+        return;
+      }
+
+      if (!confirm('¿Deseas eliminar definitivamente este perfil personalizado?')) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/profiles/custom/${pId}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const err = await res.json();
+          alert('Error eliminando perfil: ' + (err.detail || 'Fallo desconocido'));
+          return;
+        }
+
+        currentSelectedProfileId = null;
+        await refreshProfileManagerList();
+        await loadTargetProfiles();
+        initNewProfileForm();
+        alert('Perfil personalizado eliminado con éxito.');
+      } catch (err) {
+        alert('Error al conectar con el servidor: ' + err.message);
+      }
+    }
+
+    async function exportProfilesJson() {
+      try {
+        const res = await fetch('/api/profiles/export');
+        const data = await res.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `IntelliPrint_Perfiles_Personalizados_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert('Error al exportar perfiles: ' + err.message);
+      }
+    }
+
+    async function importProfilesJson(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const jsonPayload = JSON.parse(e.target.result);
+          const res = await fetch('/api/profiles/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(jsonPayload)
+          });
+          const data = await res.json();
+          await refreshProfileManagerList();
+          await loadTargetProfiles();
+          alert(`Importación completada: ${data.imported} nuevos perfiles añadidos.`);
+        } catch (err) {
+          alert('Error importando archivo JSON: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
     }
   </script>
 </body>

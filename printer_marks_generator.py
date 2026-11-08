@@ -106,23 +106,25 @@ def add_printer_marks_to_pdf(
         draw_reg_target(np, slug_pt / 2, margin + h_pt / 2)
         draw_reg_target(np, tot_w - slug_pt / 2, margin + h_pt / 2)
 
-        # 3. Tira de Control de Color CMYK
-        colors = [
-            (0.0, 0.65, 0.9),   # Cian 100%
-            (0.85, 0.0, 0.5),   # Magenta 100%
-            (0.95, 0.85, 0.0),  # Amarillo 100%
-            (0.1, 0.1, 0.1),    # Negro 100%
-            (0.3, 0.15, 0.6),   # C+M
-            (0.1, 0.6, 0.25),   # C+Y
-            (0.85, 0.25, 0.1),  # M+Y
-            (0.5, 0.5, 0.5)     # Tono 50%
-        ]
-        swatch_size = 7.0
-        start_x = margin + w_pt - len(colors) * (swatch_size + 2)
-        start_y = slug_pt / 2 - swatch_size / 2
-        for i, col in enumerate(colors):
-            sx = start_x + i * (swatch_size + 2)
-            np.draw_rect(pymupdf.Rect(sx, start_y, sx + swatch_size, start_y + swatch_size), color=black, fill=col, width=0.25)
+        # 3. Tira de Control Normalizada FOGRA / ISO 12647-2 (Media Wedge con Balance de Grises)
+        try:
+            from control_strip_engine import draw_fogra_control_strip
+            strip_w_est = 245.0
+            start_x = max(margin + 180.0, tot_w - margin - strip_w_est)
+            start_y = slug_pt / 2 - 3.5
+            draw_fogra_control_strip(np, start_x, start_y, swatch_w=5.5, swatch_h=5.5, show_labels=True)
+        except Exception as e:
+            # Fallback a tira básica si hubiera algún problema
+            colors = [
+                (0.0, 0.65, 0.9), (0.85, 0.0, 0.5), (0.95, 0.85, 0.0), (0.1, 0.1, 0.1),
+                (0.3, 0.15, 0.6), (0.1, 0.6, 0.25), (0.85, 0.25, 0.1), (0.5, 0.5, 0.5)
+            ]
+            swatch_size = 6.0
+            start_x = tot_w - margin - len(colors) * (swatch_size + 2)
+            start_y = slug_pt / 2 - swatch_size / 2
+            for i, col in enumerate(colors):
+                sx = start_x + i * (swatch_size + 2)
+                np.draw_rect(pymupdf.Rect(sx, start_y, sx + swatch_size, start_y + swatch_size), color=black, fill=col, width=0.25)
 
         # 4. Información de Trabajo (Slug)
         info_text = f"{doc_name} · Pág {idx + 1}/{total_pages} · {now_str} · IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII"

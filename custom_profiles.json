@@ -1,0 +1,22 @@
+{
+  "version": "1.2.0",
+  "updated_at": "2026-11-08T08:20:20.578639",
+  "custom_profiles": [
+    {
+      "id": "CUSTOM_PACKAGING_MENDIZABALA_5M_ff20",
+      "name": "Packaging Mendizabala 5mm",
+      "destination": "Estuches cosméticos y cartoncillo troquelado",
+      "target_dpi": 300,
+      "min_bleed_mm": 5.0,
+      "max_tac": 280,
+      "min_hairline_pt": 0.3,
+      "safety_margin_mm": 4.0,
+      "color_family": "CMYK",
+      "allow_spot_colors": true,
+      "require_fonts_embedded": true,
+      "is_custom": true,
+      "is_builtin": false,
+      "created_at": "08/11/2026 08:19"
+    }
+  ]
+}

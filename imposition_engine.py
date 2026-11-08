@@ -356,24 +356,28 @@ def _draw_registration_cross(page: pymupdf.Page, cx: float, cy: float, radius: f
 
 
 def _draw_cmyk_color_strip(page: pymupdf.Page, x_start: float, y_top: float, patch_w: float = 14.0, patch_h: float = 8.0):
-    """Dibuja una tira de control densitométrico CMYK (C, M, Y, K al 100% y 50%)."""
-    colors = [
-        (0.0, 0.65, 0.90),      # Cyan 100%
-        (0.5, 0.82, 0.95),      # Cyan 50%
-        (0.85, 0.05, 0.45),     # Magenta 100%
-        (0.92, 0.52, 0.72),     # Magenta 50%
-        (0.98, 0.85, 0.05),     # Yellow 100%
-        (0.99, 0.92, 0.52),     # Yellow 50%
-        (0.10, 0.10, 0.10),     # Black 100%
-        (0.55, 0.55, 0.55),     # Black 50%
-    ]
-    cur_x = x_start
-    shape = page.new_shape()
-    for col in colors:
-        shape.draw_rect(pymupdf.Rect(cur_x, y_top, cur_x + patch_w, y_top + patch_h))
-        shape.finish(fill=col, color=(0.4, 0.4, 0.4), width=0.3)
-        cur_x += patch_w + 1.5
-    shape.commit()
+    """Dibuja la tira de control FOGRA / ISO 12647-2 con balance de grises y trapping."""
+    try:
+        from control_strip_engine import draw_fogra_control_strip
+        draw_fogra_control_strip(page, x_start, y_top - 1.0, swatch_w=6.5, swatch_h=6.5, show_labels=True)
+    except Exception:
+        colors = [
+            (0.0, 0.65, 0.90),      # Cyan 100%
+            (0.5, 0.82, 0.95),      # Cyan 50%
+            (0.85, 0.05, 0.45),     # Magenta 100%
+            (0.92, 0.52, 0.72),     # Magenta 50%
+            (0.98, 0.85, 0.05),     # Yellow 100%
+            (0.99, 0.92, 0.52),     # Yellow 50%
+            (0.10, 0.10, 0.10),     # Black 100%
+            (0.55, 0.55, 0.55),     # Black 50%
+        ]
+        cur_x = x_start
+        shape = page.new_shape()
+        for col in colors:
+            shape.draw_rect(pymupdf.Rect(cur_x, y_top, cur_x + patch_w, y_top + patch_h))
+            shape.finish(fill=col, color=(0.4, 0.4, 0.4), width=0.3)
+            cur_x += patch_w + 1.5
+        shape.commit()
 
 
 def _place_pose(

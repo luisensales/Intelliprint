@@ -562,19 +562,21 @@ class IntelliPrintEngine:
         findings = []
         rules_evaluated = {}
 
-        # 1. Target Profile Criteria
-        target_dpi = 300
-        req_family = "CMYK"
-        requires_bleed = True
-        
-        if profile_id == "DIGITAL_200":
-            target_dpi = 200
-            req_family = "CMYK"
-            requires_bleed = True
-        elif profile_id == "PANTALLA_RGB":
-            target_dpi = 96
-            req_family = "RGB"
-            requires_bleed = False
+        # 1. Target Profile Criteria (Dinámico desde profile_manager)
+        try:
+            from profile_manager import get_profile_by_id
+            prof = get_profile_by_id(profile_id)
+        except Exception:
+            prof = {}
+
+        target_dpi = prof.get("target_dpi", 300)
+        req_family = prof.get("color_family", "CMYK")
+        min_bleed_req_mm = prof.get("min_bleed_mm", 3.0)
+        requires_bleed = min_bleed_req_mm > 0.5
+        max_tac_limit = prof.get("max_tac", 300)
+        min_hairline_threshold = prof.get("min_hairline_pt", 0.25)
+        allow_spot_colors = prof.get("allow_spot_colors", True)
+        require_fonts_embedded = prof.get("require_fonts_embedded", True)
 
         # Inspect original OutputIntent of uploaded PDF before applying any custom choices
         original_icc_info = detect_pdf_output_intent(pdf_path)
@@ -676,10 +678,11 @@ class IntelliPrintEngine:
                         # 2. Per-edge content artwork check
                         failing_edges = []
                         page_eff_bleed = box_bleed_mm
+                        bleed_thresh = max(0.5, min_bleed_req_mm - 0.5)
                         for edge_name, max_ext in edges_checked:
                             eff = round(max(0.0, max_ext), 1)
                             page_eff_bleed = min(page_eff_bleed, eff)
-                            if eff < 2.5: # Required standard 3 mm (tolerance down to 2.5 mm)
+                            if eff < bleed_thresh:
                                 failing_edges.append((edge_name, eff))
 
                         min_detected_bleed = min(min_detected_bleed, page_eff_bleed)
@@ -693,7 +696,7 @@ class IntelliPrintEngine:
                                 "severity": "ERROR",
                                 "category": "Geometría",
                                 "title": f"Sangrado insuficiente en pág {p_idx+1} ({page_eff_bleed} mm en borde {failing_edges[0][0]})",
-                                "message": f"La página {p_idx+1} contiene elementos a ras de corte que no alcanzan los 3.0 mm reglamentarios en borde: {desc}."
+                                "message": f"La página {p_idx+1} contiene elementos a ras de corte que no alcanzan los {min_bleed_req_mm:.1f} mm exigidos por el perfil en borde: {desc}."
                             })
 
         if requires_bleed:
@@ -915,6 +918,10 @@ class IntelliPrintEngine:
         return {
             "job_summary": {
                 "profile_id": profile_id,
+                "target_dpi": target_dpi,
+                "min_bleed_req_mm": min_bleed_req_mm,
+                "max_tac_limit": max_tac_limit,
+                "min_hairline_threshold": min_hairline_threshold,
                 "pages": page_count,
                 "total_images": total_images,
                 "low_res_images": low_res_images,

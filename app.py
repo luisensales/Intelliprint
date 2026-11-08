@@ -70,6 +70,15 @@ from didactic_engine import (
     evaluate_student_quiz,
     generate_student_worksheet_pdf,
 )
+from profile_manager import (
+    get_all_profiles,
+    get_profile_by_id,
+    create_custom_profile,
+    update_custom_profile,
+    delete_custom_profile,
+    load_custom_profiles,
+    save_custom_profiles_to_disk,
+)
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -169,49 +178,60 @@ async def serve_index():
 
 @app.get("/api/profiles")
 async def get_profiles():
-    # Read profiles from IntelliPrint_perfiles_v1.json
-    json_path = BASE_DIR / "IntelliPrint_perfiles_v1.json"
-    if json_path.exists():
-        try:
-            with open(json_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return {
-                    "version": data.get("version", "1.2.0"),
-                    "profiles": data.get("profiles", [])
-                }
-        except Exception:
-            pass
-
-    # Fallback default description
+    """Devuelve la lista unificada de perfiles estándar y personalizados."""
+    all_profiles = get_all_profiles()
     return {
         "version": "1.2.0",
-        "profiles": [
-            {
-                "id": "OFFSET_300",
-                "name": "IntelliPrint Offset 300",
-                "destination": "Impresión Offset Comercial",
-                "dpi": 300,
-                "bleed_mm": 3.0,
-                "color": "CMYK"
-            },
-            {
-                "id": "DIGITAL_200",
-                "name": "IntelliPrint Digital 200",
-                "destination": "Impresión Digital",
-                "dpi": 200,
-                "bleed_mm": 3.0,
-                "color": "CMYK"
-            },
-            {
-                "id": "PANTALLA_RGB",
-                "name": "IntelliPrint Pantalla RGB",
-                "destination": "Publicación Digital y Web",
-                "dpi": 96,
-                "bleed_mm": 0.0,
-                "color": "RGB"
-            }
-        ]
+        "profiles": all_profiles
     }
+
+
+@app.post("/api/profiles/custom")
+async def create_profile_endpoint(payload: dict):
+    """Crea un nuevo perfil personalizado de preflight."""
+    new_p = create_custom_profile(payload)
+    return {"status": "success", "profile": new_p}
+
+
+@app.put("/api/profiles/custom/{profile_id}")
+async def update_profile_endpoint(profile_id: str, payload: dict):
+    """Actualiza un perfil personalizado de preflight."""
+    updated = update_custom_profile(profile_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Perfil no encontrado o no modificable.")
+    return {"status": "success", "profile": updated}
+
+
+@app.delete("/api/profiles/custom/{profile_id}")
+async def delete_profile_endpoint(profile_id: str):
+    """Elimina un perfil personalizado de preflight."""
+    ok = delete_custom_profile(profile_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Perfil no encontrado o no se puede eliminar.")
+    return {"status": "success", "deleted_id": profile_id}
+
+
+@app.get("/api/profiles/export")
+async def export_profiles_endpoint():
+    """Exporta los perfiles personalizados en formato JSON."""
+    custom = load_custom_profiles()
+    return {"version": "1.2.0", "custom_profiles": custom}
+
+
+@app.post("/api/profiles/import")
+async def import_profiles_endpoint(payload: dict):
+    """Importa perfiles personalizados desde un JSON."""
+    profiles_to_import = payload.get("custom_profiles", [])
+    current = load_custom_profiles()
+    current_ids = {p["id"] for p in current}
+    imported_count = 0
+    for p in profiles_to_import:
+        if p.get("id") not in current_ids:
+            p["is_custom"] = True
+            current.append(p)
+            imported_count += 1
+    save_custom_profiles_to_disk(current)
+    return {"status": "success", "imported": imported_count, "total_custom": len(current)}
 
 @app.get("/api/icc-catalog")
 async def get_icc_catalog():

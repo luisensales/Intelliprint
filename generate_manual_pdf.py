@@ -329,3 +329,4 @@ def build_manual_pdf():
 
 if __name__ == "__main__":
     build_manual_pdf()
+
