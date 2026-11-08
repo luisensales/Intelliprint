@@ -1611,7 +1611,8 @@ async def generate_mirror_bleed_endpoint(job_id: str, bleed_mm: float = 3.0):
 
 @app.get("/api/download-mirror-bleed/{job_id}")
 async def download_mirror_bleed_pdf(job_id: str):
-    """Descarga el PDF con sangrado sintético por reflejo generado."""
+    """Descarga el PDF con sangrado sintético por reflejo generado.
+    Si no existe todavía, lo genera al vuelo desde el PDF de origen."""
     safe_id = Path(job_id).name
     job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
@@ -1620,12 +1621,24 @@ async def download_mirror_bleed_pdf(job_id: str):
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
 
-    fixed_path = job_data.get("job_meta", {}).get("mirror_bleed_pdf_path")
+    job_meta = job_data.get("job_meta", {})
+    fixed_path = job_meta.get("mirror_bleed_pdf_path")
+
+    # Si no existe en el JSON o el archivo fue eliminado (Render reinicio), generar al vuelo
     if not fixed_path or not Path(fixed_path).exists():
-        raise HTTPException(
-            status_code=404,
-            detail="PDF con sangrado por reflejo no encontrado."
-        )
+        source_pdf = get_latest_cumulative_pdf(job_meta)
+        if not source_pdf or not Path(source_pdf).exists():
+            raise HTTPException(
+                status_code=404,
+                detail="PDF con sangrado por reflejo no encontrado y no se pudo regenerar."
+            )
+        output_path = JOBS_DIR / f"{safe_id}_mirror_bleed.pdf"
+        generate_mirror_bleed(source_pdf, str(output_path), bleed_mm=3.0)
+        job_meta["mirror_bleed_pdf_path"] = str(output_path)
+        register_cumulative_fix(job_data, output_path, "mirror_bleed")
+        with open(job_json_path, "w", encoding="utf-8") as f:
+            json.dump(job_data, f, ensure_ascii=False, indent=2)
+        fixed_path = str(output_path)
 
     filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
     clean_name = filename.replace(".pdf", "")
