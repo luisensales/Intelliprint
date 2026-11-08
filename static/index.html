@@ -37,6 +37,9 @@
             <button onclick="openManualModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition ml-2 cursor-pointer" title="Manual Oficial de Usuario y Guía de Operación (PDF / Word)">
               <i class="fa-solid fa-book-bookmark text-amber-300"></i> Manual
             </button>
+            <button onclick="openProfileManagerModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 hover:text-white text-xs font-semibold rounded-lg border border-indigo-700/60 shadow-xs transition ml-2 cursor-pointer" title="Editor de Perfiles de Preflight Personalizados (Crear, Editar, Exportar JSON)">
+              <i class="fa-solid fa-sliders text-indigo-300"></i> Perfiles Preflight
+            </button>
           </div>
           <p class="text-xs text-slate-400">Sistema Avanzado de Preflight mediante Redes Neuronales & Análisis PDF</p>
         </div>
@@ -97,8 +100,8 @@
         <div class="space-y-2">
           <div class="flex items-center justify-between">
             <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">2. Perfil de Destino (IntelliPrint)</label>
-            <button type="button" onclick="openProfileManagerModal()" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer" title="Crear y editar perfiles de preflight personalizados">
-              <i class="fa-solid fa-sliders"></i> <span>Gestionar Perfiles</span>
+            <button type="button" onclick="openProfileManagerModal()" class="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border border-indigo-200 rounded text-[11px] font-bold transition shadow-xs cursor-pointer" title="Crear y editar perfiles de preflight personalizados">
+              <i class="fa-solid fa-sliders text-indigo-600"></i> <span>⚙️ Gestionar Perfiles</span>
             </button>
           </div>
           <div id="targetProfilesContainer" class="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
@@ -124,6 +127,10 @@
               </div>
             </label>
           </div>
+          <!-- Botón de acceso directo para crear perfil a medida -->
+          <button type="button" onclick="openProfileManagerModal(); initNewProfileForm();" class="w-full py-2 px-3 border border-dashed border-indigo-300 hover:border-indigo-500 hover:bg-indigo-50/60 text-indigo-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer">
+            <i class="fa-solid fa-plus-circle text-indigo-600"></i> <span>+ Crear Perfil Personalizado (FP / Taller)</span>
+          </button>
         </div>
 
         <!-- 3. ICC Color Policy -->

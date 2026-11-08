@@ -188,3 +188,4 @@ def create_fogra_spec_sheet(output_pdf="Muestra_Tira_FOGRA_ISO12647.pdf", output
 
 if __name__ == "__main__":
     create_fogra_spec_sheet()
+
