@@ -275,7 +275,7 @@
 
       <!-- Job Banner & Triple Result Header -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
+        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-4">
           <div>
             <div class="flex items-center gap-2">
               <h2 id="resFileName" class="text-lg font-bold text-slate-900">Documento.pdf</h2>
@@ -288,56 +288,77 @@
             </div>
           </div>
 
+          <!-- Acciones Primarias de Salida -->
           <div class="flex flex-wrap items-center gap-2">
-            <button onclick="resetToNewAnalysis()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer" title="Cerrar este reporte y analizar otro PDF desde el principio">
-              <i class="fa-solid fa-arrow-left"></i> Enviar nuevo PDF
+            <button onclick="openBatchFixModal()" id="btnBatchFix" class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer" title="Aplica en lote las correcciones estándar recomendadas para imprenta">
+              <i class="fa-solid fa-wand-magic-sparkles text-amber-300 text-sm"></i> <span>Taller en 1 Clic</span>
             </button>
-            <a id="downloadPdfBtn" href="#" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition">
-              <i class="fa-solid fa-file-pdf"></i> <span id="downloadPdfBtnLabel">Descargar PDF con ICC</span>
+            <a id="downloadPdfBtn" href="#" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition">
+              <i class="fa-solid fa-file-pdf"></i> <span id="downloadPdfBtnLabel">Descargar PDF</span>
             </a>
-            <a id="downloadCertBtn" href="#" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition">
-              <i class="fa-solid fa-file-shield"></i> Descargar Ficha en PDF
+            <a id="downloadCertBtn" href="#" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition">
+              <i class="fa-solid fa-file-shield text-amber-400"></i> Ficha Técnica
             </a>
-            <a id="downloadClientReportBtn" href="#" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-sm transition" title="Exportar informe pedagógico de 1 página con instrucciones para el diseñador/cliente">
-              <i class="fa-solid fa-chalkboard-user"></i> Informe Cliente
-            </a>
-            <button onclick="openBatchFixModal()" id="btnBatchFix" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Aplica en lote las correcciones estándar recomendadas para imprenta">
-              <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> <span>Taller en 1 Clic</span>
-            </button>
-            <button onclick="applyPrinterMarks(this)" id="btnPrinterMarks" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer" title="Inyectar marcas de corte, cruces de registro y tiras CMYK">
-              <i class="fa-solid fa-crop-simple text-amber-400"></i> <span>Marcas de Imprenta</span>
-            </button>
-            <button onclick="applyTacLimiter(this)" id="btnTacLimiter" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer" title="Limitar cobertura total de tinta al 300% (evita repintado)">
-              <i class="fa-solid fa-droplet text-cyan-400"></i> <span>Limitar TAC 300%</span>
-            </button>
-            <button onclick="openImpositionModal()" id="btnOpenImposition" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Montaje e imposición de pliegos de máquina (Paso y repetición N-Up / Cuadernillo grapado en SRA3, A3, A4)">
-              <i class="fa-solid fa-table-cells text-amber-300"></i> <span>Imposición Pliego</span>
-            </button>
-            <button onclick="openCip3Modal()" id="btnOpenCip3" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Cálculo de Consumo de Tinta y Ajuste de Tinteros CIP3 / PPF por Zonas para el Maquinista">
-              <i class="fa-solid fa-faucet-drip text-amber-300"></i> <span>Tinteros CIP3</span>
-            </button>
-            <button onclick="openBarcodeModal()" id="btnOpenBarcodes" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Inspector y Corrector de Códigos de Barras y Códigos QR (EAN-13, QR, 100% K)">
-              <i class="fa-solid fa-barcode text-amber-300"></i> <span>Códigos & QR</span>
-            </button>
-            <button onclick="openBatchHotfolderModal()" id="btnOpenBatch" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Procesamiento por Lote y Carpeta Caliente (Hot-Folder)">
-              <i class="fa-solid fa-layer-group text-amber-300"></i> <span>Lote & Hot-Folder</span>
-            </button>
-            <button onclick="openSafetyMarginModal()" id="btnOpenSafetyMargin" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Inspector de Margen de Seguridad y Lomo / Medianil">
-              <i class="fa-solid fa-ruler-combined text-amber-200"></i> <span>Margen & Lomo</span>
-            </button>
-            <button onclick="openPressOperatorSheet()" id="btnOpenPressSheet" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Ficha Técnica de Producción y Trazabilidad para el Maquinista (QR en Pliego)">
-              <i class="fa-solid fa-qrcode text-amber-300"></i> <span>Ficha Maquinista</span>
-            </button>
-            <button onclick="openDidacticModal()" id="btnDidactic" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-700 to-purple-700 hover:from-indigo-800 hover:to-purple-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Modo Didáctico y Simulador de Taller FP para Alumnos">
-              <i class="fa-solid fa-graduation-cap text-amber-300"></i> <span>Modo Alumnos FP</span>
-            </button>
-            <button onclick="openManualModal()" id="btnManual" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Manual de Usuario y Guía de Operación (PDF / Word)">
-              <i class="fa-solid fa-book-bookmark text-amber-300"></i> <span>Manual</span>
-            </button>
-            <button id="downloadJsonBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition">
-              <i class="fa-solid fa-code"></i> JSON Oficial
+            <button onclick="resetToNewAnalysis()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer" title="Cerrar este reporte y analizar otro PDF desde el principio">
+              <i class="fa-solid fa-arrow-left"></i> Nuevo PDF
             </button>
           </div>
+        </div>
+
+        <!-- Barra de Herramientas de Taller & Preimpresión Agrupada por Especialidad -->
+        <div class="p-3 bg-slate-50/80 rounded-xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+          
+          <!-- Cluster 1: Prensa & Taller -->
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
+              <i class="fa-solid fa-print text-purple-600"></i> Prensa & Taller:
+            </span>
+            <button onclick="openImpositionModal()" id="btnOpenImposition" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-xs font-bold shadow-2xs transition cursor-pointer" title="Montaje e imposición de pliegos de máquina (Paso y repetición N-Up / Cuadernillo grapado)">
+              <i class="fa-solid fa-table-cells text-purple-600"></i> <span>Imposición Pliego</span>
+            </button>
+            <button onclick="openCip3Modal()" id="btnOpenCip3" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-cyan-50 text-cyan-800 border border-cyan-200 rounded-lg text-xs font-bold shadow-2xs transition cursor-pointer" title="Cálculo de Consumo de Tinta y Ajuste de Tinteros CIP3 / PPF por Zonas">
+              <i class="fa-solid fa-faucet-drip text-cyan-600"></i> <span>Tinteros CIP3</span>
+            </button>
+            <button onclick="openPressOperatorSheet()" id="btnOpenPressSheet" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold shadow-2xs transition cursor-pointer" title="Ficha Técnica de Producción y Trazabilidad para el Maquinista (QR en Pliego)">
+              <i class="fa-solid fa-qrcode text-slate-700"></i> <span>Ficha Maquinista</span>
+            </button>
+          </div>
+
+          <!-- Cluster 2: Ajustes Técnicos Específicos -->
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
+              <i class="fa-solid fa-screwdriver-wrench text-amber-600"></i> Ajustes:
+            </span>
+            <button onclick="applyPrinterMarks(this)" id="btnPrinterMarks" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer" title="Inyectar marcas de corte, cruces de registro y tiras FOGRA CMYK">
+              <i class="fa-solid fa-crop-simple text-amber-500"></i> <span>Marcas FOGRA</span>
+            </button>
+            <button onclick="applyTacLimiter(this)" id="btnTacLimiter" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer" title="Limitar cobertura total de tinta al 300%">
+              <i class="fa-solid fa-droplet text-cyan-600"></i> <span>Limitar TAC</span>
+            </button>
+            <button onclick="openBarcodeModal()" id="btnOpenBarcodes" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer" title="Inspector y Corrector de Códigos de Barras y Códigos QR">
+              <i class="fa-solid fa-barcode text-emerald-600"></i> <span>Códigos & QR</span>
+            </button>
+            <button onclick="openSafetyMarginModal()" id="btnOpenSafetyMargin" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer" title="Inspector de Margen de Seguridad y Lomo / Medianil">
+              <i class="fa-solid fa-ruler-combined text-amber-600"></i> <span>Margen & Lomo</span>
+            </button>
+          </div>
+
+          <!-- Cluster 3: Entregables y Utilidades -->
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
+              <i class="fa-solid fa-folder-open text-sky-600"></i> Entregables:
+            </span>
+            <button onclick="openBatchHotfolderModal()" id="btnOpenBatch" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer" title="Procesamiento por Lote y Carpeta Caliente">
+              <i class="fa-solid fa-layer-group text-sky-600"></i> <span>Hot-Folder</span>
+            </button>
+            <a id="downloadClientReportBtn" href="#" target="_blank" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition" title="Exportar informe pedagógico de 1 página para cliente">
+              <i class="fa-solid fa-chalkboard-user text-indigo-600"></i> <span>Informe Cliente</span>
+            </a>
+            <button id="downloadJsonBtn" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer" title="Descargar auditoría completa en JSON">
+              <i class="fa-solid fa-code text-slate-400"></i> <span>JSON</span>
+            </button>
+          </div>
+
         </div>
 
         <!-- Triple Result Cards -->
