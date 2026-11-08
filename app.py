@@ -2517,6 +2517,8 @@ async def calculate_imposition_endpoint(job_id: str, request: Request):
     orientation = body.get("orientation", "auto")
     mode = body.get("mode", "step_and_repeat")
     gap_mm = float(body.get("gap_mm", 4.0))
+    gap_x_mm = float(body.get("gap_x_mm", gap_mm))
+    gap_y_mm = float(body.get("gap_y_mm", gap_mm))
     bleed_mm = float(body.get("bleed_mm", 2.0))
     sheet_margin_mm = float(body.get("sheet_margin_mm", 10.0))
 
@@ -2529,6 +2531,8 @@ async def calculate_imposition_endpoint(job_id: str, request: Request):
             gap_mm=gap_mm,
             bleed_mm=bleed_mm,
             sheet_margin_mm=sheet_margin_mm,
+            gap_x_mm=gap_x_mm,
+            gap_y_mm=gap_y_mm,
         )
         return plan
     except Exception as e:
@@ -2561,6 +2565,8 @@ async def generate_imposition_endpoint(job_id: str, request: Request):
     orientation = body.get("orientation", "auto")
     mode = body.get("mode", "step_and_repeat")
     gap_mm = float(body.get("gap_mm", 4.0))
+    gap_x_mm = float(body.get("gap_x_mm", gap_mm))
+    gap_y_mm = float(body.get("gap_y_mm", gap_mm))
     bleed_mm = float(body.get("bleed_mm", 2.0))
     sheet_margin_mm = float(body.get("sheet_margin_mm", 10.0))
     add_marks = bool(body.get("add_marks", True))
@@ -2586,6 +2592,8 @@ async def generate_imposition_endpoint(job_id: str, request: Request):
             add_slug=add_slug,
             job_id=safe_id,
             base_url=str(request.base_url),
+            gap_x_mm=gap_x_mm,
+            gap_y_mm=gap_y_mm,
         )
 
         job_meta["imposed_pdf_path"] = str(output_pdf)
@@ -2594,7 +2602,7 @@ async def generate_imposition_endpoint(job_id: str, request: Request):
             json.dump(job_data, f, ensure_ascii=False, indent=2)
 
         result["download_url"] = f"/api/imposition/download/{job_id}"
-        result["preview_url"] = f"/api/imposition/preview/{job_id}?sheet_size={sheet_size}&orientation={orientation}&mode={mode}&gap_mm={gap_mm}&t={int(time.time())}"
+        result["preview_url"] = f"/api/imposition/preview/{job_id}?sheet_size={sheet_size}&orientation={orientation}&mode={mode}&gap_mm={gap_mm}&gap_x_mm={gap_x_mm}&gap_y_mm={gap_y_mm}&t={int(time.time())}"
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generando pliego de imposición: {e}")
@@ -2634,6 +2642,8 @@ async def preview_imposition_endpoint(
     orientation: str = "auto",
     mode: str = "step_and_repeat",
     gap_mm: float = 4.0,
+    gap_x_mm: Optional[float] = None,
+    gap_y_mm: Optional[float] = None,
     bleed_mm: float = 2.0,
     sheet_margin_mm: float = 10.0,
     dpi: int = 80
@@ -2662,6 +2672,8 @@ async def preview_imposition_endpoint(
             bleed_mm=bleed_mm,
             sheet_margin_mm=sheet_margin_mm,
             dpi=dpi,
+            gap_x_mm=gap_x_mm,
+            gap_y_mm=gap_y_mm,
         )
         return Response(content=img_bytes, media_type="image/jpeg")
     except Exception as e:

@@ -134,11 +134,13 @@ def calculate_imposition_plan(
     sheet_size: str = "SRA3",
     orientation: str = "auto",  # "auto", "landscape", "portrait"
     mode: str = "step_and_repeat",  # "step_and_repeat", "booklet", "2up", "4up"
-    gap_mm: float = 4.0,  # Calle intermedia entre poses
+    gap_mm: float = 4.0,  # Calle intermedia entre poses (fallback si no se especifica gap_x/gap_y)
     bleed_mm: float = 2.0,  # Sangrado por pose en la imposición (mínimo de seguridad)
     sheet_margin_mm: float = 10.0,  # Margen perimetral para pinza de máquina y marcas
     user_cols: Optional[int] = None,
     user_rows: Optional[int] = None,
+    gap_x_mm: Optional[float] = None,
+    gap_y_mm: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Calcula el plan geométrico de imposición y aprovechamiento del pliego.
@@ -166,6 +168,9 @@ def calculate_imposition_plan(
     bleed_h_mm = boxes["bleed_h_mm"]
     source_bleed_mm = boxes["source_bleed_mm"]
     pdf_state = boxes["pdf_state"]
+
+    gx_mm = float(gap_x_mm) if gap_x_mm is not None else float(gap_mm)
+    gy_mm = float(gap_y_mm) if gap_y_mm is not None else float(gap_mm)
 
     # La pose "efectiva" incluye la sangre cuando el PDF la tiene nativamente,
     # para que el contenido sangrado se renderice completo en el pliego.
@@ -232,6 +237,8 @@ def calculate_imposition_plan(
             "grid": {"cols": 2, "rows": 1, "total_poses": 2},
             "rotated_90": False,
             "gap_mm": 0.0,
+            "gap_x_mm": 0.0,
+            "gap_y_mm": 0.0,
             "bleed_mm": bleed_mm,
             "source_bleed_mm": source_bleed_mm,
             "pdf_state": pdf_state,
@@ -279,13 +286,13 @@ def calculate_imposition_plan(
             if user_cols and user_rows:
                 c = user_cols
                 r = user_rows
-                req_w = c * pw + (c - 1) * gap_mm
-                req_h = r * ph + (r - 1) * gap_mm
+                req_w = c * pw + (c - 1) * gx_mm
+                req_h = r * ph + (r - 1) * gy_mm
                 if req_w > avail_w or req_h > avail_h:
                     continue
             else:
-                c = int((avail_w + gap_mm) // (pw + gap_mm))
-                r = int((avail_h + gap_mm) // (ph + gap_mm))
+                c = int((avail_w + gx_mm) // (pw + gx_mm))
+                r = int((avail_h + gy_mm) // (ph + gy_mm))
 
             poses = c * r
             if poses <= 0:
@@ -310,7 +317,9 @@ def calculate_imposition_plan(
                     "grid": {"cols": c, "rows": r, "total_poses": poses},
                     "rotated_90": pv["rot"],
                     "effective_pose_size_mm": [pw, ph],  # Tamaño de celda (incluye sangre si la hay)
-                    "gap_mm": gap_mm,
+                    "gap_mm": gx_mm,
+                    "gap_x_mm": gx_mm,
+                    "gap_y_mm": gy_mm,
                     "bleed_mm": bleed_mm,
                     "source_bleed_mm": source_bleed_mm,
                     "pdf_state": pdf_state,
@@ -334,7 +343,9 @@ def calculate_imposition_plan(
             "grid": {"cols": 1, "rows": 1, "total_poses": 1},
             "rotated_90": False,
             "effective_pose_size_mm": [trim_w_mm, trim_h_mm],
-            "gap_mm": gap_mm,
+            "gap_mm": gx_mm,
+            "gap_x_mm": gx_mm,
+            "gap_y_mm": gy_mm,
             "bleed_mm": bleed_mm,
             "source_bleed_mm": source_bleed_mm,
             "pdf_state": pdf_state,
@@ -449,6 +460,8 @@ def generate_imposed_pdf(
     base_url: str = "",
     user_cols: Optional[int] = None,
     user_rows: Optional[int] = None,
+    gap_x_mm: Optional[float] = None,
+    gap_y_mm: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Genera el archivo PDF impuesto en pliego de máquina listo para ripeo y CTP/Digital.
@@ -471,6 +484,8 @@ def generate_imposed_pdf(
         sheet_margin_mm=sheet_margin_mm,
         user_cols=user_cols,
         user_rows=user_rows,
+        gap_x_mm=gap_x_mm,
+        gap_y_mm=gap_y_mm,
     )
 
     src_doc = pymupdf.open(str(pdf_path))
@@ -587,11 +602,12 @@ def generate_imposed_pdf(
         # effective_pose_size_mm ya incluye la sangre cuando hay 'has_bleed'
         pw_pt = plan["effective_pose_size_mm"][0] * PT_PER_MM
         ph_pt = plan["effective_pose_size_mm"][1] * PT_PER_MM
-        gap_pt = plan["gap_mm"] * PT_PER_MM
+        gap_x_pt = plan.get("gap_x_mm", plan.get("gap_mm", 4.0)) * PT_PER_MM
+        gap_y_pt = plan.get("gap_y_mm", plan.get("gap_mm", 4.0)) * PT_PER_MM
         rot = plan.get("rotated_90", False)
 
-        total_grid_w_pt = cols * pw_pt + (cols - 1) * gap_pt
-        total_grid_h_pt = rows * ph_pt + (rows - 1) * gap_pt
+        total_grid_w_pt = cols * pw_pt + (cols - 1) * gap_x_pt
+        total_grid_h_pt = rows * ph_pt + (rows - 1) * gap_y_pt
 
         x_start = (sheet_w_pt - total_grid_w_pt) / 2.0
         y_start = (sheet_h_pt - total_grid_h_pt) / 2.0
@@ -607,8 +623,8 @@ def generate_imposed_pdf(
                     src_page_idx = page_idx_local if num_src_pages > 1 else 0
                     if num_src_pages > 1 and page_idx_local >= num_src_pages:
                         break
-                    px = x_start + c * (pw_pt + gap_pt)
-                    py = y_start + r * (ph_pt + gap_pt)
+                    px = x_start + c * (pw_pt + gap_x_pt)
+                    py = y_start + r * (ph_pt + gap_y_pt)
                     rect_pose = pymupdf.Rect(px, py, px + pw_pt, py + ph_pt)
                     _place_pose(sheet, src_doc, src_page_idx, rect_pose, rotate_val, pdf_state, clip_rect_pt)
                     if num_src_pages > 1:
@@ -635,7 +651,9 @@ def generate_imposed_pdf(
                 rows=rows,
                 pw_pt=pw_pt,
                 ph_pt=ph_pt,
-                gap_pt=gap_pt,
+                gap_pt=gap_x_pt,
+                gap_x_pt=gap_x_pt,
+                gap_y_pt=gap_y_pt,
                 source_bleed_mm=source_bleed_mm,
                 add_marks=add_marks,
                 add_reg_crosses=add_reg_crosses,
@@ -667,7 +685,9 @@ def generate_imposed_pdf(
                     rows=rows,
                     pw_pt=pw_pt,
                     ph_pt=ph_pt,
-                    gap_pt=gap_pt,
+                    gap_pt=gap_x_pt,
+                    gap_x_pt=gap_x_pt,
+                    gap_y_pt=gap_y_pt,
                     source_bleed_mm=source_bleed_mm,
                     add_marks=add_marks,
                     add_reg_crosses=add_reg_crosses,
@@ -702,16 +722,18 @@ def _decorate_sheet(
     rows: int,
     pw_pt: float,
     ph_pt: float,
-    gap_pt: float,
-    source_bleed_mm: float,
-    add_marks: bool,
-    add_reg_crosses: bool,
-    add_color_bar: bool,
-    add_slug: bool,
-    slug_text: str,
+    gap_pt: float = 0.0,
+    source_bleed_mm: float = 0.0,
+    add_marks: bool = True,
+    add_reg_crosses: bool = True,
+    add_color_bar: bool = True,
+    add_slug: bool = True,
+    slug_text: str = "",
     is_booklet: bool = False,
     job_id: Optional[str] = None,
     base_url: str = "",
+    gap_x_pt: Optional[float] = None,
+    gap_y_pt: Optional[float] = None,
 ):
     """
     Inyecta marcas de corte vectoriales, cruces de registro, plegado, tiras densitométricas y slug.
@@ -727,6 +749,9 @@ def _decorate_sheet(
     mark_offset = 2.0 * PT_PER_MM  # 2 mm gap entre corte y marca
     bleed_pt = source_bleed_mm * PT_PER_MM  # offset inward para TrimBox
 
+    gx_pt = gap_x_pt if gap_x_pt is not None else gap_pt
+    gy_pt = gap_y_pt if gap_y_pt is not None else gap_pt
+
     def _draw_mark_line(p1: pymupdf.Point, p2: pymupdf.Point):
         shape_halo.draw_line(p1, p2)
         shape_mark.draw_line(p1, p2)
@@ -736,14 +761,14 @@ def _decorate_sheet(
         # Posiciones de corte X por columna [(x_left, x_right), ...]
         x_cuts = []
         for c in range(cols):
-            x_left  = x_start + c * (pw_pt + gap_pt) + bleed_pt
+            x_left  = x_start + c * (pw_pt + gx_pt) + bleed_pt
             x_right = x_left + pw_pt - 2 * bleed_pt
             x_cuts.append((x_left, x_right))
 
         # Posiciones de corte Y por fila [(y_top, y_bottom), ...]
         y_cuts = []
         for r in range(rows):
-            y_top    = y_start + r * (ph_pt + gap_pt) + bleed_pt
+            y_top    = y_start + r * (ph_pt + gy_pt) + bleed_pt
             y_bottom = y_top + ph_pt - 2 * bleed_pt
             y_cuts.append((y_top, y_bottom))
 
@@ -751,8 +776,8 @@ def _decorate_sheet(
         all_y = [pos for pair in y_cuts for pos in pair]
 
         # Límites de la rejilla
-        total_grid_w_calc = cols * pw_pt + (cols - 1) * gap_pt
-        total_grid_h_calc = rows * ph_pt + (rows - 1) * gap_pt
+        total_grid_w_calc = cols * pw_pt + (cols - 1) * gx_pt
+        total_grid_h_calc = rows * ph_pt + (rows - 1) * gy_pt
         y_min_grid = y_start
         y_max_grid = y_start + total_grid_h_calc
         x_min_grid = x_start
@@ -908,6 +933,8 @@ def render_imposition_preview_image(
     dpi: int = 80,
     user_cols: Optional[int] = None,
     user_rows: Optional[int] = None,
+    gap_x_mm: Optional[float] = None,
+    gap_y_mm: Optional[float] = None,
 ) -> bytes:
     """
     Renderiza una previsualización en JPEG del pliego impuesto generado en memoria.
@@ -932,6 +959,8 @@ def render_imposition_preview_image(
             add_slug=True,
             user_cols=user_cols,
             user_rows=user_rows,
+            gap_x_mm=gap_x_mm,
+            gap_y_mm=gap_y_mm,
         )
 
         doc = pymupdf.open(str(temp_out))
