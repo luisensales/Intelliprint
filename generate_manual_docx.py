@@ -432,14 +432,14 @@ def build_manual_docx():
 
     toc_items = [
         ("1. ¿QUÉ ES INTELLIPRINT?", "Filosofía, objetivos de taller y arquitectura del sistema"),
-        ("2. PRIMEROS PASOS Y ACCESO", "Requisitos de archivo, conexión al servidor y estructura de la pantalla"),
-        ("3. CONFIGURACIÓN DEL PREFLIGHT", "Subida de documentos, inspección rápida, perfiles de comprobación y gestión ICC"),
-        ("4. EL INFORME DE VERIFICACIÓN", "Semáforo global, hallazgos técnicos, corrector ortográfico, TAC y separaciones CMYK"),
-        ("5. SUITE DE CORRECCIÓN EN 1 CLIC", "Taller en 1 Clic, conversión RGB a CMYK, sobreimpresión, hairlines y sangre reflejada"),
-        ("6. MÓDULOS AVANZADOS DE PRODUCCIÓN", "Imposición N-Up, códigos de barras 100% K, Hot-Folder, margen de seguridad y lomo"),
+        ("2. PRIMEROS PASOS Y ACCESO", "Requisitos de archivo, conexión al servidor, Modo Cabina D50 y Pantalla Completa"),
+        ("3. CONFIGURACIÓN DEL PREFLIGHT", "Subida de documentos, inspección rápida, perfiles estándar, gestión ICC y Editor de Perfiles Personalizados"),
+        ("4. EL INFORME DE VERIFICACIÓN", "Semáforo global, hallazgos técnicos, corrector ortográfico, TAC, separaciones CMYK y barra ergonómica"),
+        ("5. SUITE DE CORRECCIÓN EN 1 CLIC", "Taller en 1 Clic, conversión CMYK, sobreimpresión, hairlines, sangre reflejada y Tira FOGRA ISO 12647-2"),
+        ("6. MÓDULOS AVANZADOS DE PRODUCCIÓN", "Imposición N-Up, Exportación CIP3 / Tinteros, códigos de barras 100% K, Hot-Folder y margen/lomo"),
         ("7. TRAZABILIDAD Y QR DEL MAQUINISTA", "Inyección de QR en el pliego y consola web móvil (/verify/{job_id}) a pie de máquina"),
         ("8. MODO DIDÁCTICO Y SIMULADOR FP", "Retos prácticos, simulador físico interactivo, quiz técnico y ficha oficial en PDF"),
-        ("9. DOCUMENTACIÓN Y CERTIFICADOS", "Certificado técnico oficial, guía pedagógica para clientes y exportación JSON"),
+        ("9. DOCUMENTACIÓN Y CERTIFICADOS", "Certificado técnico oficial, guía pedagógica para clientes, exportación JSON y fichas CIP3/FOGRA"),
         ("10. PREGUNTAS FRECUENTES (FAQ)", "Resolución de incidencias comunes de preimpresión y producción gráfica"),
     ]
 
@@ -538,6 +538,15 @@ def build_manual_docx():
         "PDF/X-3 y PDF/X-4. Admite trabajos de una sola hoja (tarjetas de visita, cartelería, packaging) y publicaciones multipágina de gran volumen (revistas, libros, catálogos)."
     )
 
+    add_heading_2_styled(doc, "2.3. Modo Cabina de Máquina D50 y Pantalla Completa")
+    add_body_p(
+        doc,
+        "Bajo la iluminación normalizada D50 (5000 K) de las cabinas de control de prensas offset y digitales, el botón [🌙 Cabina D50] "
+        "conmuta a un tema oscuro antirreflejo de alto contraste calibrado según ISO 3664. Absorbe la luz parásita y evita que el brillo blanco "
+        "descalibre la adaptación cromática del maquinista al comparar pliegos físicos con la pantalla. El botón [⛶] activa el modo de Pantalla Completa "
+        "para aislamiento de ventanas en monitores táctiles industriales de taller."
+    )
+
     # =========================================================================
     # SECCIÓN 3: CONFIGURACIÓN DEL PREFLIGHT
     # =========================================================================
@@ -614,6 +623,19 @@ def build_manual_docx():
     add_bullet_styled(doc, "Asignar Perfil Estándar: ", "Inyecta la etiqueta OutputIntent oficial si el documento viene 'huérfano' sin perfil definido.")
     add_bullet_styled(doc, "Catálogo ICC Integrado: ", "Permite forzar la conversión hacia perfiles certificados de la ECI: ISO Coated v2 300% (FOGRA39), PSO Coated v3 (FOGRA51), PSO Uncoated v3 (FOGRA52), sRGB o Adobe RGB.")
 
+    add_heading_2_styled(doc, "3.4. Creador y Editor de Perfiles Personalizados (Custom Profiles Editor)")
+    add_body_p(
+        doc,
+        "Pulsando [⚙️ Gestionar Perfiles] o [+ Crear Perfil Personalizado], el personal docente o jefe de taller puede definir "
+        "criterios de inspección a medida para su parque de maquinaria (p. ej. 'Packaging Mendizabala 5mm' o 'Digital Salesianos Ricoh'):"
+    )
+    add_bullet_styled(doc, "Resolución DPI: ", "Umbral mínimo exigido para imágenes (150 a 600 DPI).")
+    add_bullet_styled(doc, "Sangrado Mínimo: ", "Configurable a 3 mm comercial, 5 mm en packaging troquelado o 0 mm en pantallas.")
+    add_bullet_styled(doc, "Límite TAC (%): ", "Cobertura máxima de tinta desde 240% en rotativa hasta 320% en digital.")
+    add_bullet_styled(doc, "Trazos Hairline: ", "Grosor mínimo de trazo vectorial (0.25 pt estándar) para evitar pérdida en CTP.")
+    add_bullet_styled(doc, "Espacio y Fuentes: ", "Permiso de tintas directas (Pantone) y obligatoriedad de fuentes incrustadas.")
+    add_bullet_styled(doc, "Exportar / Importar JSON: ", "Permite transferir perfiles de comprobación entre aulas y equipos docentes con un clic.")
+
     # =========================================================================
     # SECCIÓN 4: EL INFORME DE VERIFICACIÓN
     # =========================================================================
@@ -681,6 +703,15 @@ def build_manual_docx():
         "estampar su firma digital sobre un lienzo táctil, generando un registro de responsabilidad y conformidad de tirada."
     )
 
+    add_heading_2_styled(doc, "4.8. Barra de Herramientas Ergonómica Segmentada")
+    add_body_p(
+        doc,
+        "La botonera superior organiza las 15 herramientas de preimpresión en tres bloques de especialidad visualmente separados para evitar fatiga cognitiva:"
+    )
+    add_bullet_styled(doc, "Acciones Principales: ", "[⚡ Taller en 1 Clic] (reparación automática en lote con 1 pulsación), [📄 Descargar PDF], [🛡️ Ficha Técnica] y [🔄 Nuevo PDF].")
+    add_bullet_styled(doc, "Prensa & Taller: ", "[📐 Imposición Pliego], [🖨️ Tinteros CIP3] y [📱 Ficha Maquinista QR].")
+    add_bullet_styled(doc, "Ajustes Técnicos & Entregables: ", "[✂️ Marcas FOGRA], [💧 Limitar TAC], [🏷️ Códigos & QR], [📏 Margen & Lomo], [📁 Hot-Folder] y [👤 Informe Cliente].")
+
     # =========================================================================
     # SECCIÓN 5: SUITE DE HERRAMIENTAS Y CORRECCIONES EN 1 CLIC
     # =========================================================================
@@ -699,7 +730,7 @@ def build_manual_docx():
     add_bullet_styled(doc, "Corrección de Líneas Finas (Hairlines): ", "Detecta trazos de menos de 0.25 pt (habituales en AutoCAD e Illustrator) y los eleva a 0.30 pt para asegurar su insolado en el CTP a 2400 DPI.")
     add_bullet_styled(doc, "Vectorización de Fuentes (Outlining): ", "Convierte todos los textos en curvas vectoriales puras, eliminando de raíz cualquier problema de fuentes no incrustadas, bloqueadas por DRM o ausentes en el RIP.")
     add_bullet_styled(doc, "Generador de Sangre Reflejada (Mirror Bleed): ", "Si el diseño carece de sangría exterior, crea una extensión perimetral de 3 mm mediante espejo de los píxeles de los bordes, protegiendo el corte de guillotina contra filetes blancos.")
-    add_bullet_styled(doc, "Inyector de Marcas de Imprenta: ", "Amplía el pliego técnico e introduce cruces de registro, marcas de corte exteriores, escalas de control de entintado CMYK y la identificación institucional de la tirada.")
+    add_bullet_styled(doc, "Tira de Control Normalizada FOGRA / ISO 12647-2: ", "Inyecta marcas de corte, cruces de registro y una tira espectrofotométrica profesional en espacio DeviceCMYK nativo: sólidos 100%, escala tonal 50%, altas luces CTP críticas (3% y 5%), sombras (95% y 98%), sobreimpresiones/trapping (R, G, B, 3C), tríada crítica de Balance de Grises (CMY50 vs K50) y miras vernier de arrastre (slur) y doblado (doubling).")
     add_bullet_styled(doc, "Limitador de Cobertura de Tinta (TAC 300%): ", "Aplica un recorte suave en las densidades máximas de sombra para que ninguna zona supere el 300%, impidiendo el repintado en la salida de máquina.")
 
     # =========================================================================
@@ -717,9 +748,20 @@ def build_manual_docx():
     add_bullet_styled(doc, "Formatos de Hoja Soportados: ", "SRA3 (320 × 450 mm), A3 (297 × 420 mm), A4, 50 × 70 cm (B2) y 70 × 100 cm (B1).")
     add_bullet_styled(doc, "Esquemas de Montaje: ", "Paso y Repetición (N-Up Step and Repeat) para tarjetas y folletos sueltos, o Cuadernillo Grapado para revistas y publicaciones plegadas.")
     add_bullet_styled(doc, "Tratamiento Inteligente de Sangre: ", "Gestiona automáticamente los 3 escenarios posibles: añade marcas respetando los 3 mm de sangre existentes, genera sangría reflejada si el archivo carece de ella o recorta marcas de corte previas del cliente para evitar marcas duplicadas.")
-    add_bullet_styled(doc, "Cálculo en Tiempo Real: ", "Indica el número exacto de poses por hoja, el porcentaje de aprovechamiento del papel y permite descargar el PDF impuesto listo para CTP o prensa digital.")
+    add_bullet_styled(doc, "Cálculo en Tiempo Real: ", "Indica el número exacto de poses por hoja, el porcentaje de aprovechamiento del papel y permite descargar el PDF impuesto con marcas FOGRA y código QR de trazabilidad.")
 
-    add_heading_2_styled(doc, "6.2. Inspector y Corrector de Códigos de Barras y QR")
+    add_heading_2_styled(doc, "6.2. Exportación de Datos CIP3 / PPF v3.0 & Preajuste de Tinteros por Zonas")
+    add_body_p(
+        doc,
+        "Calcula la cobertura de tinta del pliego dividido en 16, 24 o 32 zonas longitudinales (llaves de tintero) "
+        "y genera los datos estándar para consolas de impresión (Heidelberg Prinect, Komori, Roland, KBA):"
+    )
+    add_bullet_styled(doc, "Curva de Apertura de Llaves (% Opening): ", "Estima la apertura porcentual de cada cuchilla con una base lubricante mínima del 2.5% para prevenir desgaste metal-metal.")
+    add_bullet_styled(doc, "Consumo Estimado de Tinta (kg y g): ", "Calcula el peso total requerido de Cian, Magenta, Amarillo y Negro según la tirada y el tipo de papel.")
+    add_bullet_styled(doc, "Detección de Zonas Secas: ", "Alerta al maquinista ante el riesgo de fricción seca en rodillos cuando una zona sin tinta se sitúa junto a zonas de alta carga.")
+    add_bullet_styled(doc, "Descargas de Taller: ", "Genera el archivo estándar .ppf (CIP3 v3.0) y la Ficha Técnica de Tinteros en PDF A4 apaisado para consulta a pie de máquina.")
+
+    add_heading_2_styled(doc, "6.3. Inspector y Corrector de Códigos de Barras y QR")
     add_body_p(
         doc,
         "Analiza mediante visión por computador (OpenCV) la presencia de códigos comerciales (EAN-13, EAN-8, QR Code, Code 128):"
@@ -728,7 +770,7 @@ def build_manual_docx():
     add_bullet_styled(doc, "Detección de Cuatricromía: ", "Toma muestras microscópicas de píxeles en los canales C, M, Y, K para comprobar si el código se imprimirá en Negro Puro o en Negro Enriquecido (4 tintas).")
     add_bullet_styled(doc, "Corrección en 1 Clic a 100% K: ", "Re-genera el código en vector puro a 300 DPI en tinta negra 100% sobreimpresa y añade una reserva blanca opaca (Quiet Zone) en los laterales para garantizar lectura perfecta en cajas registradoras.")
 
-    add_heading_2_styled(doc, "6.3. Procesamiento por Lotes y Hot-Folder Automatizado")
+    add_heading_2_styled(doc, "6.4. Procesamiento por Lotes y Hot-Folder Automatizado")
     add_body_p(
         doc,
         "Para entornos de alta productividad, IntelliPrint incluye:"
@@ -736,7 +778,7 @@ def build_manual_docx():
     add_bullet_styled(doc, "Cola de Lotes en Navegador: ", "Permite arrastrar decenas de archivos a la vez, procesándolos en paralelo con opción de 'Corregir Todo el Lote' y descarga en archivo ZIP comprimido.")
     add_bullet_styled(doc, "Carpeta Caliente (Hot-Folder Daemon): ", "Servicio en segundo plano que vigila la carpeta de red hotfolder/in/. Al depositar un PDF, comprueba la estabilidad de copia, realiza el preflight y lo traslada automáticamente a out_aprobados/ (con su certificado) o a out_rechazados/ (con el informe didáctico para el cliente).")
 
-    add_heading_2_styled(doc, "6.4. Inspector de Margen de Seguridad y Lomo")
+    add_heading_2_styled(doc, "6.5. Inspector de Margen de Seguridad y Lomo")
     add_body_p(
         doc,
         "Analiza geométricamente la distancia de los textos y logotipos respecto a las líneas de corte y plegado:"
@@ -833,10 +875,10 @@ def build_manual_docx():
 
     add_body_p(
         doc,
-        "IntelliPrint genera tres modalidades de salida documental diseñadas para distintos destinatarios:"
+        "IntelliPrint genera cinco modalidades de salida documental diseñadas para distintos destinatarios:"
     )
 
-    tbl_outputs = doc.add_table(rows=4, cols=3)
+    tbl_outputs = doc.add_table(rows=6, cols=3)
     tbl_outputs.alignment = WD_TABLE_ALIGNMENT.CENTER
     tbl_outputs.autofit = False
     tbl_outputs.columns[0].width = Inches(1.8)
@@ -860,6 +902,8 @@ def build_manual_docx():
         ("Certificado Técnico de Preflight (PDF A4)", "Jefe de Taller / Archivo Técnico", "Informe riguroso de una página con sellos oficiales, huella SHA-256 de integridad, métricas densitométricas y veredicto formal de tirada."),
         ("Guía Pedagógica para el Cliente (PDF A4)", "Diseñador / Agencia / Cliente", "Informe cordial sin tecnicismos hostiles que explica qué incidencias se encontraron y cómo solucionarlas paso a paso en InDesign, Illustrator o Photoshop."),
         ("Informe de Datos Estructurado (JSON)", "Sistemas ERP / MIS de Imprenta", "Exportación completa en árbol JSON con todas las métricas, árboles de objetos y perfiles para integración automática en flujos de producción."),
+        ("Ficha Técnica de Tinteros CIP3 (PDF A4)", "Maquinista de Prensa", "Mapa de apertura de llaves de tintero (1 a 32 zonas), consumo de tinta en kg y alertas de fricción seca en rodillos."),
+        ("Lámina Técnica Tira FOGRA (PDF A4)", "Taller de Calidad / CTP", "Póster de calibración espectrofotométrica con tira FOGRA 1:1 y macroexplicación de balance de grises ISO 12647-2 y trapping."),
     ]
 
     for i, row in enumerate(out_data, 1):

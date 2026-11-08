@@ -189,12 +189,14 @@ def build_manual_pdf():
             [
                 ("2.1. Conexión y Estado del Servidor",
                  "Acceda a http://localhost:8000 o a la dirección IP asignada en su red de centro. Compruebe en la cabecera que el indicador verde 'Motor Activo' está encendido, lo que certifica la disponibilidad de las librerías de análisis y del catálogo de perfiles ICC."),
-                ("2.2. Carga del PDF e Inspección Preliminar",
-                 "Arrastre el PDF a la caja de carga o búsquelo con 'Seleccionar PDF'. Inmediatamente, sin esperas, el sistema efectúa una lectura preliminar indicando peso, número de páginas, formato exacto en milímetros, número de fotos y perfil de salida (OutputIntent) original."),
-                ("2.3. Perfiles de Verificación de Taller",
-                 "Seleccione el perfil adecuado al destino de su trabajo gráfico: Offset Comercial (ISO Coated v2 / 300% TAC), Impresión Digital Estándar (320%), Prensa y Periódico (TAC 240% para papel absorbente), Packaging y Cartoncillo (con troquel) o Gran Formato (lonas y vinilos a 150 DPI)."),
-                ("2.4. Gestión de Perfiles ICC de Color",
-                 "Elija entre Preservar perfil existente, Asignar perfil estándar si viene sin etiquetar, o seleccionar en el catálogo oficial perfiles ECI como ISO Coated v2 (FOGRA39), PSO Coated v3 (FOGRA51) o PSO Uncoated v3 (FOGRA52).")
+                ("2.2. Modo Cabina de Máquina D50 y Pantalla Completa",
+                 "El botón [🌙 Cabina D50] activa un tema oscuro antirreflejo de alto contraste según norma ISO 3664 (iluminante D50 / 5000 K) para proteger la adaptación cromática del maquinista en el pupitre. El botón [⛶] activa el modo de pantalla completa para monitores táctiles."),
+                ("2.3. Carga del PDF e Inspección Preliminar",
+                 "Arrastre el PDF a la caja de carga o búsquelo con 'Seleccionar PDF'. Inmediatamente el sistema efectúa una lectura preliminar indicando peso, número de páginas, formato exacto en mm, número de fotos y OutputIntent original."),
+                ("2.4. Perfiles de Verificación Estándar",
+                 "Seleccione el perfil adecuado al destino de su trabajo gráfico: Offset Comercial (300% TAC), Impresión Digital Estándar (320%), Prensa (240%), Packaging y Cartoncillo (5 mm de sangre) o Gran Formato (150 DPI)."),
+                ("2.5. Editor de Perfiles de Preflight Personalizados",
+                 "Pulsando [⚙️ Gestionar Perfiles] o [+ Crear Perfil], profesores y jefes de taller pueden definir tolerancias a medida: DPI mínimo, sangrado de 0 a 10 mm, límite TAC, línea pelo y reglas de color, con exportación e importación en archivo JSON.")
             ],
             None
         ),
@@ -210,7 +212,9 @@ def build_manual_pdf():
                 ("3.4. Pestaña 3: Métricas de Producción y Heatmap de TAC",
                  "Muestra la Cobertura Total de Tinta (TAC) y proyecta un mapa de calor resaltando en amarillo y rojo las zonas que superan el 300% de tinta con grave riesgo de repintado."),
                 ("3.5. Pestañas 4, 5 y 6: Separaciones CMYK, Slider y Firma",
-                 "Mesa de luz para aislar canales C, M, Y, K; comparador antes/después con cortinilla interactiva; y panel de Release con lienzo táctil para la firma de autorización de tirada.")
+                 "Mesa de luz para aislar canales C, M, Y, K; comparador antes/después con cortinilla interactiva; y panel de Release con lienzo táctil para la firma de autorización de tirada."),
+                ("3.6. Barra de Herramientas Ergonómica Segmentada",
+                 "Estructura las acciones en tres bandejas especializadas: Acciones Principales (Taller en 1 Clic, Descargar PDF, Ficha Técnica), Prensa & Taller (Imposición Pliego, Tinteros CIP3, Ficha Maquinista) y Ajustes Técnicos (Marcas FOGRA, TAC, Códigos QR, Margen).")
             ],
             "CALLOUT_BLUE:Densitometría Virtual: Inspeccione la plancha del Negro (K) para asegurarse de que textos de 6 pt no manchan los cuerpos de color."
         ),
@@ -226,20 +230,24 @@ def build_manual_pdf():
                 ("4.4. Hairlines y Vectorización de Tipografías",
                  "Eleva filetes menores a 0.25 pt a 0.30 pt garantizando su reproducción en plancha, y vectoriza fuentes tipográficas para solventar problemas de tipografías no incrustadas."),
                 ("4.5. Sangre Reflejada (+3 mm) y Limitador de TAC",
-                 "Genera una extensión en espejo de 3 mm en los bordes para eliminar filetes blancos en la guillotina, y comprime sombras al 300% de TAC impidiendo el maculado en pila.")
+                 "Genera una extensión en espejo de 3 mm en los bordes para eliminar filetes blancos en la guillotina, y comprime sombras al 300% de TAC impidiendo el maculado en pila."),
+                ("4.6. Tira de Control Normalizada FOGRA / ISO 12647-2",
+                 "Inyecta marcas de corte y tira espectrofotométrica en espacio nativo DeviceCMYK: sólidos 100%, escala tonal 50%, altas luces (3%, 5%), sombras (95%, 98%), trapping, tríada de Balance de Grises (CMY50 vs REF50) y miras vernier de arrastre (slur) y doblado (doubling).")
             ],
             None
         ),
         (
-            "5. MÓDULOS AVANZADOS: IMPOSICIÓN, CÓDIGOS Y HOT-FOLDER",
+            "5. MÓDULOS AVANZADOS: IMPOSICIÓN, CIP3, CÓDIGOS Y HOT-FOLDER",
             [
                 ("5.1. Motor de Imposición de Pliegos N-Up",
                  "Montaje de pliegos en SRA3, A3, A4, B2 o B1. Permite esquemas de Paso y Repetición (tarjetas y flyers) o Cuadernillo Grapado para revistas. Gestiona automáticamente los 3 casos de sangre (sin sangre, con 3 mm, o recortando marcas previas duplicadas)."),
-                ("5.2. Inspector y Corrector de Códigos de Barras y QR a 100% K",
+                ("5.2. Exportación de Datos CIP3 / PPF v3.0 & Preajuste de Tinteros",
+                 "Calcula la cobertura de tinta del pliego dividida en 16, 24 o 32 zonas longitudinales. Estima consumos en kg y gramos de tinta CMYK según tirada y papel, detecta zonas secas en rodillos y genera archivo .ppf y Ficha PDF para el maquinista."),
+                ("5.3. Inspector y Corrector de Códigos de Barras y QR a 100% K",
                  "Detección por visión artificial (OpenCV) de códigos EAN-13, QR, UPC y Code 128. Comprueba el dígito GS1 y si las barras están tramadas en 4 tintas (Rich Black). En 1 clic regenera el código vectorial en 100% K puro con zona de reserva blanca (Quiet Zone)."),
-                ("5.3. Carpeta Caliente (Hot-Folder) y Cola de Lotes",
+                ("5.4. Carpeta Caliente (Hot-Folder) y Cola de Lotes",
                  "Procesa decenas de archivos concurrentemente. El servicio en segundo plano vigila la carpeta hotfolder/in/; al depositar un PDF, lo analiza y mueve a out_aprobados/ o a out_rechazados/ con el informe para el cliente."),
-                ("5.4. Inspector de Margen de Seguridad y Lomo",
+                ("5.5. Inspector de Margen de Seguridad y Lomo",
                  "Distingue hojas sueltas (tarjetas 85x55: margen 3 mm, lomo 0 mm) frente a publicaciones (≥ 4 págs: margen 3 mm, lomo 8 mm). Dibuja avisos visuales sobre textos en riesgo de corte.")
             ],
             "CALLOUT_AMBER:Alerta de Códigos de Barras: Un código impreso en 4 tintas CMYK provoca rechazo en escáneres láser de supermercado. Exija siempre 100% K puro."
@@ -265,8 +273,10 @@ def build_manual_pdf():
                  "Documento formal de control de calidad para el archivo técnico de la imprenta, con sello institucional, huella SHA-256 de seguridad, datos colorimétricos y veredicto de tirada."),
                 ("7.2. Guía Pedagógica para el Diseñador y Cliente (PDF A4)",
                  "Informe cordial redactado sin lenguaje agresivo que explica al cliente qué fallos tiene su archivo y cómo solucionarlos paso a paso en InDesign, Illustrator o Photoshop."),
-                ("7.3. Respuestas a Preguntas Frecuentes de Taller",
-                 "¿Por qué Rich Black falla en texto fino? Porque cualquier descalce de 0.05 mm genera halos de color. ¿La sangre reflejada altera el diseño? No, solo prolonga simétricamente los 3 mm exteriores al corte. ¿Cumple normas ISO? Sí, está calibrado según ISO 12647-2, ISO 15930 (PDF/X) e ISO/IEC 15420 (GS1).")
+                ("7.3. Ficha de Tinteros CIP3 y Lámina Técnica FOGRA (PDF A4)",
+                 "Hojas especializadas descargables para el taller: plano de apertura de llaves de tintero (1 a 32 zonas) y póster de referencia de la tira FOGRA ISO 12647-2 con macroexplicación del balance de grises."),
+                ("7.4. Respuestas a Preguntas Frecuentes de Taller",
+                 "¿Por qué Rich Black falla en texto fino? Porque cualquier descalce de 0.05 mm genera halos de color. ¿La sangre reflejada altera el diseño? No, solo prolonga simétricamente los 3 mm exteriores al corte. ¿Cumple normas ISO? Sí, está calibrado según ISO 12647-2, ISO 15930 (PDF/X), CIP3 PPF v3.0 e ISO/IEC 15420 (GS1).")
             ],
             None
         )
