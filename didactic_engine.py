@@ -1345,8 +1345,8 @@ def generate_student_worksheet_pdf(
 
         # Enlaces interactivos en los logotipos de la ficha PDF
         page.insert_link({"kind": pymupdf.LINK_URI, "from": r_sales, "uri": "https://salesianosurnieta.com/"})
-        page.insert_link({"kind": pymupdf.LINK_URI, "from": r_mendi, "uri": "https://www.mendizabala.eus/"})
-        page.insert_link({"kind": pymupdf.LINK_URI, "from": r_edu, "uri": "https://www.euskadi.eus/gobierno-vasco/departamento-de-educacion/"})
+        page.insert_link({"kind": pymupdf.LINK_URI, "from": r_mendi, "uri": "https://mendizabala.hezkuntza.net/"})
+        page.insert_link({"kind": pymupdf.LINK_URI, "from": r_edu, "uri": "https://www.euskadi.eus/gobierno-vasco/departamento-educacion/"})
 
     # 2. Bloque de Datos del Alumno y Práctica
     y = 86.0

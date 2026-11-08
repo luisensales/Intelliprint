@@ -377,8 +377,8 @@ def render_press_operator_html(d: Dict[str, Any]) -> str:
       <p class="font-semibold text-slate-600"><a href="/" class="hover:underline">IntelliPrint</a> · Proyecto de Innovación en FP Gráfica</p>
       <p class="space-x-1">
         <a href="https://salesianosurnieta.com/" target="_blank" rel="noopener noreferrer" class="hover:underline text-slate-500 font-medium">Salesianos Urnieta</a> · 
-        <a href="https://www.mendizabala.eus/" target="_blank" rel="noopener noreferrer" class="hover:underline text-slate-500 font-medium">CIFP Mendizabala LHII</a> · 
-        <a href="https://www.euskadi.eus/gobierno-vasco/departamento-de-educacion/" target="_blank" rel="noopener noreferrer" class="hover:underline text-slate-500 font-medium">Eusko Jaurlaritza</a>
+        <a href="https://mendizabala.hezkuntza.net/" target="_blank" rel="noopener noreferrer" class="hover:underline text-slate-500 font-medium">CIFP Mendizabala LHII</a> · 
+        <a href="https://www.euskadi.eus/gobierno-vasco/departamento-educacion/" target="_blank" rel="noopener noreferrer" class="hover:underline text-slate-500 font-medium">Eusko Jaurlaritza</a>
       </p>
     </div>
 

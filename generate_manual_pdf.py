@@ -111,13 +111,13 @@ def build_manual_pdf():
 
         r_mendi = pymupdf.Rect(MARGIN_X + 175, 32, MARGIN_X + 315, 78)
         p_cov.insert_image(r_mendi, filename=str(p_mendi), keep_proportion=True)
-        p_cov.insert_link({"kind": pymupdf.LINK_URI, "from": r_mendi, "uri": "https://www.mendizabala.eus/"})
+        p_cov.insert_link({"kind": pymupdf.LINK_URI, "from": r_mendi, "uri": "https://mendizabala.hezkuntza.net/"})
 
         p_cov.draw_line(pymupdf.Point(MARGIN_X + 325, 36), pymupdf.Point(MARGIN_X + 325, 74), color=(0.85, 0.85, 0.85), width=0.8)
 
         r_edu = pymupdf.Rect(MARGIN_X + 340, 32, MARGIN_X + 490, 78)
         p_cov.insert_image(r_edu, filename=str(p_edu), keep_proportion=True)
-        p_cov.insert_link({"kind": pymupdf.LINK_URI, "from": r_edu, "uri": "https://www.euskadi.eus/gobierno-vasco/departamento-de-educacion/"})
+        p_cov.insert_link({"kind": pymupdf.LINK_URI, "from": r_edu, "uri": "https://www.euskadi.eus/gobierno-vasco/departamento-educacion/"})
 
     # Logo central IntelliPrint
     p_full_logo = ASSETS_DIR / "Logo-intelliprint.png"
