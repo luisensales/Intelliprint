@@ -151,11 +151,11 @@ def create_custom_profile(data: Dict[str, Any]) -> Dict[str, Any]:
         "id": profile_id,
         "name": raw_name,
         "destination": data.get("destination", "Perfil personalizado de imprenta").strip(),
-        "target_dpi": int(data.get("target_dpi", 300)),
-        "min_bleed_mm": float(data.get("min_bleed_mm", 3.0)),
-        "max_tac": int(data.get("max_tac", 300)),
-        "min_hairline_pt": float(data.get("min_hairline_pt", 0.25)),
-        "safety_margin_mm": float(data.get("safety_margin_mm", 3.0)),
+        "target_dpi": int(data.get("target_dpi") or data.get("dpi") or 300),
+        "min_bleed_mm": float(data.get("min_bleed_mm") or data.get("bleed_mm") or 3.0),
+        "max_tac": int(data.get("max_tac") or data.get("tac_limit") or data.get("tac") or 300),
+        "min_hairline_pt": float(data.get("min_hairline_pt") or data.get("hairline_pt") or 0.25),
+        "safety_margin_mm": float(data.get("safety_margin_mm") or data.get("safety_margin") or 3.0),
         "color_family": data.get("color_family", "CMYK"),
         "allow_spot_colors": bool(data.get("allow_spot_colors", True)),
         "require_fonts_embedded": bool(data.get("require_fonts_embedded", True)),
@@ -185,11 +185,11 @@ def update_custom_profile(profile_id: str, data: Dict[str, Any]) -> Optional[Dic
     p = current[target_idx]
     p["name"] = data.get("name", p["name"]).strip()
     p["destination"] = data.get("destination", p["destination"]).strip()
-    p["target_dpi"] = int(data.get("target_dpi", p["target_dpi"]))
-    p["min_bleed_mm"] = float(data.get("min_bleed_mm", p["min_bleed_mm"]))
-    p["max_tac"] = int(data.get("max_tac", p["max_tac"]))
-    p["min_hairline_pt"] = float(data.get("min_hairline_pt", p["min_hairline_pt"]))
-    p["safety_margin_mm"] = float(data.get("safety_margin_mm", p["safety_margin_mm"]))
+    p["target_dpi"] = int(data.get("target_dpi") or data.get("dpi") or p["target_dpi"])
+    p["min_bleed_mm"] = float(data.get("min_bleed_mm") or data.get("bleed_mm") or p["min_bleed_mm"])
+    p["max_tac"] = int(data.get("max_tac") or data.get("tac_limit") or data.get("tac") or p["max_tac"])
+    p["min_hairline_pt"] = float(data.get("min_hairline_pt") or data.get("hairline_pt") or p["min_hairline_pt"])
+    p["safety_margin_mm"] = float(data.get("safety_margin_mm") or data.get("safety_margin") or p["safety_margin_mm"])
     p["color_family"] = data.get("color_family", p["color_family"])
     p["allow_spot_colors"] = bool(data.get("allow_spot_colors", p["allow_spot_colors"]))
     p["require_fonts_embedded"] = bool(data.get("require_fonts_embedded", p["require_fonts_embedded"]))

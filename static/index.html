@@ -94,6 +94,12 @@
     body.theme-kiosk-d50 .divide-slate-100 > * {
       border-color: #1e293b !important;
     }
+    /* Pastilla de logotipos institucionales: siempre fondo blanco puro para legibilidad total */
+    body.theme-kiosk-d50 #headerInstitutionalLogos,
+    body.theme-kiosk-d50 .institutional-logos-pill {
+      background-color: #ffffff !important;
+      border-color: #cbd5e1 !important;
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans transition-colors duration-200">
@@ -121,7 +127,7 @@
         </div>
 
         <!-- Institutional Logos: Salesianos, Mendizabala, Dept. Educación -->
-        <div class="shrink-0 flex items-center gap-3 sm:gap-4 bg-white pl-4 pr-6 sm:pr-8 py-1.5 rounded-xl shadow-xs border border-slate-200">
+        <div id="headerInstitutionalLogos" class="institutional-logos-pill shrink-0 flex items-center gap-3 sm:gap-4 bg-white pl-4 pr-6 sm:pr-8 py-1.5 rounded-xl shadow-xs border border-slate-200">
           <img src="/asset/logo-salesianos.svg" alt="Salesianos Urnieta" class="h-6 sm:h-7 w-auto max-w-[110px] object-contain shrink-0" title="CPIFP Salesianos Urnieta LHIPI">
           <div class="h-5 sm:h-6 w-px bg-slate-200 shrink-0"></div>
           <img src="/asset/logo-mendizabala.png" alt="CIFP Mendizabala LHII" class="h-6 sm:h-7 w-auto max-w-[110px] object-contain shrink-0" title="CIFP Mendizabala LHII">
@@ -308,10 +314,10 @@
             <button onclick="openBatchFixModal()" id="btnBatchFix" class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer" title="Aplica en lote las correcciones estándar recomendadas para imprenta">
               <i class="fa-solid fa-wand-magic-sparkles text-amber-300 text-sm"></i> <span>Taller en 1 Clic</span>
             </button>
-            <a id="downloadPdfBtn" href="#" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition">
+            <a id="downloadPdfBtn" href="#" download class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition">
               <i class="fa-solid fa-file-pdf"></i> <span id="downloadPdfBtnLabel">Descargar PDF</span>
             </a>
-            <a id="downloadCertBtn" href="#" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition">
+            <a id="downloadCertBtn" href="#" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-file-shield text-amber-400"></i> Ficha Técnica
             </a>
             <button onclick="resetToNewAnalysis()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer" title="Cerrar este reporte y analizar otro PDF desde el principio">
@@ -4230,8 +4236,8 @@
         if (res.ok && data.status === 'success') {
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400 mr-1"></i> Marcas Listas';
-          btn.classList.remove('bg-slate-800', 'hover:bg-slate-700');
-          btn.classList.add('bg-emerald-700', 'hover:bg-emerald-800');
+          btn.classList.remove('bg-slate-800', 'hover:bg-slate-700', 'bg-white', 'hover:bg-slate-100', 'text-slate-700', 'border-slate-200');
+          btn.classList.add('bg-emerald-700', 'hover:bg-emerald-800', 'text-white', 'border-emerald-600');
 
           // Actualizar botón de descarga de la cabecera
           const pdfBtn = document.getElementById('downloadPdfBtn');
@@ -4278,8 +4284,8 @@
         if (res.ok && data.status === 'success') {
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-circle-check text-cyan-400 mr-1"></i> TAC ≤ 300% OK';
-          btn.classList.remove('bg-slate-800', 'hover:bg-slate-700');
-          btn.classList.add('bg-cyan-800', 'hover:bg-cyan-900');
+          btn.classList.remove('bg-slate-800', 'hover:bg-slate-700', 'bg-white', 'hover:bg-slate-100', 'text-slate-700', 'border-slate-200');
+          btn.classList.add('bg-cyan-800', 'hover:bg-cyan-900', 'text-white', 'border-cyan-700');
 
           // Actualizar botón de descarga de la cabecera
           const pdfBtn = document.getElementById('downloadPdfBtn');
@@ -5323,6 +5329,18 @@
 
           const badge = document.getElementById('findingsCount');
           if (badge) badge.textContent = (data.errors_count || 0) + (data.warnings_count || 0);
+
+          // Actualizar botón de descarga de la cabecera / barra principal
+          const mainPdfBtn = document.getElementById('downloadPdfBtn');
+          const mainPdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+          if (mainPdfBtn) {
+            mainPdfBtn.href = `/api/download-batch/${currentJobId}`;
+            mainPdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            mainPdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+          }
+          if (mainPdfBtnLabel) {
+            mainPdfBtnLabel.textContent = 'Descargar PDF (Lote OK)';
+          }
 
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-check text-emerald-200"></i> Lote completado!';
