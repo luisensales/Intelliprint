@@ -480,7 +480,7 @@ def generate_scenario_pdf(scenario_id: str, output_path: Path) -> Path:
 
         # Fondo oscuro al corte exacto (Rich black C=60, M=50, Y=40, K=100)
         page.draw_rect(pymupdf.Rect(0, 0, w, h), fill=(0.04, 0.03, 0.03))
-        page.draw_rect(pymupdf.Rect(10, 10, w - 10, h - 10), color=(0.85, 0.70, 0.20), width=0.8)
+        page.draw_rect(pymupdf.Rect(15, 15, w - 15, h - 15), color=(0.85, 0.70, 0.20), width=0.8)
 
         page.insert_text(pymupdf.Point(20, 40), "SERVICIOS GRÁFICOS NORTE", fontsize=11, fontname="helv", color=(1, 1, 1))
         page.insert_text(pymupdf.Point(20, 56), "Consultoría Gráfica & Packaging", fontsize=7.5, fontname="helv", color=(0.85, 0.70, 0.20))

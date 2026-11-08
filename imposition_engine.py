@@ -746,23 +746,57 @@ def _decorate_sheet(
         x_min_grid = x_start
         x_max_grid = x_start + cols * pw_pt + (cols - 1) * gap_pt
 
-        # Marcas de corte verticales (arriba y abajo de cada columna de corte)
+        # Marcas de corte verticales (arriba y abajo de CADA posición de corte X)
+        # Incluye marcas internas entre filas, no solo en el borde exterior de la rejilla
         for xp in x_positions:
-            # Arriba: desde fuera del contenido hacia arriba
+            # Marca exterior superior
             y_top_mark = y_min_grid + bleed_pt - mark_offset
             shape.draw_line(pymupdf.Point(xp, y_top_mark), pymupdf.Point(xp, y_top_mark - mark_len))
-            # Abajo
+            # Marca exterior inferior
             y_bot_mark = y_max_grid - bleed_pt + mark_offset
             shape.draw_line(pymupdf.Point(xp, y_bot_mark), pymupdf.Point(xp, y_bot_mark + mark_len))
+            # Marcas internas entre filas (en cada separación de fila)
+            for r in range(1, rows):
+                # Centro del gap entre fila r-1 y fila r
+                y_gap_center = y_start + r * (ph_pt + gap_pt) - gap_pt / 2
+                # Marca apuntando hacia arriba (desde el borde superior del gap)
+                y_gap_top = y_gap_center - gap_pt / 2 + bleed_pt
+                shape.draw_line(
+                    pymupdf.Point(xp, y_gap_top - mark_offset),
+                    pymupdf.Point(xp, y_gap_top - mark_offset - mark_len)
+                )
+                # Marca apuntando hacia abajo (desde el borde inferior del gap)
+                y_gap_bot = y_gap_center + gap_pt / 2 - bleed_pt
+                shape.draw_line(
+                    pymupdf.Point(xp, y_gap_bot + mark_offset),
+                    pymupdf.Point(xp, y_gap_bot + mark_offset + mark_len)
+                )
 
-        # Marcas de corte horizontales (izquierda y derecha de cada fila de corte)
+        # Marcas de corte horizontales (izquierda y derecha de CADA posición de corte Y)
+        # Incluye marcas internas entre columnas, no solo en el borde exterior de la rejilla
         for yp in y_positions:
-            # Izquierda
+            # Marca exterior izquierda
             x_left_mark = x_min_grid + bleed_pt - mark_offset
             shape.draw_line(pymupdf.Point(x_left_mark, yp), pymupdf.Point(x_left_mark - mark_len, yp))
-            # Derecha
+            # Marca exterior derecha
             x_right_mark = x_max_grid - bleed_pt + mark_offset
             shape.draw_line(pymupdf.Point(x_right_mark, yp), pymupdf.Point(x_right_mark + mark_len, yp))
+            # Marcas internas entre columnas (en cada separación de columna)
+            for c in range(1, cols):
+                # Centro del gap entre columna c-1 y columna c
+                x_gap_center = x_start + c * (pw_pt + gap_pt) - gap_pt / 2
+                # Marca apuntando hacia la izquierda (desde el borde izquierdo del gap)
+                x_gap_left = x_gap_center - gap_pt / 2 + bleed_pt
+                shape.draw_line(
+                    pymupdf.Point(x_gap_left - mark_offset, yp),
+                    pymupdf.Point(x_gap_left - mark_offset - mark_len, yp)
+                )
+                # Marca apuntando hacia la derecha (desde el borde derecho del gap)
+                x_gap_right = x_gap_center + gap_pt / 2 - bleed_pt
+                shape.draw_line(
+                    pymupdf.Point(x_gap_right + mark_offset, yp),
+                    pymupdf.Point(x_gap_right + mark_offset + mark_len, yp)
+                )
 
         # Marca de plegado (fold mark) en cuadernillo
         if is_booklet and cols == 2:
