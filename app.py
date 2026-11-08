@@ -36,6 +36,11 @@ from imposition_engine import (
     render_imposition_preview_image,
     STANDARD_SHEET_SIZES_MM,
 )
+from cip3_engine import (
+    calculate_ink_zone_coverage,
+    generate_cip3_ppf,
+    generate_cip3_pdf_sheet,
+)
 from barcode_engine import (
     inspect_barcodes_in_pdf,
     fix_barcodes_in_pdf,
@@ -2637,6 +2642,188 @@ async def preview_imposition_endpoint(
         return Response(content=img_bytes, media_type="image/jpeg")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error renderizando previsualización de imposición: {e}")
+
+
+# =============================================================================
+# ENDPOINTS: DATOS DE TALLER CIP3 / PPF (AJUSTE DE TINTEROS POR ZONAS)
+# =============================================================================
+
+@app.post("/api/cip3/calculate/{job_id}")
+async def calculate_cip3_endpoint(job_id: str, request: Request):
+    """
+    Calcula la cobertura de tinta CMYK por franjas longitudinales (zonas de tintero)
+    y precalcula los archivos de salida CIP3 (.ppf) y Ficha de Tinteros (PDF).
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    job_dir = JOBS_DIR / safe_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    num_zones = int(body.get("num_zones", 32))
+    if num_zones not in (16, 24, 32):
+        num_zones = 32
+    run_length = int(body.get("run_length", 1000))
+    paper_type = str(body.get("paper_type", "coated"))
+    source = str(body.get("source", "auto"))
+
+    # Determinar el PDF a analizar: Si se solicita el pliego de imposición y existe, se usa ese
+    imposed_path = job_meta.get("last_imposition_plan", {}).get("imposed_pdf_path")
+    if source == "imposed" and imposed_path and Path(imposed_path).exists():
+        target_pdf = imposed_path
+        sheet_label = "Pliego_Imposicion"
+    else:
+        target_pdf = (
+            imposed_path if (source == "auto" and imposed_path and Path(imposed_path).exists())
+            else (
+                job_meta.get("last_fixed_pdf_path")
+                or job_meta.get("batch_fixed_pdf_path")
+                or job_meta.get("cmyk_converted_pdf_path")
+                or job_meta.get("overprint_fixed_pdf_path")
+                or job_meta.get("pdf_path")
+            )
+        )
+        sheet_label = "Pliego_Imposicion" if (imposed_path and target_pdf == imposed_path) else "Pagina_Individual"
+
+    if not target_pdf or not Path(target_pdf).exists():
+        raise HTTPException(status_code=404, detail="Archivo PDF objetivo no encontrado.")
+
+    try:
+        cip3_result = calculate_ink_zone_coverage(
+            pdf_path=target_pdf,
+            num_zones=num_zones,
+            run_length=run_length,
+            paper_type=paper_type
+        )
+        
+        # Guardar archivo .ppf
+        ppf_filename = f"CIP3_{safe_id}_{num_zones}Z.ppf"
+        ppf_path = job_dir / ppf_filename
+        generate_cip3_ppf(
+            cip3_data=cip3_result,
+            output_ppf_path=str(ppf_path),
+            job_id=safe_id,
+            job_title=f"IntelliPrint_Job_{safe_id[:8]}"
+        )
+        
+        # Guardar Ficha PDF para el maquinista
+        sheet_pdf_filename = f"Ficha_Tinteros_CIP3_{safe_id}.pdf"
+        sheet_pdf_path = job_dir / sheet_pdf_filename
+        generate_cip3_pdf_sheet(
+            cip3_data=cip3_result,
+            output_pdf_path=str(sheet_pdf_path),
+            job_id=safe_id,
+            job_title=f"IntelliPrint_Job_{safe_id[:8]}"
+        )
+        
+        cip3_result["source_used"] = sheet_label
+        cip3_result["download_ppf_url"] = f"/api/cip3/download/ppf/{safe_id}?num_zones={num_zones}&run_length={run_length}&paper_type={paper_type}"
+        cip3_result["download_pdf_url"] = f"/api/cip3/download/pdf/{safe_id}?num_zones={num_zones}&run_length={run_length}&paper_type={paper_type}"
+
+        # Guardar en metadata de trabajo para consulta posterior
+        job_meta["last_cip3_calculation"] = {
+            "num_zones": num_zones,
+            "run_length": run_length,
+            "paper_type": paper_type,
+            "ppf_path": str(ppf_path),
+            "sheet_pdf_path": str(sheet_pdf_path),
+            "updated_at": datetime.now().isoformat()
+        }
+        with open(job_json_path, "w", encoding="utf-8") as f:
+            json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+        return cip3_result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error calculando cobertura CIP3: {e}")
+
+
+@app.get("/api/cip3/download/ppf/{job_id}")
+async def download_cip3_ppf_endpoint(
+    job_id: str,
+    num_zones: int = 32,
+    run_length: int = 1000,
+    paper_type: str = "coated"
+):
+    """Descarga el archivo estándar CIP3 / PPF v3.0 generado para el trabajo."""
+    safe_id = Path(job_id).name
+    job_dir = JOBS_DIR / safe_id
+    ppf_filename = f"CIP3_{safe_id}_{num_zones}Z.ppf"
+    ppf_path = job_dir / ppf_filename
+
+    # Si no existe, recalcular sobre la marcha
+    if not ppf_path.exists():
+        job_json_path = JOBS_DIR / f"{safe_id}.json"
+        if not job_json_path.exists():
+            raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+        with open(job_json_path, "r", encoding="utf-8") as f:
+            job_data = json.load(f)
+        job_meta = job_data.get("job_meta", {})
+        target_pdf = (
+            job_meta.get("last_imposition_plan", {}).get("imposed_pdf_path")
+            or job_meta.get("last_fixed_pdf_path")
+            or job_meta.get("pdf_path")
+        )
+        if not target_pdf or not Path(target_pdf).exists():
+            raise HTTPException(status_code=404, detail="PDF no disponible.")
+        job_dir.mkdir(parents=True, exist_ok=True)
+        cip3_res = calculate_ink_zone_coverage(target_pdf, num_zones=num_zones, run_length=run_length, paper_type=paper_type)
+        generate_cip3_ppf(cip3_res, str(ppf_path), safe_id)
+
+    return FileResponse(
+        path=str(ppf_path),
+        media_type="application/octet-stream",
+        filename=f"CIP3_{safe_id[:8].upper()}_{num_zones}Zonas.ppf"
+    )
+
+
+@app.get("/api/cip3/download/pdf/{job_id}")
+async def download_cip3_pdf_endpoint(
+    job_id: str,
+    num_zones: int = 32,
+    run_length: int = 1000,
+    paper_type: str = "coated"
+):
+    """Descarga la Ficha Técnica de Ajuste de Tinteros CIP3 en PDF A4."""
+    safe_id = Path(job_id).name
+    job_dir = JOBS_DIR / safe_id
+    sheet_pdf_filename = f"Ficha_Tinteros_CIP3_{safe_id}.pdf"
+    sheet_pdf_path = job_dir / sheet_pdf_filename
+
+    # Si no existe, recalcular sobre la marcha
+    if not sheet_pdf_path.exists():
+        job_json_path = JOBS_DIR / f"{safe_id}.json"
+        if not job_json_path.exists():
+            raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+        with open(job_json_path, "r", encoding="utf-8") as f:
+            job_data = json.load(f)
+        job_meta = job_data.get("job_meta", {})
+        target_pdf = (
+            job_meta.get("last_imposition_plan", {}).get("imposed_pdf_path")
+            or job_meta.get("last_fixed_pdf_path")
+            or job_meta.get("pdf_path")
+        )
+        if not target_pdf or not Path(target_pdf).exists():
+            raise HTTPException(status_code=404, detail="PDF no disponible.")
+        job_dir.mkdir(parents=True, exist_ok=True)
+        cip3_res = calculate_ink_zone_coverage(target_pdf, num_zones=num_zones, run_length=run_length, paper_type=paper_type)
+        generate_cip3_pdf_sheet(cip3_res, str(sheet_pdf_path), safe_id)
+
+    return FileResponse(
+        path=str(sheet_pdf_path),
+        media_type="application/pdf",
+        filename=f"Ficha_Tinteros_CIP3_{safe_id[:8].upper()}.pdf"
+    )
 
 
 # =============================================================================

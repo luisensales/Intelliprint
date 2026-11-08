@@ -222,6 +222,9 @@
             <button onclick="openImpositionModal()" id="btnOpenImposition" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Montaje e imposición de pliegos de máquina (Paso y repetición N-Up / Cuadernillo grapado en SRA3, A3, A4)">
               <i class="fa-solid fa-table-cells text-amber-300"></i> <span>Imposición Pliego</span>
             </button>
+            <button onclick="openCip3Modal()" id="btnOpenCip3" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Cálculo de Consumo de Tinta y Ajuste de Tinteros CIP3 / PPF por Zonas para el Maquinista">
+              <i class="fa-solid fa-faucet-drip text-amber-300"></i> <span>Tinteros CIP3</span>
+            </button>
             <button onclick="openBarcodeModal()" id="btnOpenBarcodes" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Inspector y Corrector de Códigos de Barras y Códigos QR (EAN-13, QR, 100% K)">
               <i class="fa-solid fa-barcode text-amber-300"></i> <span>Códigos & QR</span>
             </button>
@@ -1372,6 +1375,9 @@
         </button>
 
         <div class="flex items-center gap-2.5">
+          <button onclick="closeImpositionModal(); openCip3Modal('imposed');" class="inline-flex items-center gap-1.5 px-3 py-2 bg-cyan-700 hover:bg-cyan-800 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer" title="Calcular tinteros CIP3 de este pliego montado">
+            <i class="fa-solid fa-faucet-drip text-amber-300"></i> <span>Tinteros CIP3</span>
+          </button>
           <a id="impDownloadBtn" href="#" class="hidden inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer">
             <i class="fa-solid fa-download"></i> Descargar Pliego PDF
           </a>
@@ -1380,6 +1386,253 @@
           </button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: AJUSTE DE TINTEROS CIP3 / PPF & ESTIMACIÓN DE CONSUMO DE TINTA     -->
+  <!-- ========================================================================= -->
+  <div id="cip3Modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="cip3ModalTitle">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeCip3Modal()"></div>
+
+    <!-- Panel -->
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-5xl w-full border border-slate-200 overflow-hidden animate-fade-in flex flex-col max-h-[92vh]">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-cyan-950 via-slate-900 to-indigo-950 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-cyan-600/30 border border-cyan-400/40 flex items-center justify-center text-amber-300 text-lg">
+            <i class="fa-solid fa-faucet-drip"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 id="cip3ModalTitle" class="text-base font-bold tracking-tight text-white">Preajuste de Tinteros CIP3 / PPF & Consumo de Tintas</h3>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">CIP3 v3.0</span>
+            </div>
+            <p class="text-xs text-slate-300">Cálculo de cobertura zonal (1 a 32 llaves) • CPIFP Salesianos Urnieta • CIFP Mendizabala • Hezkuntza Saila</p>
+          </div>
+        </div>
+        <button onclick="closeCip3Modal()" class="w-8 h-8 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-6 overflow-y-auto flex-1 bg-slate-50 space-y-5">
+
+        <!-- Controls Row -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Número de Zonas / Llaves:</label>
+            <select id="cip3NumZones" class="w-full text-xs font-medium border border-slate-300 rounded-lg p-2 bg-white text-slate-800 focus:ring-2 focus:ring-cyan-500">
+              <option value="32" selected>32 Zonas (Estándar 70/100 cm)</option>
+              <option value="24">24 Zonas (Prensa 50/70 cm)</option>
+              <option value="16">16 Zonas (Prensa 35/50 cm)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Tirada (Pliegos):</label>
+            <div class="flex items-center gap-2">
+              <input type="number" id="cip3RunLength" value="1000" min="100" max="1000000" step="500" class="w-full text-xs font-medium border border-slate-300 rounded-lg p-2 bg-white text-slate-800 focus:ring-2 focus:ring-cyan-500">
+              <span class="text-[11px] text-slate-400 font-semibold shrink-0">pliegos</span>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Tipo de Papel / Soporte:</label>
+            <select id="cip3PaperType" class="w-full text-xs font-medium border border-slate-300 rounded-lg p-2 bg-white text-slate-800 focus:ring-2 focus:ring-cyan-500">
+              <option value="coated" selected>Estucado Comercial (1.20 g/m²)</option>
+              <option value="uncoated">Offset / No Estucado (0.95 g/m²)</option>
+              <option value="carton">Cartoncillo Packaging (1.30 g/m²)</option>
+              <option value="newspaper">Papel Prensa (0.85 g/m²)</option>
+            </select>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button onclick="fetchCip3Data()" class="w-full py-2 bg-cyan-700 hover:bg-cyan-800 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer">
+              <i class="fa-solid fa-arrows-rotate"></i> <span>Calcular Zonas</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Global Ink Consumption Summary Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <!-- Total Card -->
+          <div class="col-span-2 lg:col-span-1 bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tinta Total</span>
+            <div class="mt-1">
+              <span id="cip3TotalKg" class="text-xl font-black text-slate-900">0.000</span>
+              <span class="text-xs font-semibold text-slate-500 ml-1">kg</span>
+            </div>
+            <span id="cip3TotalG" class="text-[11px] text-slate-500 mt-1 font-mono">0.0 g total</span>
+          </div>
+
+          <!-- Cyan Card -->
+          <div class="bg-white p-3.5 rounded-xl border border-cyan-200 shadow-sm flex flex-col justify-between border-t-4 border-t-cyan-500">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-cyan-700">Cian (C)</span>
+              <span id="cip3CyanCov" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-50 text-cyan-700 font-mono">0%</span>
+            </div>
+            <div class="mt-1">
+              <span id="cip3CyanKg" class="text-lg font-black text-slate-800">0.000</span>
+              <span class="text-[11px] text-slate-500 ml-1">kg</span>
+            </div>
+            <span id="cip3CyanG" class="text-[11px] text-slate-500 mt-0.5 font-mono">0.0 g</span>
+          </div>
+
+          <!-- Magenta Card -->
+          <div class="bg-white p-3.5 rounded-xl border border-pink-200 shadow-sm flex flex-col justify-between border-t-4 border-t-pink-500">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-pink-700">Magenta (M)</span>
+              <span id="cip3MagCov" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-pink-50 text-pink-700 font-mono">0%</span>
+            </div>
+            <div class="mt-1">
+              <span id="cip3MagKg" class="text-lg font-black text-slate-800">0.000</span>
+              <span class="text-[11px] text-slate-500 ml-1">kg</span>
+            </div>
+            <span id="cip3MagG" class="text-[11px] text-slate-500 mt-0.5 font-mono">0.0 g</span>
+          </div>
+
+          <!-- Yellow Card -->
+          <div class="bg-white p-3.5 rounded-xl border border-amber-200 shadow-sm flex flex-col justify-between border-t-4 border-t-amber-400">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-amber-700">Amarillo (Y)</span>
+              <span id="cip3YelCov" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-mono">0%</span>
+            </div>
+            <div class="mt-1">
+              <span id="cip3YelKg" class="text-lg font-black text-slate-800">0.000</span>
+              <span class="text-[11px] text-slate-500 ml-1">kg</span>
+            </div>
+            <span id="cip3YelG" class="text-[11px] text-slate-500 mt-0.5 font-mono">0.0 g</span>
+          </div>
+
+          <!-- Black Card -->
+          <div class="bg-white p-3.5 rounded-xl border border-slate-300 shadow-sm flex flex-col justify-between border-t-4 border-t-slate-800">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-800">Negro (K)</span>
+              <span id="cip3BlkCov" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 font-mono">0%</span>
+            </div>
+            <div class="mt-1">
+              <span id="cip3BlkKg" class="text-lg font-black text-slate-800">0.000</span>
+              <span class="text-[11px] text-slate-500 ml-1">kg</span>
+            </div>
+            <span id="cip3BlkG" class="text-[11px] text-slate-500 mt-0.5 font-mono">0.0 g</span>
+          </div>
+        </div>
+
+        <!-- Chart Section with Filter Tabs -->
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <h4 class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                <i class="fa-solid fa-chart-simple text-cyan-600"></i>
+                Perfil de Apertura de Tornillos de Tintero (% Opening)
+              </h4>
+              <p class="text-[11px] text-slate-500">Distribución a lo largo del ancho del pliego (Zonas 1 a <span id="cip3ZonesCountLabel">32</span> de izquierda a derecha)</p>
+            </div>
+
+            <!-- Channel Filter Pills -->
+            <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg text-xs">
+              <button onclick="setFilterCip3Channel('ALL')" id="cip3FilterALL" class="px-2.5 py-1 rounded-md font-bold transition bg-white text-slate-900 shadow-xs cursor-pointer">
+                Todos (CMYK)
+              </button>
+              <button onclick="setFilterCip3Channel('C')" id="cip3FilterC" class="px-2.5 py-1 rounded-md font-bold transition text-cyan-700 hover:bg-white/80 cursor-pointer">
+                Cian
+              </button>
+              <button onclick="setFilterCip3Channel('M')" id="cip3FilterM" class="px-2.5 py-1 rounded-md font-bold transition text-pink-700 hover:bg-white/80 cursor-pointer">
+                Magenta
+              </button>
+              <button onclick="setFilterCip3Channel('Y')" id="cip3FilterY" class="px-2.5 py-1 rounded-md font-bold transition text-amber-700 hover:bg-white/80 cursor-pointer">
+                Amarillo
+              </button>
+              <button onclick="setFilterCip3Channel('K')" id="cip3FilterK" class="px-2.5 py-1 rounded-md font-bold transition text-slate-800 hover:bg-white/80 cursor-pointer">
+                Negro
+              </button>
+            </div>
+          </div>
+
+          <!-- Visual Bar Chart Container -->
+          <div class="relative min-h-[190px] pt-4 pb-2 px-2 bg-slate-900 rounded-xl overflow-x-auto">
+            <!-- Loading overlay -->
+            <div id="cip3LoadingOverlay" class="absolute inset-0 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center text-white text-xs gap-2 hidden z-10">
+              <i class="fa-solid fa-spinner fa-spin text-cyan-400 text-xl"></i>
+              <span>Calculando coberturas zonales de tinta...</span>
+            </div>
+
+            <!-- 100%, 75%, 50%, 25% Grid Lines -->
+            <div class="absolute left-3 right-3 top-4 bottom-8 flex flex-col justify-between pointer-events-none opacity-20">
+              <div class="border-b border-white text-[9px] text-white">100%</div>
+              <div class="border-b border-white text-[9px] text-white">75%</div>
+              <div class="border-b border-white text-[9px] text-white">50%</div>
+              <div class="border-b border-white text-[9px] text-white">25%</div>
+              <div class="border-b border-white text-[9px] text-white">0%</div>
+            </div>
+
+            <!-- Bars container -->
+            <div id="cip3BarsFlex" class="relative z-1 flex items-end justify-between h-[150px] gap-1 px-4">
+              <!-- Dynamically rendered -->
+            </div>
+          </div>
+
+          <!-- Dry Friction Warning Alert if needed -->
+          <div id="cip3FrictionAlert" class="hidden p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-start gap-2.5">
+            <i class="fa-solid fa-triangle-exclamation text-amber-600 text-sm mt-0.5"></i>
+            <div>
+              <strong class="font-bold">Aviso para el Maquinista: Riesgo de Fricción Seca en Rodillos</strong>
+              <p class="text-[11px] mt-0.5">Se han detectado zonas con 0% de aporte de tinta adyacentes a zonas de alta carga. Aplica pasta lubricante o gel protector de rodillos en esas zonas para evitar calentamiento por fricción.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table of Zones (Collapsible or scrollable) -->
+        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+          <div class="px-5 py-3 bg-slate-100/70 border-b border-slate-200 flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-800">Tabla Numérica de Regla de Tinteros por Zona</span>
+            <span id="cip3SheetDimsLabel" class="text-[11px] text-slate-500 font-mono">-- mm</span>
+          </div>
+          <div class="max-h-[220px] overflow-y-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-200">
+                <tr>
+                  <th class="py-2 px-3">Zona</th>
+                  <th class="py-2 px-3">Posición (mm)</th>
+                  <th class="py-2 px-3 text-cyan-600">Cian (%)</th>
+                  <th class="py-2 px-3 text-pink-600">Magenta (%)</th>
+                  <th class="py-2 px-3 text-amber-600">Amarillo (%)</th>
+                  <th class="py-2 px-3 text-slate-700">Negro (%)</th>
+                  <th class="py-2 px-3">Estado</th>
+                </tr>
+              </thead>
+              <tbody id="cip3TableBody" class="divide-y divide-slate-100 font-mono text-[11px]">
+                <!-- Dynamically rendered -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer Buttons -->
+      <div class="flex flex-wrap items-center justify-between gap-3 px-6 py-3.5 bg-slate-50 border-t border-slate-200 shrink-0">
+        <span class="text-[11px] text-slate-500 flex items-center gap-1.5">
+          <i class="fa-solid fa-print text-cyan-700"></i> Formato Estándar CIP3 PPF v3.0 • Euskadiko Lanbide Heziketa
+        </span>
+
+        <div class="flex items-center gap-2">
+          <button onclick="closeCip3Modal()" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+            Cerrar
+          </button>
+          <a id="cip3DownloadPdfBtn" href="#" download class="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer">
+            <i class="fa-solid fa-file-pdf text-red-400"></i> Ficha de Tinteros (PDF)
+          </a>
+          <a id="cip3DownloadPpfBtn" href="#" download class="inline-flex items-center gap-1.5 px-4 py-2 bg-cyan-700 hover:bg-cyan-800 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer">
+            <i class="fa-solid fa-download text-amber-300"></i> Descargar CIP3 (.ppf)
+          </a>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -6784,6 +7037,235 @@
       };
       reader.readAsText(file);
       event.target.value = '';
+    }
+
+    // =========================================================================
+    // MODAL DE AJUSTE DE TINTEROS CIP3 / PPF & CONSUMO DE TINTA
+    // =========================================================================
+    let cachedCip3Data = null;
+    let activeCip3Channel = 'ALL';
+    let cip3SourcePref = 'auto';
+
+    function openCip3Modal(sourceHint) {
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo. Sube y analiza un PDF primero.');
+        return;
+      }
+      if (sourceHint) {
+        cip3SourcePref = sourceHint;
+      }
+      const modal = document.getElementById('cip3Modal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+      fetchCip3Data();
+    }
+
+    function closeCip3Modal() {
+      const modal = document.getElementById('cip3Modal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    async function fetchCip3Data() {
+      if (!currentJobId) return;
+
+      const numZones = parseInt(document.getElementById('cip3NumZones')?.value || '32', 10);
+      const runLength = parseInt(document.getElementById('cip3RunLength')?.value || '1000', 10);
+      const paperType = document.getElementById('cip3PaperType')?.value || 'coated';
+      const loadingOverlay = document.getElementById('cip3LoadingOverlay');
+
+      if (loadingOverlay) loadingOverlay.classList.remove('hidden');
+
+      try {
+        const res = await fetch(`/api/cip3/calculate/${currentJobId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            num_zones: numZones,
+            run_length: runLength,
+            paper_type: paperType,
+            source: cip3SourcePref
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'Error calculando CIP3');
+        }
+
+        cachedCip3Data = await res.json();
+        renderCip3Visuals(cachedCip3Data);
+
+      } catch (err) {
+        console.error('Error calculando CIP3:', err);
+        alert('Error calculando datos CIP3: ' + err.message);
+      } finally {
+        if (loadingOverlay) loadingOverlay.classList.add('hidden');
+      }
+    }
+
+    function setFilterCip3Channel(channel) {
+      activeCip3Channel = channel;
+      ['ALL', 'C', 'M', 'Y', 'K'].forEach(ch => {
+        const btn = document.getElementById(`cip3Filter${ch}`);
+        if (!btn) return;
+        if (ch === channel) {
+          btn.className = 'px-2.5 py-1 rounded-md font-bold transition bg-white text-slate-900 shadow-xs cursor-pointer';
+        } else {
+          let textCol = 'text-slate-600';
+          if (ch === 'C') textCol = 'text-cyan-700';
+          if (ch === 'M') textCol = 'text-pink-700';
+          if (ch === 'Y') textCol = 'text-amber-700';
+          if (ch === 'K') textCol = 'text-slate-800';
+          btn.className = `px-2.5 py-1 rounded-md font-bold transition ${textCol} hover:bg-white/80 cursor-pointer`;
+        }
+      });
+
+      if (cachedCip3Data) {
+        renderCip3Bars(cachedCip3Data.zones);
+      }
+    }
+
+    function renderCip3Visuals(data) {
+      if (!data) return;
+
+      const sheet = data.sheet_info || {};
+      const cov = data.coverage_summary || {};
+      const ink = data.ink_consumption || {};
+      const zones = data.zones || [];
+
+      // Actualizar rótulos de cabecera y dimensiones
+      const zLabel = document.getElementById('cip3ZonesCountLabel');
+      if (zLabel) zLabel.textContent = data.num_zones;
+      const dimsLabel = document.getElementById('cip3SheetDimsLabel');
+      if (dimsLabel) dimsLabel.textContent = `Pliego: ${sheet.width_mm} × ${sheet.height_mm} mm (${sheet.zone_width_mm} mm/zona)`;
+
+      // Actualizar tarjetas de consumo
+      const totalKgEl = document.getElementById('cip3TotalKg');
+      if (totalKgEl) totalKgEl.textContent = ink.total_kg?.toFixed(3) || '0.000';
+      const totalGEl = document.getElementById('cip3TotalG');
+      if (totalGEl) totalGEl.textContent = `${ink.total_g?.toFixed(1) || '0.0'} g para ${ink.run_length?.toLocaleString()} pliegos`;
+
+      const setCard = (prefix, covVal, kgVal, gVal) => {
+        const cCov = document.getElementById(`cip3${prefix}Cov`);
+        if (cCov) cCov.textContent = `${covVal?.toFixed(1) || '0'}%`;
+        const cKg = document.getElementById(`cip3${prefix}Kg`);
+        if (cKg) cKg.textContent = kgVal?.toFixed(3) || '0.000';
+        const cG = document.getElementById(`cip3${prefix}G`);
+        if (cG) cG.textContent = `${gVal?.toFixed(1) || '0.0'} g`;
+      };
+
+      setCard('Cyan', cov.c, ink.c_kg, ink.c_g);
+      setCard('Mag', cov.m, ink.m_kg, ink.m_g);
+      setCard('Yel', cov.y, ink.y_kg, ink.y_g);
+      setCard('Blk', cov.k, ink.k_kg, ink.k_g);
+
+      // Renderizar barras y tabla
+      renderCip3Bars(zones);
+      renderCip3Table(zones);
+
+      // Alerta de fricción seca
+      const frictionAlert = document.getElementById('cip3FrictionAlert');
+      const hasFriction = zones.some(z => z.is_dry_friction_risk);
+      if (frictionAlert) {
+        if (hasFriction) frictionAlert.classList.remove('hidden');
+        else frictionAlert.classList.add('hidden');
+      }
+
+      // Enlaces de descarga
+      const ppfBtn = document.getElementById('cip3DownloadPpfBtn');
+      if (ppfBtn && data.download_ppf_url) {
+        ppfBtn.href = data.download_ppf_url;
+      }
+      const pdfBtn = document.getElementById('cip3DownloadPdfBtn');
+      if (pdfBtn && data.download_pdf_url) {
+        pdfBtn.href = data.download_pdf_url;
+      }
+    }
+
+    function renderCip3Bars(zones) {
+      const container = document.getElementById('cip3BarsFlex');
+      if (!container) return;
+
+      container.innerHTML = zones.map(z => {
+        let barsHtml = '';
+        const opC = z.c_opening;
+        const opM = z.m_opening;
+        const opY = z.y_opening;
+        const opK = z.k_opening;
+
+        if (activeCip3Channel === 'ALL') {
+          barsHtml = `
+            <div class="flex items-end gap-[1px] h-full w-full justify-center">
+              <div class="w-1.5 bg-cyan-400 rounded-t-[1px] transition-all duration-300" style="height: ${Math.max(2, opC)}%;" title="Cian: ${opC}%"></div>
+              <div class="w-1.5 bg-pink-500 rounded-t-[1px] transition-all duration-300" style="height: ${Math.max(2, opM)}%;" title="Magenta: ${opM}%"></div>
+              <div class="w-1.5 bg-amber-400 rounded-t-[1px] transition-all duration-300" style="height: ${Math.max(2, opY)}%;" title="Amarillo: ${opY}%"></div>
+              <div class="w-1.5 bg-slate-300 rounded-t-[1px] transition-all duration-300" style="height: ${Math.max(2, opK)}%;" title="Negro: ${opK}%"></div>
+            </div>
+          `;
+        } else if (activeCip3Channel === 'C') {
+          barsHtml = `<div class="w-3 bg-cyan-400 rounded-t-[1px] transition-all duration-300 mx-auto" style="height: ${Math.max(2, opC)}%;" title="Cian: ${opC}% (Cob: ${z.c_coverage}%)"></div>`;
+        } else if (activeCip3Channel === 'M') {
+          barsHtml = `<div class="w-3 bg-pink-500 rounded-t-[1px] transition-all duration-300 mx-auto" style="height: ${Math.max(2, opM)}%;" title="Magenta: ${opM}% (Cob: ${z.m_coverage}%)"></div>`;
+        } else if (activeCip3Channel === 'Y') {
+          barsHtml = `<div class="w-3 bg-amber-400 rounded-t-[1px] transition-all duration-300 mx-auto" style="height: ${Math.max(2, opY)}%;" title="Amarillo: ${opY}% (Cob: ${z.y_coverage}%)"></div>`;
+        } else if (activeCip3Channel === 'K') {
+          barsHtml = `<div class="w-3 bg-slate-200 rounded-t-[1px] transition-all duration-300 mx-auto" style="height: ${Math.max(2, opK)}%;" title="Negro: ${opK}% (Cob: ${z.k_coverage}%)"></div>`;
+        }
+
+        const warnBadge = z.is_dry_friction_risk ? '<span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block mt-0.5"></span>' : '';
+
+        return `
+          <div class="flex-1 flex flex-col items-center justify-end h-full group relative cursor-pointer" title="Zona ${z.zone_index}: ${z.x_start_mm}-${z.x_end_mm}mm | C:${opC}% M:${opM}% Y:${opY}% K:${opK}%">
+            <!-- Tooltip on hover -->
+            <div class="absolute bottom-full mb-2 hidden group-hover:flex flex-col bg-slate-950 text-white text-[10px] p-2 rounded shadow-xl border border-slate-700 z-30 pointer-events-none whitespace-nowrap">
+              <span class="font-bold text-cyan-300 border-b border-slate-800 pb-0.5 mb-1">Zona ${z.zone_index} (${z.x_start_mm}-${z.x_end_mm} mm)</span>
+              <span>Cian: <strong>${opC}%</strong> (cob: ${z.c_coverage}%)</span>
+              <span>Magenta: <strong>${opM}%</strong> (cob: ${z.m_coverage}%)</span>
+              <span>Amarillo: <strong>${opY}%</strong> (cob: ${z.y_coverage}%)</span>
+              <span>Negro: <strong>${opK}%</strong> (cob: ${z.k_coverage}%)</span>
+              ${z.is_dry_friction_risk ? '<span class="text-amber-400 font-bold mt-1">⚠️ Peligro fricción seca</span>' : ''}
+            </div>
+
+            <!-- The Bar Column -->
+            <div class="w-full h-[120px] flex items-end">
+              ${barsHtml}
+            </div>
+
+            <!-- Zone Number Label -->
+            <span class="text-[8px] font-mono text-slate-400 mt-1 select-none">${z.zone_index}</span>
+            ${warnBadge}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderCip3Table(zones) {
+      const tbody = document.getElementById('cip3TableBody');
+      if (!tbody) return;
+
+      tbody.innerHTML = zones.map(z => {
+        const bgRow = z.zone_index % 2 === 0 ? 'bg-slate-50/60' : 'bg-white';
+        const warnTag = z.is_dry_friction_risk 
+          ? '<span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[9px] font-bold">FRICCIÓN</span>' 
+          : '<span class="text-emerald-600 font-semibold text-[10px]">OK</span>';
+
+        return `
+          <tr class="${bgRow} hover:bg-cyan-50/40 transition">
+            <td class="py-1.5 px-3 font-bold text-slate-800">Z${String(z.zone_index).padStart(2, '0')}</td>
+            <td class="py-1.5 px-3 text-slate-500">${z.x_start_mm} - ${z.x_end_mm}</td>
+            <td class="py-1.5 px-3 text-cyan-700 font-bold">${z.c_opening.toFixed(1)}% <span class="text-[9px] text-slate-400 font-normal">(${z.c_coverage}%)</span></td>
+            <td class="py-1.5 px-3 text-pink-700 font-bold">${z.m_opening.toFixed(1)}% <span class="text-[9px] text-slate-400 font-normal">(${z.m_coverage}%)</span></td>
+            <td class="py-1.5 px-3 text-amber-700 font-bold">${z.y_opening.toFixed(1)}% <span class="text-[9px] text-slate-400 font-normal">(${z.y_coverage}%)</span></td>
+            <td class="py-1.5 px-3 text-slate-800 font-bold">${z.k_opening.toFixed(1)}% <span class="text-[9px] text-slate-400 font-normal">(${z.k_coverage}%)</span></td>
+            <td class="py-1.5 px-3">${warnTag}</td>
+          </tr>
+        `;
+      }).join('');
     }
   </script>
 </body>
