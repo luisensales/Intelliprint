@@ -7,8 +7,8 @@ Genera sangrado perimetral de 3.0 mm mediante extensión inteligente de bordes:
 4. Búsqueda inteligente hacia el interior (hasta 2.0 mm): si un elemento de diseño (cabecera, faldón, caja)
    se detuvo a décimas de milímetro del borde neto de corte dejando un filete blanco, detecta el color exacto
    del arte, cierra el filete blanco y extiende el sangrado 3.0 mm hacia el exterior.
-5. Si el borde ya contiene un fondo sólido neto (como fondos negros o tintas planas a ras), toma el píxel
-   exacto del borde sin arrastrar elementos interiores (como filetes dorados o textos).
+5. Inset anti-aliasing (0.25 mm): evita muestrear los píxeles perimetrales de subpíxel que MuPDF o el renderizador
+   mezclan con el fondo blanco de la página, extrayendo la tinta sólida pura e impidiendo filetes desvaídos.
 6. Preserva la nitidez vectorial del centro mediante superposición exacta y normaliza TrimBox y BleedBox.
 """
 
@@ -59,6 +59,7 @@ def generate_mirror_bleed(
     px_per_mm = dpi / 25.4
     bleed_px = max(1, int(round(bleed_mm * px_per_mm)))
     search_depth_px = max(1, int(round(2.0 * px_per_mm)))  # 2.0 mm de búsqueda interior
+    edge_inset = max(2, int(round(0.25 * px_per_mm)))     # 0.25 mm inward para evitar antialiasing del borde
 
     src_doc = pymupdf.open(pdf_path)
     dst_doc = pymupdf.open()
@@ -85,83 +86,97 @@ def generate_mirror_bleed(
         arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape((pix.height, pix.width, num_channels)).copy()
         H, W, _ = arr.shape
 
-        search_d = min(search_depth_px, H // 2, W // 2)
+        search_d = min(search_depth_px, max(1, H // 2 - edge_inset), max(1, W // 2 - edge_inset))
 
         # -------------------------------------------------------------
         # 1. BORDE SUPERIOR (TOP)
         # -------------------------------------------------------------
-        top_strip = arr[:search_d, :, :]
+        top_strip = arr[edge_inset:edge_inset + search_d, :, :]
         is_w_top = np.all(top_strip < 15, axis=2) if is_cmyk else np.all(top_strip > 240, axis=2)
         has_art_top = ~is_w_top
         any_art_top = np.any(has_art_top, axis=0)
-        first_art_row = np.argmax(has_art_top, axis=0)
-        top_colors = arr[0, :, :].copy()
+        first_art_row = np.argmax(has_art_top, axis=0) + edge_inset
+        top_colors = arr[edge_inset, :, :].copy()
         cols_art_top = np.where(any_art_top)[0]
         top_colors[cols_art_top] = arr[first_art_row[cols_art_top], cols_art_top, :]
 
-        # Cerrar filetes blancos en el arte cerca del borde superior
-        for c in cols_art_top:
-            r_idx = first_art_row[c]
-            if r_idx > 0:
+        # Cerrar filetes blancos y corregir antialiasing en el borde superior
+        cols_art_set = set(cols_art_top)
+        for c in range(W):
+            if c in cols_art_set:
+                r_idx = first_art_row[c]
                 arr[0:r_idx, c, :] = top_colors[c]
+            else:
+                arr[0:edge_inset, c, :] = top_colors[c]
 
         # -------------------------------------------------------------
         # 2. BORDE INFERIOR (BOTTOM)
         # -------------------------------------------------------------
-        bot_strip = arr[H - search_d:, :, :]
+        bot_anchor = H - 1 - edge_inset
+        bot_strip = arr[bot_anchor - search_d:bot_anchor + 1, :, :]
         is_w_bot = np.all(bot_strip < 15, axis=2) if is_cmyk else np.all(bot_strip > 240, axis=2)
         has_art_bot = ~is_w_bot
         any_art_bot = np.any(has_art_bot, axis=0)
         has_art_bot_rev = has_art_bot[::-1, :]
         dist_from_bot = np.argmax(has_art_bot_rev, axis=0)
-        bot_colors = arr[H - 1, :, :].copy()
+        bot_colors = arr[bot_anchor, :, :].copy()
         cols_art_bot = np.where(any_art_bot)[0]
-        bot_row_indices = H - 1 - dist_from_bot[cols_art_bot]
+        bot_row_indices = bot_anchor - dist_from_bot[cols_art_bot]
         bot_colors[cols_art_bot] = arr[bot_row_indices, cols_art_bot, :]
 
-        # Cerrar filetes blancos en el arte cerca del borde inferior
-        for i, c in enumerate(cols_art_bot):
-            r_idx = bot_row_indices[i]
-            if r_idx < H - 1:
+        # Cerrar filetes blancos y corregir antialiasing en el borde inferior
+        cols_bot_map = {c: bot_row_indices[i] for i, c in enumerate(cols_art_bot)}
+        for c in range(W):
+            if c in cols_bot_map:
+                r_idx = cols_bot_map[c]
                 arr[r_idx + 1:H, c, :] = bot_colors[c]
+            else:
+                arr[bot_anchor + 1:H, c, :] = bot_colors[c]
 
         # -------------------------------------------------------------
         # 3. BORDE IZQUIERDO (LEFT)
         # -------------------------------------------------------------
-        left_strip = arr[:, :search_d, :]
+        left_strip = arr[:, edge_inset:edge_inset + search_d, :]
         is_w_left = np.all(left_strip < 15, axis=2) if is_cmyk else np.all(left_strip > 240, axis=2)
         has_art_left = ~is_w_left
         any_art_left = np.any(has_art_left, axis=1)
-        first_art_col = np.argmax(has_art_left, axis=1)
-        left_colors = arr[:, 0, :].copy()
+        first_art_col = np.argmax(has_art_left, axis=1) + edge_inset
+        left_colors = arr[:, edge_inset, :].copy()
         rows_art_left = np.where(any_art_left)[0]
         left_colors[rows_art_left] = arr[rows_art_left, first_art_col[rows_art_left], :]
 
-        # Cerrar filetes blancos en el arte cerca del borde izquierdo
-        for r in rows_art_left:
-            c_idx = first_art_col[r]
-            if c_idx > 0:
+        # Cerrar filetes blancos y corregir antialiasing en el borde izquierdo
+        rows_left_set = set(rows_art_left)
+        for r in range(H):
+            if r in rows_left_set:
+                c_idx = first_art_col[r]
                 arr[r, 0:c_idx, :] = left_colors[r]
+            else:
+                arr[r, 0:edge_inset, :] = left_colors[r]
 
         # -------------------------------------------------------------
         # 4. BORDE DERECHO (RIGHT)
         # -------------------------------------------------------------
-        right_strip = arr[:, W - search_d:, :]
+        right_anchor = W - 1 - edge_inset
+        right_strip = arr[:, right_anchor - search_d:right_anchor + 1, :]
         is_w_right = np.all(right_strip < 15, axis=2) if is_cmyk else np.all(right_strip > 240, axis=2)
         has_art_right = ~is_w_right
         any_art_right = np.any(has_art_right, axis=1)
         has_art_right_rev = has_art_right[:, ::-1]
         dist_from_right = np.argmax(has_art_right_rev, axis=1)
-        right_colors = arr[:, W - 1, :].copy()
+        right_colors = arr[:, right_anchor, :].copy()
         rows_art_right = np.where(any_art_right)[0]
-        right_col_indices = W - 1 - dist_from_right[rows_art_right]
+        right_col_indices = right_anchor - dist_from_right[rows_art_right]
         right_colors[rows_art_right] = arr[rows_art_right, right_col_indices, :]
 
-        # Cerrar filetes blancos en el arte cerca del borde derecho
-        for i, r in enumerate(rows_art_right):
-            c_idx = right_col_indices[i]
-            if c_idx < W - 1:
+        # Cerrar filetes blancos y corregir antialiasing en el borde derecho
+        rows_right_map = {r: right_col_indices[i] for i, r in enumerate(rows_art_right)}
+        for r in range(H):
+            if r in rows_right_map:
+                c_idx = rows_right_map[r]
                 arr[r, c_idx + 1:W, :] = right_colors[r]
+            else:
+                arr[r, right_anchor + 1:W, :] = right_colors[r]
 
         # -------------------------------------------------------------
         # 5. CONSTRUCCIÓN DEL LIENZO CON SANGRADO (CANVAS)
@@ -170,7 +185,7 @@ def generate_mirror_bleed(
         canvas_w = W + 2 * bleed_px
         canvas = np.zeros((canvas_h, canvas_w, num_channels), dtype=np.uint8)
 
-        # Centro (arte original con filetes cerrados)
+        # Centro (arte original con filetes y antialiasing perimetral corregidos)
         canvas[bleed_px:bleed_px + H, bleed_px:bleed_px + W, :] = arr
 
         # Sangrados perimetrales (3.0 mm)
@@ -179,11 +194,11 @@ def generate_mirror_bleed(
         canvas[bleed_px:bleed_px + H, 0:bleed_px, :] = left_colors[:, None, :]
         canvas[bleed_px:bleed_px + H, bleed_px + W:, :] = right_colors[:, None, :]
 
-        # Esquinas
-        canvas[0:bleed_px, 0:bleed_px, :] = canvas[bleed_px, bleed_px, :]
-        canvas[0:bleed_px, bleed_px + W:, :] = canvas[bleed_px, bleed_px + W - 1, :]
-        canvas[bleed_px + H:, 0:bleed_px, :] = canvas[bleed_px + H - 1, bleed_px, :]
-        canvas[bleed_px + H:, bleed_px + W:, :] = canvas[bleed_px + H - 1, bleed_px + W - 1, :]
+        # Esquinas: utilizar los colores de los extremos de los sangrados adyacentes
+        canvas[0:bleed_px, 0:bleed_px, :] = top_colors[0][None, None, :]
+        canvas[0:bleed_px, bleed_px + W:, :] = top_colors[W - 1][None, None, :]
+        canvas[bleed_px + H:, 0:bleed_px, :] = bot_colors[0][None, None, :]
+        canvas[bleed_px + H:, bleed_px + W:, :] = bot_colors[W - 1][None, None, :]
 
         tot_w_pt = w_pt + 2 * bleed_pt
         tot_h_pt = h_pt + 2 * bleed_pt
