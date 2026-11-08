@@ -1313,16 +1313,23 @@ def generate_student_worksheet_pdf(
     else:
         text_x = 35
 
-    page.insert_text(pymupdf.Point(text_x, 32), "Intelli", fontsize=12.5, color=(1, 1, 1), fontname="helv")
+    page.insert_text(pymupdf.Point(text_x, 28), "Intelli", fontsize=12.5, color=(1, 1, 1), fontname="helv")
     w_intelli = pymupdf.get_text_length("Intelli", fontname="helv", fontsize=12.5)
-    page.insert_text(pymupdf.Point(text_x + w_intelli, 32), "Print", fontsize=12.5, color=(0.0, 0.64, 1.0), fontname="hebo")
+    page.insert_text(pymupdf.Point(text_x + w_intelli, 28), "Print", fontsize=12.5, color=(0.0, 0.64, 1.0), fontname="hebo")
     w_print = pymupdf.get_text_length("Print", fontname="hebo", fontsize=12.5)
-    page.insert_text(pymupdf.Point(text_x + w_intelli + w_print + 5, 32), "· FICHA DE EVALUACIÓN FP", fontsize=9.5, color=(0.85, 0.90, 0.95), fontname="helv")
+    page.insert_text(pymupdf.Point(text_x + w_intelli + w_print + 5, 28), "· FICHA DE EVALUACIÓN FP", fontsize=9.5, color=(0.85, 0.90, 0.95), fontname="helv")
     page.insert_text(
-        pymupdf.Point(text_x, 48),
+        pymupdf.Point(text_x, 41),
         "Simulador Didáctico de Preimpresión y Consecuencias en Taller Gráfico",
-        fontsize=7.8,
-        color=(0.75, 0.82, 0.90),
+        fontsize=7.4,
+        color=(0.78, 0.85, 0.92),
+        fontname="helv",
+    )
+    page.insert_text(
+        pymupdf.Point(text_x, 52),
+        "Control de calidad pedagógico y dictamen técnico de artes gráficas",
+        fontsize=7.0,
+        color=(0.65, 0.74, 0.84),
         fontname="helv",
     )
 
@@ -1332,15 +1339,23 @@ def generate_student_worksheet_pdf(
     p_edu = assets_dir / "logo-dept-educacion-1.png"
 
     if p_sales.exists() and p_mendi.exists() and p_edu.exists():
-        capsule = pymupdf.Rect(325, 12, 567, 58)
+        capsule = pymupdf.Rect(340, 12, 567, 58)
         page.draw_rect(capsule, fill=(1, 1, 1), radius=0.08)
-        r_sales = pymupdf.Rect(332, 16, 400, 54)
+        x0 = 346
+        slot_w = 68.0
+        r_sales = pymupdf.Rect(x0, 16, x0 + slot_w, 54)
         page.insert_image(r_sales, filename=str(p_sales), keep_proportion=True)
-        page.draw_line(pymupdf.Point(404, 18), pymupdf.Point(404, 52), color=(0.88, 0.88, 0.88), width=0.6)
-        r_mendi = pymupdf.Rect(408, 16, 478, 54)
+        div1_x = x0 + slot_w + 3.0
+        page.draw_line(pymupdf.Point(div1_x, 18), pymupdf.Point(div1_x, 52), color=(0.88, 0.88, 0.88), width=0.6)
+        
+        x1 = div1_x + 4.0
+        r_mendi = pymupdf.Rect(x1, 16, x1 + slot_w, 54)
         page.insert_image(r_mendi, filename=str(p_mendi), keep_proportion=True)
-        page.draw_line(pymupdf.Point(482, 18), pymupdf.Point(482, 52), color=(0.88, 0.88, 0.88), width=0.6)
-        r_edu = pymupdf.Rect(486, 16, 560, 54)
+        div2_x = x1 + slot_w + 3.0
+        page.draw_line(pymupdf.Point(div2_x, 18), pymupdf.Point(div2_x, 52), color=(0.88, 0.88, 0.88), width=0.6)
+        
+        x2 = div2_x + 4.0
+        r_edu = pymupdf.Rect(x2, 16, 561, 54)
         page.insert_image(r_edu, filename=str(p_edu), keep_proportion=True)
 
         # Enlaces interactivos en los logotipos de la ficha PDF
