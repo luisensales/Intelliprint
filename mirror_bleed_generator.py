@@ -66,22 +66,29 @@ def generate_mirror_bleed(
         # 1. Pegar la imagen original en el centro
         canvas.paste(img, (bleed_px, bleed_px))
 
-        # 2. Reflejar franjas perimetrales
-        left_strip = img.crop((0, 0, bleed_px, h_px)).transpose(Image.FLIP_LEFT_RIGHT)
-        right_strip = img.crop((w_px - bleed_px, 0, w_px, h_px)).transpose(Image.FLIP_LEFT_RIGHT)
-        top_strip = img.crop((0, 0, w_px, bleed_px)).transpose(Image.FLIP_TOP_BOTTOM)
-        bottom_strip = img.crop((0, h_px - bleed_px, w_px, h_px)).transpose(Image.FLIP_TOP_BOTTOM)
+        # 2. Extensión / clamping perimetral del píxel exterior (1 píxel estirado hacia la sangre)
+        # Esto garantiza que el sangrado use el color de fondo exacto que llega al corte a ras,
+        # sin arrastrar ni reflejar elementos interiores como filetes decorativos dorados o textos.
+        left_edge = img.crop((0, 0, 1, h_px)).resize((bleed_px, h_px), Image.NEAREST)
+        right_edge = img.crop((w_px - 1, 0, w_px, h_px)).resize((bleed_px, h_px), Image.NEAREST)
+        top_edge = img.crop((0, 0, w_px, 1)).resize((w_px, bleed_px), Image.NEAREST)
+        bottom_edge = img.crop((0, h_px - 1, w_px, h_px)).resize((w_px, bleed_px), Image.NEAREST)
 
-        canvas.paste(left_strip, (0, bleed_px))
-        canvas.paste(right_strip, (w_px + bleed_px, bleed_px))
-        canvas.paste(top_strip, (bleed_px, 0))
-        canvas.paste(bottom_strip, (bleed_px, h_px + bleed_px))
+        canvas.paste(left_edge, (0, bleed_px))
+        canvas.paste(right_edge, (w_px + bleed_px, bleed_px))
+        canvas.paste(top_edge, (bleed_px, 0))
+        canvas.paste(bottom_edge, (bleed_px, h_px + bleed_px))
 
-        # 3. Reflejar las 4 esquinas diagonalmente (rotación 180°)
-        canvas.paste(img.crop((0, 0, bleed_px, bleed_px)).transpose(Image.ROTATE_180), (0, 0))
-        canvas.paste(img.crop((w_px - bleed_px, 0, w_px, bleed_px)).transpose(Image.ROTATE_180), (w_px + bleed_px, 0))
-        canvas.paste(img.crop((0, h_px - bleed_px, bleed_px, h_px)).transpose(Image.ROTATE_180), (0, h_px + bleed_px))
-        canvas.paste(img.crop((w_px - bleed_px, h_px - bleed_px, w_px, h_px)).transpose(Image.ROTATE_180), (w_px + bleed_px, h_px + bleed_px))
+        # 3. Cuatro esquinas (estirar el píxel exacto de cada esquina hacia el sangrado)
+        c_tl = img.crop((0, 0, 1, 1)).resize((bleed_px, bleed_px), Image.NEAREST)
+        c_tr = img.crop((w_px - 1, 0, w_px, 1)).resize((bleed_px, bleed_px), Image.NEAREST)
+        c_bl = img.crop((0, h_px - 1, 1, h_px)).resize((bleed_px, bleed_px), Image.NEAREST)
+        c_br = img.crop((w_px - 1, h_px - 1, w_px, h_px)).resize((bleed_px, bleed_px), Image.NEAREST)
+
+        canvas.paste(c_tl, (0, 0))
+        canvas.paste(c_tr, (w_px + bleed_px, 0))
+        canvas.paste(c_bl, (0, h_px + bleed_px))
+        canvas.paste(c_br, (w_px + bleed_px, h_px + bleed_px))
 
         tot_w_pt = w_pt + 2 * bleed_pt
         tot_h_pt = h_pt + 2 * bleed_pt

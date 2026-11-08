@@ -718,132 +718,121 @@ def _decorate_sheet(
       - >0.0 → Las marcas de corte se desplazan HACIA ADENTRO por source_bleed_mm desde el borde
                de la pose, señalando la línea real de TrimBox (porque la pose incluye la sangre).
     """
-    shape = sheet.new_shape()
-    # shape_int: marcas internas (sobre la sangre) en BLANCO + grosor mayor para ser visibles sobre cualquier fondo
-    shape_int = sheet.new_shape()
+    shape_halo = sheet.new_shape()
+    shape_mark = sheet.new_shape()
     mark_len = 5.0 * PT_PER_MM   # 5 mm
-    mark_offset = 2.0 * PT_PER_MM  # 2 mm gap entre contenido y marca
+    mark_offset = 2.0 * PT_PER_MM  # 2 mm gap entre corte y marca
     bleed_pt = source_bleed_mm * PT_PER_MM  # offset inward para TrimBox
+
+    def _draw_mark_line(p1: pymupdf.Point, p2: pymupdf.Point):
+        shape_halo.draw_line(p1, p2)
+        shape_mark.draw_line(p1, p2)
 
     # 1. Marcas de corte
     if add_marks:
-        # Posiciones X de los bordes de corte (en coordenadas de pliego)
-        # Con sangre: el borde real de corte está a +bleed_pt desde el borde de la pose
-        x_positions = []
+        # Posiciones de corte X por columna [(x_left, x_right), ...]
+        x_cuts = []
         for c in range(cols):
             x_left  = x_start + c * (pw_pt + gap_pt) + bleed_pt
             x_right = x_left + pw_pt - 2 * bleed_pt
-            x_positions.extend([x_left, x_right])
+            x_cuts.append((x_left, x_right))
 
-        # Posiciones Y de los bordes de corte
-        y_positions = []
+        # Posiciones de corte Y por fila [(y_top, y_bottom), ...]
+        y_cuts = []
         for r in range(rows):
             y_top    = y_start + r * (ph_pt + gap_pt) + bleed_pt
             y_bottom = y_top + ph_pt - 2 * bleed_pt
-            y_positions.extend([y_top, y_bottom])
+            y_cuts.append((y_top, y_bottom))
 
-        # Límites de la rejilla (con sangre, si la hay, hacia afuera)
+        all_x = [pos for pair in x_cuts for pos in pair]
+        all_y = [pos for pair in y_cuts for pos in pair]
+
+        # Límites de la rejilla
+        total_grid_w_calc = cols * pw_pt + (cols - 1) * gap_pt
+        total_grid_h_calc = rows * ph_pt + (rows - 1) * gap_pt
         y_min_grid = y_start
-        y_max_grid = y_start + rows * ph_pt + (rows - 1) * gap_pt
+        y_max_grid = y_start + total_grid_h_calc
         x_min_grid = x_start
-        x_max_grid = x_start + cols * pw_pt + (cols - 1) * gap_pt
+        x_max_grid = x_start + total_grid_w_calc
 
-        # Espacio disponible en el gap para las marcas internas
-        min_space_for_internal = mark_offset + mark_len  # espacio mínimo necesario
-
-        # Marcas de corte verticales (arriba y abajo de CADA posición de corte X)
-        # Incluye marcas internas entre filas, no solo en el borde exterior de la rejilla
-        for xp in x_positions:
-            # Marca exterior superior (sobre fondo blanco del pliego → negro)
+        # A) Marcas verticales exteriores (borde superior e inferior del pliego)
+        for xp in all_x:
             y_top_mark = y_min_grid + bleed_pt - mark_offset
-            shape.draw_line(pymupdf.Point(xp, y_top_mark), pymupdf.Point(xp, y_top_mark - mark_len))
-            # Marca exterior inferior
+            _draw_mark_line(pymupdf.Point(xp, y_top_mark), pymupdf.Point(xp, y_top_mark - mark_len))
             y_bot_mark = y_max_grid - bleed_pt + mark_offset
-            shape.draw_line(pymupdf.Point(xp, y_bot_mark), pymupdf.Point(xp, y_bot_mark + mark_len))
-            # Marcas internas entre filas (en la zona de sangre → blanco para visibilidad)
-            for r in range(1, rows):
-                y_boundary = y_start + r * (ph_pt + gap_pt)  # borde físico entre poses
+            _draw_mark_line(pymupdf.Point(xp, y_bot_mark), pymupdf.Point(xp, y_bot_mark + mark_len))
 
-                if gap_pt == 0:
-                    # Sin gap: las marcas apuntan hacia el interior de la sangre (único espacio disponible)
-                    y_cut_prev = y_boundary - bleed_pt  # TrimBox bottom de fila r-1
-                    shape_int.draw_line(
-                        pymupdf.Point(xp, y_cut_prev + mark_offset),
-                        pymupdf.Point(xp, y_cut_prev + mark_offset + min(mark_len, bleed_pt - mark_offset - 0.5))
-                    )
-                    y_cut_next = y_boundary + bleed_pt  # TrimBox top de fila r
-                    shape_int.draw_line(
-                        pymupdf.Point(xp, y_cut_next - mark_offset),
-                        pymupdf.Point(xp, y_cut_next - mark_offset - min(mark_len, bleed_pt - mark_offset - 0.5))
-                    )
-                else:
-                    gap_half = gap_pt / 2
-                    y_cut_prev = y_boundary - bleed_pt
-                    y_cut_next = y_boundary + gap_pt + bleed_pt  # = y_boundary + gap_pt + bleed_pt... wait
-                    y_cut_prev = y_boundary - bleed_pt
-                    y_cut_next = y_boundary + gap_pt + bleed_pt
-                    if gap_half >= min_space_for_internal:
-                        shape.draw_line(
-                            pymupdf.Point(xp, y_cut_prev + mark_offset),
-                            pymupdf.Point(xp, y_cut_prev + mark_offset + mark_len)
-                        )
-                        shape.draw_line(
-                            pymupdf.Point(xp, y_cut_next - mark_offset),
-                            pymupdf.Point(xp, y_cut_next - mark_offset - mark_len)
-                        )
-
-        # Marcas de corte horizontales (izquierda y derecha de CADA posición de corte Y)
-        # Incluye marcas internas entre columnas
-        for yp in y_positions:
-            # Marca exterior izquierda (sobre fondo blanco → negro)
+        # B) Marcas horizontales exteriores (borde izquierdo y derecho del pliego)
+        for yp in all_y:
             x_left_mark = x_min_grid + bleed_pt - mark_offset
-            shape.draw_line(pymupdf.Point(x_left_mark, yp), pymupdf.Point(x_left_mark - mark_len, yp))
-            # Marca exterior derecha
+            _draw_mark_line(pymupdf.Point(x_left_mark, yp), pymupdf.Point(x_left_mark - mark_len, yp))
             x_right_mark = x_max_grid - bleed_pt + mark_offset
-            shape.draw_line(pymupdf.Point(x_right_mark, yp), pymupdf.Point(x_right_mark + mark_len, yp))
-            # Marcas internas entre columnas (en zona de sangre → blanco)
-            for c in range(1, cols):
-                x_boundary = x_start + c * (pw_pt + gap_pt)  # borde físico entre poses
+            _draw_mark_line(pymupdf.Point(x_right_mark, yp), pymupdf.Point(x_right_mark + mark_len, yp))
 
-                if gap_pt == 0:
-                    x_cut_prev = x_boundary - bleed_pt  # TrimBox right de columna c-1
-                    shape_int.draw_line(
-                        pymupdf.Point(x_cut_prev + mark_offset, yp),
-                        pymupdf.Point(x_cut_prev + mark_offset + min(mark_len, bleed_pt - mark_offset - 0.5), yp)
+        # C) MARCAS INTERNAS VERTICALES (en cada calle horizontal entre filas)
+        for r in range(1, rows):
+            y_prev_bottom = y_cuts[r-1][1]  # línea de corte inferior de la fila anterior
+            y_curr_top    = y_cuts[r][0]    # línea de corte superior de la fila actual
+            gutter_h = y_curr_top - y_prev_bottom
+
+            inner_len = min(mark_len, max(2.0 * PT_PER_MM, (gutter_h - 2 * mark_offset) / 2))
+
+            for xp in all_x:
+                if gutter_h >= 2 * mark_offset + 2.0:
+                    _draw_mark_line(
+                        pymupdf.Point(xp, y_prev_bottom + mark_offset),
+                        pymupdf.Point(xp, y_prev_bottom + mark_offset + inner_len)
                     )
-                    x_cut_next = x_boundary + bleed_pt  # TrimBox left de columna c
-                    shape_int.draw_line(
-                        pymupdf.Point(x_cut_next - mark_offset, yp),
-                        pymupdf.Point(x_cut_next - mark_offset - min(mark_len, bleed_pt - mark_offset - 0.5), yp)
+                    _draw_mark_line(
+                        pymupdf.Point(xp, y_curr_top - mark_offset),
+                        pymupdf.Point(xp, y_curr_top - mark_offset - inner_len)
                     )
                 else:
-                    gap_half = gap_pt / 2
-                    x_cut_prev = x_boundary - bleed_pt
-                    x_cut_next = x_boundary + gap_pt + bleed_pt
-                    if gap_half >= min_space_for_internal:
-                        shape.draw_line(
-                            pymupdf.Point(x_cut_prev + mark_offset, yp),
-                            pymupdf.Point(x_cut_prev + mark_offset + mark_len, yp)
-                        )
-                        shape.draw_line(
-                            pymupdf.Point(x_cut_next - mark_offset, yp),
-                            pymupdf.Point(x_cut_next - mark_offset - mark_len, yp)
-                        )
+                    y_mid = (y_prev_bottom + y_curr_top) / 2
+                    _draw_mark_line(
+                        pymupdf.Point(xp, y_mid - 2.0 * PT_PER_MM),
+                        pymupdf.Point(xp, y_mid + 2.0 * PT_PER_MM)
+                    )
+
+        # D) MARCAS INTERNAS HORIZONTALES (en cada calle vertical entre columnas)
+        for c in range(1, cols):
+            x_prev_right = x_cuts[c-1][1]   # línea de corte derecha de la columna anterior
+            x_curr_left  = x_cuts[c][0]     # línea de corte izquierda de la columna actual
+            gutter_w = x_curr_left - x_prev_right
+
+            inner_len = min(mark_len, max(2.0 * PT_PER_MM, (gutter_w - 2 * mark_offset) / 2))
+
+            for yp in all_y:
+                if gutter_w >= 2 * mark_offset + 2.0:
+                    _draw_mark_line(
+                        pymupdf.Point(x_prev_right + mark_offset, yp),
+                        pymupdf.Point(x_prev_right + mark_offset + inner_len, yp)
+                    )
+                    _draw_mark_line(
+                        pymupdf.Point(x_curr_left - mark_offset, yp),
+                        pymupdf.Point(x_curr_left - mark_offset - inner_len, yp)
+                    )
+                else:
+                    x_mid = (x_prev_right + x_curr_left) / 2
+                    _draw_mark_line(
+                        pymupdf.Point(x_mid - 2.0 * PT_PER_MM, yp),
+                        pymupdf.Point(x_mid + 2.0 * PT_PER_MM, yp)
+                    )
 
         # Marca de plegado (fold mark) en cuadernillo
         if is_booklet and cols == 2:
             x_spine = x_start + pw_pt
             y_top_mark = y_min_grid + bleed_pt - mark_offset
             y_bot_mark = y_max_grid - bleed_pt + mark_offset
-            shape.draw_line(pymupdf.Point(x_spine, y_top_mark), pymupdf.Point(x_spine, y_top_mark - mark_len))
-            shape.draw_line(pymupdf.Point(x_spine, y_bot_mark), pymupdf.Point(x_spine, y_bot_mark + mark_len))
+            _draw_mark_line(pymupdf.Point(x_spine, y_top_mark), pymupdf.Point(x_spine, y_top_mark - mark_len))
+            _draw_mark_line(pymupdf.Point(x_spine, y_bot_mark), pymupdf.Point(x_spine, y_bot_mark + mark_len))
 
-    # Marcas externas: negro fino
-    shape.finish(color=(0, 0, 0), width=0.35)
-    shape.commit()
-    # Marcas internas (sobre zona de sangre): blanco más grueso para contraste
-    shape_int.finish(color=(1, 1, 1), width=0.6)
-    shape_int.commit()
+    # Primero el halo blanco de fondo (0.85 pt) para contraste sobre tintas oscuras o fondos
+    shape_halo.finish(color=(1, 1, 1), width=0.85)
+    shape_halo.commit()
+    # Encima el trazo negro de corte nítido (0.35 pt)
+    shape_mark.finish(color=(0, 0, 0), width=0.35)
+    shape_mark.commit()
 
     # 2. Cruces de registro circulares
     if add_reg_crosses:
