@@ -764,7 +764,7 @@ class IntelliPrintEngine:
                         "message": f"Imagen {i_idx+1} en pág {p_idx+1}: espacio {cs_label}, resolución efectiva de {effective_dpi} ppp ({width_px} × {height_px} px, tamaño colocado: {placed_w_mm} × {placed_h_mm} mm). El perfil {profile_id} exige un mínimo de {target_dpi} ppp."
                     })
 
-                # Color mode warning for images (e.g. RGB in Offset/Digital)
+                # Color mode warning for images (e.g. RGB in Offset/Digital, or CMYK in Web/Screen)
                 if req_family == "CMYK" and not is_cmyk and not is_gray:
                     non_cmyk_images += 1
                     findings.append({
@@ -774,6 +774,15 @@ class IntelliPrintEngine:
                         "category": "Color",
                         "title": f"Imagen en modo {cs_label} · {dpi_desc} (requiere CMYK)",
                         "message": f"Imagen {i_idx+1} en pág {p_idx+1}: espacio de color {cs_label}, resolución efectiva {dpi_desc} ({width_px} × {height_px} px, tamaño colocado: {placed_w_mm} × {placed_h_mm} mm). El perfil {profile_id} exige imágenes CMYK. Se admite conversión gestionada pero debe verificarse su apariencia en destino."
+                    })
+                elif req_family == "RGB" and is_cmyk:
+                    findings.append({
+                        "page": p_idx + 1,
+                        "rule_id": "SOURCE_COLOR_DIAGNOSTIC",
+                        "severity": "WARNING",
+                        "category": "Color",
+                        "title": f"Imagen en modo CMYK · {dpi_desc} (se recomienda sRGB)",
+                        "message": f"Imagen {i_idx+1} en pág {p_idx+1}: espacio de color CMYK. El perfil {profile_id} está optimizado para web y pantallas (sRGB); se recomienda sRGB para evitar colores apagados en navegadores y dispositivos móviles."
                     })
 
                 # Register full image inventory entry

@@ -1142,7 +1142,7 @@ async def fix_output_intent_endpoint(job_id: str, icc_profile: Optional[str] = N
     if not icc_profile:
         if profile_id == "DIGITAL_200":
             target_icc = "PSOcoated_v3.icc" if (ICC_DIR / "PSOcoated_v3.icc").exists() else "ISOcoated_v2_300_bas.icc"
-        elif profile_id == "SCREEN_RGB":
+        elif profile_id in ("SCREEN_RGB", "PANTALLA_RGB"):
             target_icc = "sRGB2014.icc"
         else:
             target_icc = "ISOcoated_v2_eci.icc" if (ICC_DIR / "ISOcoated_v2_eci.icc").exists() else "ISOcoated_v2_300_bas.icc"

@@ -231,7 +231,7 @@
               <i class="fa-solid fa-sliders text-indigo-600"></i> <span>⚙️ Gestionar Perfiles</span>
             </button>
           </div>
-          <div id="targetProfilesContainer" class="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+          <div id="targetProfilesContainer" class="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
             <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
               <input type="radio" name="profile" value="OFFSET_300" checked class="mt-1 text-blue-600 focus:ring-blue-500">
               <div class="text-xs">
@@ -246,11 +246,35 @@
                 <span class="block text-[11px] text-slate-500 mt-0.5">≥200 ppp efectivos · 3 mm sangre · TAC ≤320% · CMYK</span>
               </div>
             </label>
+            <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-50/40">
+              <input type="radio" name="profile" value="PANTALLA_RGB" class="mt-1 text-emerald-600 focus:ring-emerald-500">
+              <div class="text-xs">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-bold text-slate-800">Web, Pantalla y Documento Digital (RGB)</span>
+                  <span class="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded border border-emerald-200">RGB / Web</span>
+                </div>
+                <span class="block text-[11px] text-slate-500 mt-0.5">≥96 ppp · Sin sangre · Espacio sRGB · No apto para imprenta</span>
+              </div>
+            </label>
             <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
-              <input type="radio" name="profile" value="PANTALLA_RGB" class="mt-1 text-blue-600 focus:ring-blue-500">
+              <input type="radio" name="profile" value="PERIODICO_TAC240" class="mt-1 text-blue-600 focus:ring-blue-500">
+              <div class="text-xs">
+                <span class="font-bold text-slate-800">Prensa y Papel Periódico</span>
+                <span class="block text-[11px] text-slate-500 mt-0.5">Rotativa Offset / Papel Prensa Absorbente · TAC ≤240%</span>
+              </div>
+            </label>
+            <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
+              <input type="radio" name="profile" value="PACKAGING_CARTONCILLO" class="mt-1 text-blue-600 focus:ring-blue-500">
+              <div class="text-xs">
+                <span class="font-bold text-slate-800">Packaging y Cartoncillo</span>
+                <span class="block text-[11px] text-slate-500 mt-0.5">Estuches, Cajas Plegables y Envases con Troquel · 5 mm sangre</span>
+              </div>
+            </label>
+            <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
+              <input type="radio" name="profile" value="GRAN_FORMATO" class="mt-1 text-blue-600 focus:ring-blue-500">
               <div class="text-xs">
                 <span class="font-bold text-slate-800">Gran Formato y Cartelería</span>
-                <span class="block text-[11px] text-slate-500 mt-0.5">≥150 ppp · 5 mm sangre · Lonas y vinilos</span>
+                <span class="block text-[11px] text-slate-500 mt-0.5">≥150 ppp · 5 mm sangre · Lonas, vinilos y displays</span>
               </div>
             </label>
           </div>
@@ -2863,15 +2887,22 @@
 
         container.innerHTML = cachedTargetProfiles.map(p => {
           const isChecked = (p.id === currentlyChecked) ? 'checked' : '';
-          const customBadge = p.is_custom 
+          const isRgb = (p.color_family === 'RGB' || p.id === 'PANTALLA_RGB');
+          const typeBadge = p.is_custom 
             ? '<span class="ml-1 text-[9px] font-bold px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded border border-purple-200">Personalizado</span>' 
-            : '';
-          const desc = p.destination || `≥${p.target_dpi || 300} ppp · ${p.min_bleed_mm || 3} mm sangre · TAC ≤${p.max_tac || 300}% · ${p.color_family || 'CMYK'}`;
+            : (isRgb ? '<span class="ml-1 text-[9px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded border border-emerald-200">RGB / Web</span>' : '');
+          const borderClass = isRgb 
+            ? 'has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-50/40' 
+            : 'has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40';
+          const radioClass = isRgb 
+            ? 'text-emerald-600 focus:ring-emerald-500' 
+            : 'text-blue-600 focus:ring-blue-500';
+          const desc = p.destination || `≥${p.target_dpi || 300} ppp · ${p.min_bleed_mm || 0} mm sangre · TAC ≤${p.max_tac || 300}% · ${p.color_family || 'CMYK'}`;
           return `
-            <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
-              <input type="radio" name="profile" value="${p.id}" ${isChecked} class="mt-1 text-blue-600 focus:ring-blue-500">
+            <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all ${borderClass}">
+              <input type="radio" name="profile" value="${p.id}" ${isChecked} class="mt-1 ${radioClass}">
               <div class="text-xs">
-                <span class="font-bold text-slate-800">${p.name}</span>${customBadge}
+                <span class="font-bold text-slate-800">${p.name}</span>${typeBadge}
                 <span class="block text-[11px] text-slate-500 mt-0.5">${desc}</span>
               </div>
             </label>
