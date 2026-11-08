@@ -152,3 +152,4 @@ def draw_fogra_control_strip(
     cur_x += vernier_w + 4.0
 
     return cur_x - x
+

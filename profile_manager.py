@@ -207,3 +207,4 @@ def delete_custom_profile(profile_id: str) -> bool:
         save_custom_profiles_to_disk(filtered)
         return True
     return False
+

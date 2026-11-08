@@ -2047,7 +2047,7 @@
       <div class="p-6 overflow-y-auto flex-1 bg-slate-50 space-y-6">
 
         <!-- Download Cards Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 
           <!-- Card 1: PDF A4 Editorial -->
           <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-red-300 hover:shadow-md transition flex flex-col justify-between">
@@ -2060,15 +2060,15 @@
                   PDF A4 · 8 Págs (~520 KB)
                 </span>
               </div>
-              <h4 class="text-sm font-bold text-slate-900">Manual en Formato PDF A4 Editorial</h4>
+              <h4 class="text-sm font-bold text-slate-900">Manual en PDF A4 Editorial</h4>
               <p class="text-xs text-slate-600 leading-relaxed">
-                Documento de alta fidelidad maquetado con portada institucional, tablas densitométricas, cajas de advertencia y diagramación lista para imprimir o leer en tablets sin necesidad de software ofimático.
+                Documento oficial maquetado con portada institucional, tablas densitométricas y diagramación lista para imprimir o leer en tablets sin dependencias ofimáticas.
               </p>
             </div>
 
             <div class="pt-4 mt-2 flex items-center gap-2">
               <a href="/api/manual/download/pdf" download class="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-2">
-                <i class="fa-solid fa-download"></i> Descargar PDF A4
+                <i class="fa-solid fa-download"></i> Descargar
               </a>
               <button onclick="window.open('/api/manual/download/pdf', '_blank')" class="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition cursor-pointer" title="Abrir en pestaña nueva">
                 <i class="fa-solid fa-arrow-up-right-from-square"></i>
@@ -2089,14 +2089,41 @@
               </div>
               <h4 class="text-sm font-bold text-slate-900">Manual en Microsoft Word (.docx)</h4>
               <p class="text-xs text-slate-600 leading-relaxed">
-                Versión editable maquetada profesionalmente con portada, estilos tipográficos, tablas corporativas e imágenes institucionales para personalización docente o integración en proyectos de centro.
+                Versión editable maquetada profesionalmente con portada, estilos tipográficos, tablas corporativas e imágenes institucionales para personalización docente.
               </p>
             </div>
 
-            <div class="pt-4 mt-2">
+            <div class="pt-4 mt-2 flex items-center gap-2">
               <a href="/api/manual/download/docx" download class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-2">
                 <i class="fa-solid fa-download"></i> Descargar Word (.docx)
               </a>
+            </div>
+          </div>
+
+          <!-- Card 3: Lámina Técnica Tira FOGRA / ISO 12647-2 -->
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-teal-300 hover:shadow-md transition flex flex-col justify-between">
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="w-10 h-10 rounded-lg bg-teal-50 text-teal-600 border border-teal-200 flex items-center justify-center text-xl">
+                  <i class="fa-solid fa-swatchbook"></i>
+                </div>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">
+                  FOGRA / ISO 12647-2
+                </span>
+              </div>
+              <h4 class="text-sm font-bold text-slate-900">Lámina Técnica Tira FOGRA</h4>
+              <p class="text-xs text-slate-600 leading-relaxed">
+                Póster técnico de taller con la tira FOGRA 1:1, ampliación macro con valores CMYK y guía de medición densitométrica (balance de grises, TVI y trapping).
+              </p>
+            </div>
+
+            <div class="pt-4 mt-2 flex items-center gap-2">
+              <a href="/api/fogra/download" download class="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-download"></i> Descargar Lámina
+              </a>
+              <button onclick="window.open('/api/fogra/download', '_blank')" class="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition cursor-pointer" title="Abrir en pestaña nueva">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              </button>
             </div>
           </div>
 

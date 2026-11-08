@@ -3230,6 +3230,22 @@ async def get_manual_info_endpoint():
     }
 
 
+@app.get("/api/fogra/download")
+async def download_fogra_sheet_endpoint():
+    """Descarga la Lámina Técnica Oficial de la Tira de Control FOGRA / ISO 12647-2 en PDF A4."""
+    fogra_pdf = BASE_DIR / "Muestra_Tira_FOGRA_ISO12647.pdf"
+    if not fogra_pdf.exists():
+        from generate_fogra_sample import create_fogra_spec_sheet
+        create_fogra_spec_sheet()
+    if not fogra_pdf.exists():
+        raise HTTPException(status_code=404, detail="Lámina técnica FOGRA no encontrada.")
+    return FileResponse(
+        fogra_pdf,
+        media_type="application/pdf",
+        filename="Muestra_Tira_FOGRA_ISO12647.pdf"
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
     print("\n" + "="*50)
