@@ -541,6 +541,54 @@ async def cleanup_now():
         "remaining_jobs": len(list(JOBS_DIR.glob("*.json")))
     }
 
+
+def get_latest_cumulative_pdf(job_meta: dict) -> Optional[str]:
+    """
+    Devuelve siempre la ruta absoluta al PDF de trabajo más reciente con todas
+    las correcciones acumuladas. Garantiza una cadena estrictamente acumulativa
+    para que cada corrección técnica herede y preserve todas las anteriores.
+    """
+    if not job_meta:
+        return None
+    candidates = [
+        job_meta.get("last_fixed_pdf_path"),
+        job_meta.get("batch_fixed_pdf_path"),
+        job_meta.get("barcode_fixed_pdf_path"),
+        job_meta.get("tac_limited_pdf_path"),
+        job_meta.get("printer_marks_pdf_path"),
+        job_meta.get("mirror_bleed_pdf_path"),
+        job_meta.get("fonts_outlined_pdf_path"),
+        job_meta.get("bleed_fixed_pdf_path"),
+        job_meta.get("hairline_fixed_pdf_path"),
+        job_meta.get("icc_fixed_pdf_path"),
+        job_meta.get("overprint_fixed_pdf_path"),
+        job_meta.get("spot_converted_pdf_path"),
+        job_meta.get("varnish_overprint_pdf_path"),
+        job_meta.get("cmyk_converted_pdf_path"),
+        job_meta.get("pdf_path")
+    ]
+    for c in candidates:
+        if c and Path(c).exists():
+            return str(c)
+    return None
+
+
+def register_cumulative_fix(job_data: dict, output_path: str | Path, fix_name: str) -> None:
+    """
+    Registra de forma centralizada la nueva versión del PDF acumulado, actualizando
+    'last_fixed_pdf_path' y el historial cronológico de correcciones acumulativas.
+    """
+    job_meta = job_data.setdefault("job_meta", {})
+    job_meta["last_fixed_pdf_path"] = str(output_path)
+    job_meta[f"has_{fix_name}"] = True
+    history = job_meta.setdefault("applied_fixes_history", [])
+    history.append({
+        "fix": fix_name,
+        "path": str(output_path),
+        "timestamp": datetime.now().isoformat()
+    })
+
+
 @app.get("/api/download-pdf/{job_id}")
 async def download_pdf_file(job_id: str):
     job_json_path = JOBS_DIR / f"{job_id}.json"
@@ -549,19 +597,7 @@ async def download_pdf_file(job_id: str):
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
     meta = job_data.get("job_meta", {})
-    pdf_p = (
-        meta.get("last_fixed_pdf_path")
-        or meta.get("tac_limited_pdf_path")
-        or meta.get("printer_marks_pdf_path")
-        or meta.get("mirror_bleed_pdf_path")
-        or meta.get("fonts_outlined_pdf_path")
-        or meta.get("bleed_fixed_pdf_path")
-        or meta.get("hairline_fixed_pdf_path")
-        or meta.get("icc_fixed_pdf_path")
-        or meta.get("overprint_fixed_pdf_path")
-        or meta.get("cmyk_converted_pdf_path")
-        or meta.get("pdf_path")
-    )
+    pdf_p = get_latest_cumulative_pdf(meta)
     filename = meta.get("filename", "documento.pdf")
     if not pdf_p or not os.path.exists(pdf_p):
         raise HTTPException(status_code=404, detail="Archivo PDF no encontrado en el servidor.")
@@ -593,16 +629,7 @@ async def convert_images_to_cmyk(
     job_meta = job_data.get("job_meta", {})
 
     # Usar el PDF más reciente en la cadena acumulativa
-    pdf_path = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("fonts_outlined_pdf_path")
-        or job_meta.get("bleed_fixed_pdf_path")
-        or job_meta.get("hairline_fixed_pdf_path")
-        or job_meta.get("icc_fixed_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    pdf_path = get_latest_cumulative_pdf(job_meta)
 
     if not pdf_path or not os.path.exists(pdf_path):
         raise HTTPException(status_code=404, detail="PDF de origen no encontrado en el servidor.")
@@ -657,7 +684,7 @@ async def convert_images_to_cmyk(
     # Guardar en metadatos del job de forma acumulativa
     job_meta["has_cmyk_converted"] = True
     job_meta["cmyk_converted_pdf_path"] = str(output_path)
-    job_meta["last_fixed_pdf_path"] = str(output_path)
+    register_cumulative_fix(job_data, output_path, "cmyk_converted")
 
     # Filtrar incidencias resueltas de RGB
     job_data["findings"] = [
@@ -748,16 +775,11 @@ async def convert_spots_to_cmyk_endpoint(job_id: str, target_spots: Optional[str
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    # Fuente acumulativa: overprint_fixed > cmyk_converted > original
-    source_pdf = (
-        job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
 
-    output_path = JOBS_DIR / f"{safe_id}_cmyk_converted.pdf"
+    output_path = JOBS_DIR / f"{safe_id}_spots_converted.pdf"
 
     target_list = None
     if target_spots:
@@ -774,10 +796,9 @@ async def convert_spots_to_cmyk_endpoint(job_id: str, target_spots: Optional[str
         errors = conv_result.get("errors", [])
         raise HTTPException(status_code=500, detail=f"Fallo al convertir tintas planas: {'; '.join(errors)}")
 
-    # Guardar paths en job_meta
-    job_data["job_meta"]["cmyk_converted_pdf_path"] = str(output_path)
-    if job_data["job_meta"].get("overprint_fixed_pdf_path"):
-        job_data["job_meta"]["overprint_fixed_pdf_path"] = ""
+    # Guardar paths en job_meta de forma acumulativa
+    job_data["job_meta"]["spot_converted_pdf_path"] = str(output_path)
+    register_cumulative_fix(job_data, output_path, "spot_converted")
 
     converted_names = {s["name"] for s in conv_result.get("spots_converted", [])}
 
@@ -844,15 +865,11 @@ async def apply_overprint_fix(job_id: str, mode: str = "k100"):
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-
-    # Usar el PDF más reciente como fuente: cmyk_converted > original
-    # (El overprint_fixed ya apunta al resultado final acumulado, no lo usamos como fuente
-    #  para evitar re-aplicar overprint sobre overprint; siempre partimos del CMYK o el original)
-    source_pdf = job_meta.get("cmyk_converted_pdf_path") or job_meta.get("pdf_path")
+    source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(
             status_code=400,
-            detail="PDF de origen no encontrado. Sube el archivo o ejecuta la conversión CMYK primero."
+            detail="PDF de origen no encontrado en el servidor."
         )
 
     output_path = JOBS_DIR / f"{safe_id}_overprint_fixed.pdf"
@@ -922,8 +939,9 @@ async def apply_overprint_fix(job_id: str, mode: str = "k100"):
             detail=f"La corrección de sobreimpresión falló: {'; '.join(errors)}"
         )
 
-    # Guardar la ruta en el job para el endpoint de descarga
+    # Guardar la ruta en el job para el endpoint de descarga de forma acumulativa
     job_data["job_meta"]["overprint_fixed_pdf_path"] = str(output_path)
+    register_cumulative_fix(job_data, output_path, "overprint_fixed")
 
     # Actualizar estadisticas y limpiar incidencias resueltas de la ficha tecnica
     stats = job_data.get("job_summary", {}).get("overprint_stats", {})
@@ -996,13 +1014,7 @@ async def fix_hairlines_endpoint(job_id: str, target_width: float = 0.30):
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    # Cadena acumulativa de PDFs: tomar el más reciente
-    source_pdf = (
-        job_meta.get("hairline_fixed_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
 
@@ -1020,8 +1032,7 @@ async def fix_hairlines_endpoint(job_id: str, target_width: float = 0.30):
 
     # Guardar ruta acumulada
     job_data["job_meta"]["hairline_fixed_pdf_path"] = str(output_path)
-    job_data["job_meta"]["has_hairline_fixed"] = True
-    job_data["job_meta"]["last_fixed_pdf_path"] = str(output_path)
+    register_cumulative_fix(job_data, output_path, "hairline_fixed")
 
     # Limpiar incidencias de HAIRLINE_DETECTED
     job_data["findings"] = [
@@ -1108,14 +1119,7 @@ async def fix_output_intent_endpoint(job_id: str, icc_profile: Optional[str] = N
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    # Cadena acumulativa de PDFs: tomar el más reciente
-    source_pdf = (
-        job_meta.get("hairline_fixed_pdf_path")
-        or job_meta.get("icc_fixed_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
 
@@ -1141,8 +1145,7 @@ async def fix_output_intent_endpoint(job_id: str, icc_profile: Optional[str] = N
 
     # Guardar ruta acumulada
     job_data["job_meta"]["icc_fixed_pdf_path"] = str(output_path)
-    job_data["job_meta"]["has_icc_fixed"] = True
-    job_data["job_meta"]["last_fixed_pdf_path"] = str(output_path)
+    register_cumulative_fix(job_data, output_path, "icc_fixed")
     job_data["job_meta"]["applied_icc_info"] = applied_info
 
     # Actualizar información del ICC detectado en el job_summary
@@ -1234,15 +1237,7 @@ async def fix_bleed_geometry_endpoint(job_id: str, bleed_mm: float = 3.0):
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    source_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("bleed_fixed_pdf_path")
-        or job_meta.get("hairline_fixed_pdf_path")
-        or job_meta.get("icc_fixed_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
 
@@ -1251,7 +1246,7 @@ async def fix_bleed_geometry_endpoint(job_id: str, bleed_mm: float = 3.0):
 
     job_meta["has_bleed_fixed"] = True
     job_meta["bleed_fixed_pdf_path"] = str(output_path)
-    job_meta["last_fixed_pdf_path"] = str(output_path)
+    register_cumulative_fix(job_data, output_path, "bleed_fixed")
 
     # Actualizar resumen de trabajo
     job_summary = job_data.setdefault("job_summary", {})
@@ -1344,16 +1339,7 @@ async def outline_fonts_endpoint(job_id: str, pages: Optional[str] = None):
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    source_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("fonts_outlined_pdf_path")
-        or job_meta.get("bleed_fixed_pdf_path")
-        or job_meta.get("hairline_fixed_pdf_path")
-        or job_meta.get("icc_fixed_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
 
@@ -1369,7 +1355,7 @@ async def outline_fonts_endpoint(job_id: str, pages: Optional[str] = None):
 
     job_meta["has_fonts_outlined"] = True
     job_meta["fonts_outlined_pdf_path"] = str(output_path)
-    job_meta["last_fixed_pdf_path"] = str(output_path)
+    register_cumulative_fix(job_data, output_path, "fonts_outlined")
 
     # Filtrar incidencias de fuentes no incrustadas
     if target_page_list:
@@ -1462,17 +1448,7 @@ async def generate_mirror_bleed_endpoint(job_id: str, bleed_mm: float = 3.0):
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    source_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("mirror_bleed_pdf_path")
-        or job_meta.get("fonts_outlined_pdf_path")
-        or job_meta.get("bleed_fixed_pdf_path")
-        or job_meta.get("hairline_fixed_pdf_path")
-        or job_meta.get("icc_fixed_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
 
@@ -1482,7 +1458,7 @@ async def generate_mirror_bleed_endpoint(job_id: str, bleed_mm: float = 3.0):
     job_meta["has_mirror_bleed"] = True
     job_meta["has_bleed_fixed"] = True
     job_meta["mirror_bleed_pdf_path"] = str(output_path)
-    job_meta["last_fixed_pdf_path"] = str(output_path)
+    register_cumulative_fix(job_data, output_path, "mirror_bleed")
 
     # Actualizar resumen de trabajo
     job_summary = job_data.setdefault("job_summary", {})
@@ -1579,18 +1555,7 @@ async def add_printer_marks_endpoint(
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    source_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("printer_marks_pdf_path")
-        or job_meta.get("mirror_bleed_pdf_path")
-        or job_meta.get("fonts_outlined_pdf_path")
-        or job_meta.get("bleed_fixed_pdf_path")
-        or job_meta.get("hairline_fixed_pdf_path")
-        or job_meta.get("icc_fixed_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
 
@@ -1608,7 +1573,7 @@ async def add_printer_marks_endpoint(
 
     job_meta["has_printer_marks"] = True
     job_meta["printer_marks_pdf_path"] = str(output_path)
-    job_meta["last_fixed_pdf_path"] = str(output_path)
+    register_cumulative_fix(job_data, output_path, "printer_marks")
 
     # Regenerar certificado técnico PDF
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
@@ -1676,19 +1641,7 @@ async def limit_tac_endpoint(
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    source_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("tac_limited_pdf_path")
-        or job_meta.get("printer_marks_pdf_path")
-        or job_meta.get("mirror_bleed_pdf_path")
-        or job_meta.get("fonts_outlined_pdf_path")
-        or job_meta.get("bleed_fixed_pdf_path")
-        or job_meta.get("hairline_fixed_pdf_path")
-        or job_meta.get("icc_fixed_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
 
@@ -1697,7 +1650,7 @@ async def limit_tac_endpoint(
 
     job_meta["has_tac_limited"] = True
     job_meta["tac_limited_pdf_path"] = str(output_path)
-    job_meta["last_fixed_pdf_path"] = str(output_path)
+    register_cumulative_fix(job_data, output_path, "tac_limited")
 
     # Regenerar certificado técnico PDF
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
@@ -1796,12 +1749,7 @@ async def apply_varnish_overprint_endpoint(job_id: str, target_spots: Optional[s
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    # Fuente acumulativa: overprint_fixed > cmyk_converted > original
-    source_pdf = (
-        job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
 
@@ -1821,8 +1769,9 @@ async def apply_varnish_overprint_endpoint(job_id: str, target_spots: Optional[s
         errors = result.get("errors", [])
         raise HTTPException(status_code=500, detail=f"Fallo al sobreimprimir tintas técnicas: {'; '.join(errors)}")
 
-    # Guardar ruta en job_meta
-    job_data["job_meta"]["overprint_fixed_pdf_path"] = str(output_path)
+    # Guardar ruta en job_meta de forma acumulativa
+    job_data["job_meta"]["varnish_overprint_pdf_path"] = str(output_path)
+    register_cumulative_fix(job_data, output_path, "varnish_overprint")
 
     # Actualizar estadísticas de sobreimpresión
     stats = job_data.get("job_summary", {}).get("overprint_stats", {})
@@ -1932,17 +1881,12 @@ async def get_page_separation(
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
 
-    overprint_path = job_data.get("job_meta", {}).get("overprint_fixed_pdf_path")
-    converted_path = job_data.get("job_meta", {}).get("cmyk_converted_pdf_path")
-    original_path = job_data.get("job_meta", {}).get("pdf_path")
-
+    job_meta = job_data.get("job_meta", {})
     target_pdf = None
-    if use_converted and overprint_path and os.path.exists(overprint_path):
-        target_pdf = overprint_path
-    elif use_converted and converted_path and os.path.exists(converted_path):
-        target_pdf = converted_path
-    elif original_path and os.path.exists(original_path):
-        target_pdf = original_path
+    if use_converted:
+        target_pdf = get_latest_cumulative_pdf(job_meta)
+    elif job_meta.get("pdf_path") and os.path.exists(job_meta.get("pdf_path")):
+        target_pdf = job_meta.get("pdf_path")
 
     if not target_pdf:
         raise HTTPException(status_code=404, detail="Archivo PDF no encontrado en el servidor.")
@@ -2043,19 +1987,7 @@ async def render_comparison_endpoint(
 
     job_meta = job_data.get("job_meta", {})
     orig_path = job_meta.get("pdf_path")
-    fixed_path = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("tac_limited_pdf_path")
-        or job_meta.get("printer_marks_pdf_path")
-        or job_meta.get("mirror_bleed_pdf_path")
-        or job_meta.get("fonts_outlined_pdf_path")
-        or job_meta.get("bleed_fixed_pdf_path")
-        or job_meta.get("hairline_fixed_pdf_path")
-        or job_meta.get("icc_fixed_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or orig_path
-    )
+    fixed_path = get_latest_cumulative_pdf(job_meta) or orig_path
 
     target_path = orig_path if side == "before" else fixed_path
     if not target_path or not Path(target_path).exists():
@@ -2115,10 +2047,7 @@ async def batch_fix_endpoint(
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    source_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF original no encontrado.")
 
@@ -2377,10 +2306,10 @@ async def batch_fix_endpoint(
                 except Exception:
                     pass
 
-    # Registrar en job_meta
+    # Registrar en job_meta de manera acumulativa
     job_data["job_meta"]["batch_fixed_pdf_path"] = str(final_batch_path)
-    job_data["job_meta"]["last_fixed_pdf_path"] = str(final_batch_path)
     job_data["job_meta"]["batch_steps_applied"] = steps_applied
+    register_cumulative_fix(job_data, final_batch_path, "batch_fixed")
 
     # Recalcular dictamen técnico
     all_findings = job_data.get("findings", [])
@@ -2461,13 +2390,7 @@ async def calculate_imposition_endpoint(job_id: str, request: Request):
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    target_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("batch_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    target_pdf = get_latest_cumulative_pdf(job_meta)
     if not target_pdf or not Path(target_pdf).exists():
         raise HTTPException(status_code=404, detail="Archivo PDF de origen no encontrado.")
 
@@ -2511,13 +2434,7 @@ async def generate_imposition_endpoint(job_id: str, request: Request):
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    target_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("batch_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    target_pdf = get_latest_cumulative_pdf(job_meta)
     if not target_pdf or not Path(target_pdf).exists():
         raise HTTPException(status_code=404, detail="Archivo PDF de origen no encontrado.")
 
@@ -2618,13 +2535,7 @@ async def preview_imposition_endpoint(
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    target_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("batch_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    target_pdf = get_latest_cumulative_pdf(job_meta)
     if not target_pdf or not Path(target_pdf).exists():
         raise HTTPException(status_code=404, detail="Archivo PDF no encontrado.")
 
@@ -2686,13 +2597,7 @@ async def calculate_cip3_endpoint(job_id: str, request: Request):
     else:
         target_pdf = (
             imposed_path if (source == "auto" and imposed_path and Path(imposed_path).exists())
-            else (
-                job_meta.get("last_fixed_pdf_path")
-                or job_meta.get("batch_fixed_pdf_path")
-                or job_meta.get("cmyk_converted_pdf_path")
-                or job_meta.get("overprint_fixed_pdf_path")
-                or job_meta.get("pdf_path")
-            )
+            else get_latest_cumulative_pdf(job_meta)
         )
         sheet_label = "Pliego_Imposicion" if (imposed_path and target_pdf == imposed_path) else "Pagina_Individual"
 
@@ -2771,8 +2676,7 @@ async def download_cip3_ppf_endpoint(
         job_meta = job_data.get("job_meta", {})
         target_pdf = (
             job_meta.get("last_imposition_plan", {}).get("imposed_pdf_path")
-            or job_meta.get("last_fixed_pdf_path")
-            or job_meta.get("pdf_path")
+            or get_latest_cumulative_pdf(job_meta)
         )
         if not target_pdf or not Path(target_pdf).exists():
             raise HTTPException(status_code=404, detail="PDF no disponible.")
@@ -2810,8 +2714,7 @@ async def download_cip3_pdf_endpoint(
         job_meta = job_data.get("job_meta", {})
         target_pdf = (
             job_meta.get("last_imposition_plan", {}).get("imposed_pdf_path")
-            or job_meta.get("last_fixed_pdf_path")
-            or job_meta.get("pdf_path")
+            or get_latest_cumulative_pdf(job_meta)
         )
         if not target_pdf or not Path(target_pdf).exists():
             raise HTTPException(status_code=404, detail="PDF no disponible.")
@@ -2842,13 +2745,7 @@ async def inspect_barcodes_endpoint(job_id: str):
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    target_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("batch_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    target_pdf = get_latest_cumulative_pdf(job_meta)
     if not target_pdf or not Path(target_pdf).exists():
         raise HTTPException(status_code=404, detail="Archivo PDF no encontrado.")
 
@@ -2871,13 +2768,7 @@ async def fix_barcodes_endpoint(job_id: str, request: Request):
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    target_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("batch_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    target_pdf = get_latest_cumulative_pdf(job_meta)
     if not target_pdf or not Path(target_pdf).exists():
         raise HTTPException(status_code=404, detail="Archivo PDF no encontrado.")
 
@@ -2905,7 +2796,7 @@ async def fix_barcodes_endpoint(job_id: str, request: Request):
         )
 
         job_meta["barcode_fixed_pdf_path"] = str(output_pdf)
-        job_meta["last_fixed_pdf_path"] = str(output_pdf)
+        register_cumulative_fix(job_data, output_pdf, "barcode_fixed")
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
 
@@ -2934,13 +2825,7 @@ async def preview_barcode_endpoint(
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    target_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("batch_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    target_pdf = get_latest_cumulative_pdf(job_meta)
     if not target_pdf or not Path(target_pdf).exists():
         raise HTTPException(status_code=404, detail="Archivo PDF no encontrado.")
 
@@ -3103,13 +2988,7 @@ async def inspect_safety_margin_endpoint(
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    target_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("batch_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    target_pdf = get_latest_cumulative_pdf(job_meta)
     if not target_pdf or not Path(target_pdf).exists():
         raise HTTPException(status_code=404, detail="Archivo PDF no encontrado.")
 
@@ -3144,13 +3023,7 @@ async def preview_safety_margin_endpoint(
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
-    target_pdf = (
-        job_meta.get("last_fixed_pdf_path")
-        or job_meta.get("batch_fixed_pdf_path")
-        or job_meta.get("cmyk_converted_pdf_path")
-        or job_meta.get("overprint_fixed_pdf_path")
-        or job_meta.get("pdf_path")
-    )
+    target_pdf = get_latest_cumulative_pdf(job_meta)
     if not target_pdf or not Path(target_pdf).exists():
         raise HTTPException(status_code=404, detail="Archivo PDF no encontrado.")
 
