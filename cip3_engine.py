@@ -475,3 +475,4 @@ def generate_cip3_pdf_sheet(
     doc.save(output_pdf_path)
     doc.close()
     return output_pdf_path
+

@@ -11,9 +11,92 @@
   <style>
     .drag-active { border-color: #2563eb !important; background-color: #eff6ff !important; }
     .tab-active { border-bottom: 2px solid #2563eb; color: #1d4ed8; font-weight: 600; }
+
+    /* =========================================================================
+       MODO KIOSKO / CABINA DE MÁQUINA (D50 DARK & HIGH CONTRAST)
+       Específicamente calibrado para pupitres de prensa e iluminación D50 (5000 K)
+       ========================================================================= */
+    body.theme-kiosk-d50 {
+      background-color: #060a12 !important;
+      color: #f1f5f9 !important;
+    }
+    body.theme-kiosk-d50 header {
+      background-color: #030712 !important;
+      border-bottom-color: #1f293d !important;
+    }
+    body.theme-kiosk-d50 main,
+    body.theme-kiosk-d50 section,
+    body.theme-kiosk-d50 .bg-white {
+      background-color: #0d1527 !important;
+      border-color: #26354f !important;
+      color: #f1f5f9 !important;
+    }
+    body.theme-kiosk-d50 .bg-slate-50 {
+      background-color: #090f1d !important;
+      border-color: #1e293b !important;
+      color: #f1f5f9 !important;
+    }
+    body.theme-kiosk-d50 .bg-slate-100 {
+      background-color: #172239 !important;
+      border-color: #2d3f5e !important;
+      color: #f1f5f9 !important;
+    }
+    body.theme-kiosk-d50 .border-slate-100,
+    body.theme-kiosk-d50 .border-slate-200,
+    body.theme-kiosk-d50 .border-slate-300 {
+      border-color: #26354f !important;
+    }
+    body.theme-kiosk-d50 .text-slate-900,
+    body.theme-kiosk-d50 .text-slate-800,
+    body.theme-kiosk-d50 .text-slate-700 {
+      color: #f8fafc !important;
+    }
+    body.theme-kiosk-d50 .text-slate-600,
+    body.theme-kiosk-d50 .text-slate-500 {
+      color: #94a3b8 !important;
+    }
+    body.theme-kiosk-d50 .text-slate-400 {
+      color: #cbd5e1 !important;
+    }
+    body.theme-kiosk-d50 #setupSection {
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.7) !important;
+    }
+    body.theme-kiosk-d50 #dropZone {
+      background-color: #0b1220 !important;
+      border-color: #334155 !important;
+    }
+    body.theme-kiosk-d50 #targetProfilesContainer label {
+      background-color: #0f192d !important;
+      border-color: #273752 !important;
+    }
+    body.theme-kiosk-d50 #targetProfilesContainer label:hover {
+      border-color: #38bdf8 !important;
+      background-color: #14223d !important;
+    }
+    body.theme-kiosk-d50 select,
+    body.theme-kiosk-d50 input[type="text"],
+    body.theme-kiosk-d50 input[type="number"] {
+      background-color: #131d33 !important;
+      color: #f8fafc !important;
+      border-color: #334766 !important;
+    }
+    body.theme-kiosk-d50 select:focus,
+    body.theme-kiosk-d50 input:focus {
+      border-color: #38bdf8 !important;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25) !important;
+    }
+    /* Paneles modales en modo cabina */
+    body.theme-kiosk-d50 .relative.bg-white {
+      background-color: #0a1122 !important;
+      border-color: #334766 !important;
+    }
+    /* Alto contraste en tarjetas de hallazgos */
+    body.theme-kiosk-d50 .divide-slate-100 > * {
+      border-color: #1e293b !important;
+    }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans transition-colors duration-200">
 
   <!-- Header -->
   <header class="bg-slate-900 text-white shadow-md border-b border-slate-800">
@@ -21,7 +104,7 @@
       <div class="flex items-center gap-3">
         <img src="/asset/Logo-intelliprint-imago.jpg" alt="Logo IntelliPrint" class="h-10 w-auto object-contain">
         <div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <h1 class="text-xl font-bold tracking-tight">IntelliPrint</h1>
             <span class="text-blue-400 text-xs font-normal border border-blue-500/30 px-2 py-0.5 rounded-full">v1.2.0</span>
             <span class="inline-flex items-center gap-1.5 text-xs text-emerald-400 bg-slate-800/80 border border-slate-700/60 px-2.5 py-0.5 rounded-full ml-1">
@@ -39,6 +122,14 @@
             </button>
             <button onclick="openProfileManagerModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 hover:text-white text-xs font-semibold rounded-lg border border-indigo-700/60 shadow-xs transition ml-2 cursor-pointer" title="Editor de Perfiles de Preflight Personalizados (Crear, Editar, Exportar JSON)">
               <i class="fa-solid fa-sliders text-indigo-300"></i> Perfiles Preflight
+            </button>
+            <!-- Toggle Modo Cabina D50 / Kiosko -->
+            <button id="themeToggleBtn" onclick="toggleKioskTheme()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition ml-2 cursor-pointer" title="Conmutar Modo Cabina de Máquina D50 (Fondo oscuro antirreflejo para pupitres de prensa ISO 3664)">
+              <i class="fa-solid fa-moon text-amber-300"></i> <span id="themeToggleLabel">Cabina D50</span>
+            </button>
+            <!-- Toggle Pantalla Completa Kiosko -->
+            <button onclick="toggleFullScreen()" class="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition ml-1 cursor-pointer" title="Pantalla Completa / Kiosko Táctil para Pupitre de Máquina">
+              <i class="fa-solid fa-expand"></i>
             </button>
           </div>
           <p class="text-xs text-slate-400">Sistema Avanzado de Preflight mediante Redes Neuronales & Análisis PDF</p>
@@ -7267,6 +7358,53 @@
         `;
       }).join('');
     }
+
+    // =========================================================================
+    // MODO KIOSKO / CABINA DE MÁQUINA (D50 DARK & HIGH CONTRAST)
+    // =========================================================================
+    function toggleKioskTheme() {
+      const isDark = document.body.classList.toggle('theme-kiosk-d50');
+      localStorage.setItem('intelliprint_kiosk_theme', isDark ? 'true' : 'false');
+      updateKioskThemeButton(isDark);
+    }
+
+    function updateKioskThemeButton(isDark) {
+      const btn = document.getElementById('themeToggleBtn');
+      if (!btn) return;
+      if (isDark) {
+        btn.className = 'inline-flex items-center gap-1.5 px-3 py-1 bg-amber-400 text-slate-950 text-xs font-bold rounded-lg shadow-sm transition ml-2 cursor-pointer';
+        btn.innerHTML = '<i class="fa-solid fa-sun text-slate-950"></i> <span>Modo Oficina</span>';
+        btn.title = 'Cambiar a Modo Oficina (Fondo claro)';
+      } else {
+        btn.className = 'inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition ml-2 cursor-pointer';
+        btn.innerHTML = '<i class="fa-solid fa-moon text-amber-300"></i> <span>Cabina D50</span>';
+        btn.title = 'Conmutar Modo Cabina de Máquina D50 (Fondo oscuro antirreflejo para pupitres de prensa ISO 3664)';
+      }
+    }
+
+    function initKioskTheme() {
+      const saved = localStorage.getItem('intelliprint_kiosk_theme');
+      if (saved === 'true') {
+        document.body.classList.add('theme-kiosk-d50');
+        updateKioskThemeButton(true);
+      }
+    }
+
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.warn('Pantalla completa no permitida por navegador:', err);
+        });
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    // Inicializar tema al cargar DOM
+    document.addEventListener('DOMContentLoaded', initKioskTheme);
+    initKioskTheme();
   </script>
 </body>
 </html>
