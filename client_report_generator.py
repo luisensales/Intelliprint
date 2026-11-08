@@ -97,7 +97,7 @@ def _draw_header(page: pymupdf.Page, assets_dir: Path, p: dict):
 
         # Enlaces interactivos en los logotipos de la cabecera PDF
         page.insert_link({"kind": pymupdf.LINK_URI, "from": r_sales, "uri": "https://salesianosurnieta.com/"})
-        page.insert_link({"kind": pymupdf.LINK_URI, "from": r_mendi, "uri": "https://mendizabala.hezkuntza.net/"})
+        page.insert_link({"kind": pymupdf.LINK_URI, "from": r_mendi, "uri": "https://www.mendizabala.eus/"})
         page.insert_link({"kind": pymupdf.LINK_URI, "from": r_edu, "uri": "https://www.euskadi.eus/gobierno-vasco/departamento-educacion/"})
 
 
