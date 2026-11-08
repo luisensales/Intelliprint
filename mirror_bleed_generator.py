@@ -1,15 +1,43 @@
 """
-mirror_bleed_generator.py - Generador de Sangrado Sintético por Reflejo de Píxeles (Mirror Bleed)
-Extiende el sangrado perimetral a 3.0 mm reflejando los píxeles del borde hacia el exterior,
-garantizando que el corte en guillotina no deje filetes blancos sin alterar los vectores del documento.
+mirror_bleed_generator.py - Generador de Sangrado Sintético Profesional para Preimpresión
+Genera sangrado perimetral de 3.0 mm mediante extensión inteligente de bordes:
+1. Detecta automáticamente el espacio de color nativo del documento (CMYK o RGB).
+2. Muestrea y genera la capa de sangrado en DeviceCMYK / DeviceRGB nativo sin conversiones destructivas.
+3. Inserta la imagen con compresión sin pérdidas (Pixmap / Flate) eliminando artefactos y virajes de color.
+4. Búsqueda inteligente hacia el interior (hasta 2.0 mm): si un elemento de diseño (cabecera, faldón, caja)
+   se detuvo a décimas de milímetro del borde neto de corte dejando un filete blanco, detecta el color exacto
+   del arte, cierra el filete blanco y extiende el sangrado 3.0 mm hacia el exterior.
+5. Si el borde ya contiene un fondo sólido neto (como fondos negros o tintas planas a ras), toma el píxel
+   exacto del borde sin arrastrar elementos interiores (como filetes dorados o textos).
+6. Preserva la nitidez vectorial del centro mediante superposición exacta y normaliza TrimBox y BleedBox.
 """
 
-import io
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import pymupdf
-from PIL import Image
+import numpy as np
 import pikepdf
+
+
+def get_page_print_colorspace(page: pymupdf.Page) -> pymupdf.Colorspace:
+    """Detecta si la página utiliza CMYK o RGB en sus objetos vectoriales e imágenes."""
+    has_rgb = False
+    for d in page.get_drawings():
+        for col in (d.get("fill"), d.get("stroke")):
+            if col and isinstance(col, (list, tuple)):
+                if len(col) == 4:
+                    return pymupdf.csCMYK
+                elif len(col) == 3:
+                    has_rgb = True
+    for img in page.get_images(full=True):
+        cs_name = img[5] if len(img) > 5 else ""
+        if cs_name in ("DeviceCMYK", "Separation", "DeviceN"):
+            return pymupdf.csCMYK
+        if cs_name == "DeviceRGB":
+            has_rgb = True
+    if has_rgb:
+        return pymupdf.csRGB
+    return pymupdf.csCMYK
 
 
 def generate_mirror_bleed(
@@ -19,13 +47,7 @@ def generate_mirror_bleed(
     dpi: int = 300
 ) -> Dict[str, Any]:
     """
-    Genera sangrado sintético por reflejo de 3.0 mm en documentos que carecen de sangre.
-
-    - Renderiza a 300 ppp la franja perimetral interior de la página.
-    - Refleja simétricamente los píxeles hacia los cuatro márgenes de sangrado (izq, der, sup, inf y esquinas).
-    - Preserva el contenido vectorial original y tipografías en el centro (dentro del TrimBox) sin rasterizar.
-    - Normaliza las cajas de página: TrimBox = tamaño neto, BleedBox = tamaño con sangrado (+3 mm).
-    - Preserva diccionarios /OutputIntents si existen en el PDF.
+    Genera sangrado sintético profesional de 3.0 mm en documentos que carecen de sangre.
 
     :param pdf_path: Ruta al archivo PDF de entrada.
     :param output_path: Ruta de salida para el PDF con sangrado por reflejo.
@@ -34,7 +56,9 @@ def generate_mirror_bleed(
     :return: Diccionario con estadísticas de la operación.
     """
     bleed_pt = bleed_mm * 72.0 / 25.4
-    zoom = dpi / 72.0
+    px_per_mm = dpi / 25.4
+    bleed_px = max(1, int(round(bleed_mm * px_per_mm)))
+    search_depth_px = max(1, int(round(2.0 * px_per_mm)))  # 2.0 mm de búsqueda interior
 
     src_doc = pymupdf.open(pdf_path)
     dst_doc = pymupdf.open()
@@ -52,43 +76,114 @@ def generate_mirror_bleed(
         w_pt = trim.width
         h_pt = trim.height
 
-        # Renderizar la página original a alta resolución para extraer los píxeles perimetrales
-        pix = page.get_pixmap(dpi=dpi, clip=trim)
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        w_px, h_px = img.size
-        bleed_px = max(1, int(round(bleed_pt * zoom)))
+        cs = get_page_print_colorspace(page)
+        is_cmyk = (cs == pymupdf.csCMYK)
+        num_channels = 4 if is_cmyk else 3
 
-        # Crear lienzo ampliado que incluirá el sangrado perimetral
-        canvas_w = w_px + 2 * bleed_px
-        canvas_h = h_px + 2 * bleed_px
-        canvas = Image.new("RGB", (canvas_w, canvas_h))
+        # Renderizar la página original a alta resolución en su espacio de color nativo
+        pix = page.get_pixmap(dpi=dpi, clip=trim, colorspace=cs)
+        arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape((pix.height, pix.width, num_channels)).copy()
+        H, W, _ = arr.shape
 
-        # 1. Pegar la imagen original en el centro
-        canvas.paste(img, (bleed_px, bleed_px))
+        search_d = min(search_depth_px, H // 2, W // 2)
 
-        # 2. Extensión / clamping perimetral del píxel exterior (1 píxel estirado hacia la sangre)
-        # Esto garantiza que el sangrado use el color de fondo exacto que llega al corte a ras,
-        # sin arrastrar ni reflejar elementos interiores como filetes decorativos dorados o textos.
-        left_edge = img.crop((0, 0, 1, h_px)).resize((bleed_px, h_px), Image.NEAREST)
-        right_edge = img.crop((w_px - 1, 0, w_px, h_px)).resize((bleed_px, h_px), Image.NEAREST)
-        top_edge = img.crop((0, 0, w_px, 1)).resize((w_px, bleed_px), Image.NEAREST)
-        bottom_edge = img.crop((0, h_px - 1, w_px, h_px)).resize((w_px, bleed_px), Image.NEAREST)
+        # -------------------------------------------------------------
+        # 1. BORDE SUPERIOR (TOP)
+        # -------------------------------------------------------------
+        top_strip = arr[:search_d, :, :]
+        is_w_top = np.all(top_strip < 15, axis=2) if is_cmyk else np.all(top_strip > 240, axis=2)
+        has_art_top = ~is_w_top
+        any_art_top = np.any(has_art_top, axis=0)
+        first_art_row = np.argmax(has_art_top, axis=0)
+        top_colors = arr[0, :, :].copy()
+        cols_art_top = np.where(any_art_top)[0]
+        top_colors[cols_art_top] = arr[first_art_row[cols_art_top], cols_art_top, :]
 
-        canvas.paste(left_edge, (0, bleed_px))
-        canvas.paste(right_edge, (w_px + bleed_px, bleed_px))
-        canvas.paste(top_edge, (bleed_px, 0))
-        canvas.paste(bottom_edge, (bleed_px, h_px + bleed_px))
+        # Cerrar filetes blancos en el arte cerca del borde superior
+        for c in cols_art_top:
+            r_idx = first_art_row[c]
+            if r_idx > 0:
+                arr[0:r_idx, c, :] = top_colors[c]
 
-        # 3. Cuatro esquinas (estirar el píxel exacto de cada esquina hacia el sangrado)
-        c_tl = img.crop((0, 0, 1, 1)).resize((bleed_px, bleed_px), Image.NEAREST)
-        c_tr = img.crop((w_px - 1, 0, w_px, 1)).resize((bleed_px, bleed_px), Image.NEAREST)
-        c_bl = img.crop((0, h_px - 1, 1, h_px)).resize((bleed_px, bleed_px), Image.NEAREST)
-        c_br = img.crop((w_px - 1, h_px - 1, w_px, h_px)).resize((bleed_px, bleed_px), Image.NEAREST)
+        # -------------------------------------------------------------
+        # 2. BORDE INFERIOR (BOTTOM)
+        # -------------------------------------------------------------
+        bot_strip = arr[H - search_d:, :, :]
+        is_w_bot = np.all(bot_strip < 15, axis=2) if is_cmyk else np.all(bot_strip > 240, axis=2)
+        has_art_bot = ~is_w_bot
+        any_art_bot = np.any(has_art_bot, axis=0)
+        has_art_bot_rev = has_art_bot[::-1, :]
+        dist_from_bot = np.argmax(has_art_bot_rev, axis=0)
+        bot_colors = arr[H - 1, :, :].copy()
+        cols_art_bot = np.where(any_art_bot)[0]
+        bot_row_indices = H - 1 - dist_from_bot[cols_art_bot]
+        bot_colors[cols_art_bot] = arr[bot_row_indices, cols_art_bot, :]
 
-        canvas.paste(c_tl, (0, 0))
-        canvas.paste(c_tr, (w_px + bleed_px, 0))
-        canvas.paste(c_bl, (0, h_px + bleed_px))
-        canvas.paste(c_br, (w_px + bleed_px, h_px + bleed_px))
+        # Cerrar filetes blancos en el arte cerca del borde inferior
+        for i, c in enumerate(cols_art_bot):
+            r_idx = bot_row_indices[i]
+            if r_idx < H - 1:
+                arr[r_idx + 1:H, c, :] = bot_colors[c]
+
+        # -------------------------------------------------------------
+        # 3. BORDE IZQUIERDO (LEFT)
+        # -------------------------------------------------------------
+        left_strip = arr[:, :search_d, :]
+        is_w_left = np.all(left_strip < 15, axis=2) if is_cmyk else np.all(left_strip > 240, axis=2)
+        has_art_left = ~is_w_left
+        any_art_left = np.any(has_art_left, axis=1)
+        first_art_col = np.argmax(has_art_left, axis=1)
+        left_colors = arr[:, 0, :].copy()
+        rows_art_left = np.where(any_art_left)[0]
+        left_colors[rows_art_left] = arr[rows_art_left, first_art_col[rows_art_left], :]
+
+        # Cerrar filetes blancos en el arte cerca del borde izquierdo
+        for r in rows_art_left:
+            c_idx = first_art_col[r]
+            if c_idx > 0:
+                arr[r, 0:c_idx, :] = left_colors[r]
+
+        # -------------------------------------------------------------
+        # 4. BORDE DERECHO (RIGHT)
+        # -------------------------------------------------------------
+        right_strip = arr[:, W - search_d:, :]
+        is_w_right = np.all(right_strip < 15, axis=2) if is_cmyk else np.all(right_strip > 240, axis=2)
+        has_art_right = ~is_w_right
+        any_art_right = np.any(has_art_right, axis=1)
+        has_art_right_rev = has_art_right[:, ::-1]
+        dist_from_right = np.argmax(has_art_right_rev, axis=1)
+        right_colors = arr[:, W - 1, :].copy()
+        rows_art_right = np.where(any_art_right)[0]
+        right_col_indices = W - 1 - dist_from_right[rows_art_right]
+        right_colors[rows_art_right] = arr[rows_art_right, right_col_indices, :]
+
+        # Cerrar filetes blancos en el arte cerca del borde derecho
+        for i, r in enumerate(rows_art_right):
+            c_idx = right_col_indices[i]
+            if c_idx < W - 1:
+                arr[r, c_idx + 1:W, :] = right_colors[r]
+
+        # -------------------------------------------------------------
+        # 5. CONSTRUCCIÓN DEL LIENZO CON SANGRADO (CANVAS)
+        # -------------------------------------------------------------
+        canvas_h = H + 2 * bleed_px
+        canvas_w = W + 2 * bleed_px
+        canvas = np.zeros((canvas_h, canvas_w, num_channels), dtype=np.uint8)
+
+        # Centro (arte original con filetes cerrados)
+        canvas[bleed_px:bleed_px + H, bleed_px:bleed_px + W, :] = arr
+
+        # Sangrados perimetrales (3.0 mm)
+        canvas[0:bleed_px, bleed_px:bleed_px + W, :] = top_colors[None, :, :]
+        canvas[bleed_px + H:, bleed_px:bleed_px + W, :] = bot_colors[None, :, :]
+        canvas[bleed_px:bleed_px + H, 0:bleed_px, :] = left_colors[:, None, :]
+        canvas[bleed_px:bleed_px + H, bleed_px + W:, :] = right_colors[:, None, :]
+
+        # Esquinas
+        canvas[0:bleed_px, 0:bleed_px, :] = canvas[bleed_px, bleed_px, :]
+        canvas[0:bleed_px, bleed_px + W:, :] = canvas[bleed_px, bleed_px + W - 1, :]
+        canvas[bleed_px + H:, 0:bleed_px, :] = canvas[bleed_px + H - 1, bleed_px, :]
+        canvas[bleed_px + H:, bleed_px + W:, :] = canvas[bleed_px + H - 1, bleed_px + W - 1, :]
 
         tot_w_pt = w_pt + 2 * bleed_pt
         tot_h_pt = h_pt + 2 * bleed_pt
@@ -98,10 +193,9 @@ def generate_mirror_bleed(
         new_page.set_bleedbox(new_page.mediabox)
         new_page.set_trimbox(pymupdf.Rect(bleed_pt, bleed_pt, w_pt + bleed_pt, h_pt + bleed_pt))
 
-        # Insertar el fondo con sangre reflejada
-        buf = io.BytesIO()
-        canvas.save(buf, format="JPEG", quality=95, subsampling=0)
-        new_page.insert_image(new_page.rect, stream=buf.getvalue())
+        # Insertar pixmap sin pérdidas directamente en el PDF (DeviceCMYK / DeviceRGB nativo)
+        pix_out = pymupdf.Pixmap(cs, canvas_w, canvas_h, canvas.tobytes(), False)
+        new_page.insert_image(new_page.rect, pixmap=pix_out)
 
         # Superponer el contenido vectorial de la página original en el centro exacto
         new_page.show_pdf_page(
@@ -134,4 +228,3 @@ def generate_mirror_bleed(
         "total_pages": total_pages,
         "bleed_mm": bleed_mm
     }
-
