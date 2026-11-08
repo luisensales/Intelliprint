@@ -90,11 +90,103 @@ UPLOAD_DIR = BASE_DIR / "uploads"
 JOBS_DIR = BASE_DIR / "jobs"
 STATIC_DIR = BASE_DIR / "static"
 ASSETS_DIR = BASE_DIR / "assets"
+DIDACTIC_SCENARIOS_DIR = BASE_DIR / "didactic_scenarios"
 
 UPLOAD_DIR.mkdir(exist_ok=True)
 JOBS_DIR.mkdir(exist_ok=True)
 STATIC_DIR.mkdir(exist_ok=True)
 ASSETS_DIR.mkdir(exist_ok=True)
+DIDACTIC_SCENARIOS_DIR.mkdir(exist_ok=True)
+
+def rehydrate_didactic_job(job_id: str, scenario_id: str) -> Optional[dict]:
+    """
+    Reconstruye un trabajo didáctico FP a partir de los PDFs reales pre-generados
+    cuando un trabajo se consulta y no está en la memoria del contenedor (ej. reinicios de Render).
+    """
+    scenario = next((s for s in SCENARIOS_CATALOG if s["id"] == scenario_id), None)
+    if not scenario:
+        return None
+
+    job_folder = UPLOAD_DIR / job_id
+    job_folder.mkdir(parents=True, exist_ok=True)
+    filename = f"{scenario_id}.pdf"
+    file_path = job_folder / filename
+
+    src_pdf = DIDACTIC_SCENARIOS_DIR / filename
+    if src_pdf.exists():
+        shutil.copyfile(src_pdf, file_path)
+    else:
+        generate_scenario_pdf(scenario_id, file_path)
+
+    file_size_mb = round(file_path.stat().st_size / (1024 * 1024), 2)
+    with open(file_path, "rb") as f:
+        pdf_sha256 = hashlib.sha256(f.read()).hexdigest()
+
+    try:
+        report = engine.run_preflight(
+            pdf_path=str(file_path),
+            profile_id="OFFSET_300",
+            icc_choice="preserve"
+        )
+    except Exception as e:
+        print(f"[rehydrate] Error en preflight de {scenario_id}: {e}")
+        return None
+
+    report["job_meta"] = {
+        "job_id": job_id,
+        "filename": filename,
+        "file_size_mb": file_size_mb,
+        "sha256": pdf_sha256,
+        "profile_id": "OFFSET_300",
+        "icc_option": "preserve",
+        "selected_icc": None,
+        "pdf_path": str(file_path),
+        "is_didactic_scenario": True,
+        "scenario_id": scenario_id,
+        "scenario_title": scenario["title"]
+    }
+
+    job_json_path = JOBS_DIR / f"{job_id}.json"
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+
+    return report
+
+
+def get_job_json_path(job_id: str) -> Path:
+    """
+    Obtiene la ruta al archivo JSON del trabajo, asegurando que si se trata de un reto
+    didáctico FP y el contenedor ha sido reiniciado (como en Render), el trabajo se
+    rehidrate al vuelo a partir de los PDFs reales pre-generados.
+    """
+    safe_id = Path(job_id).name
+    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    if not job_json_path.exists():
+        sc_id = None
+        if safe_id.startswith("fp_"):
+            cand = safe_id[3:]
+            matched = next((s["id"] for s in SCENARIOS_CATALOG if s["id"] == cand or cand.startswith(s["id"])), None)
+            if matched:
+                sc_id = matched
+            else:
+                up_dir = UPLOAD_DIR / safe_id
+                if up_dir.exists():
+                    for f in up_dir.glob("*.pdf"):
+                        if any(s["id"] == f.stem for s in SCENARIOS_CATALOG):
+                            sc_id = f.stem
+                            break
+                if not sc_id:
+                    sc_id = "reto_tarjeta_richblack"
+        elif any(s["id"] == safe_id for s in SCENARIOS_CATALOG):
+            sc_id = safe_id
+
+        if sc_id:
+            try:
+                rehydrate_didactic_job(safe_id, sc_id)
+            except Exception as e:
+                print(f"[rehydrate] Error rehidratando reto {sc_id}: {e}")
+
+    return job_json_path
 
 app = FastAPI(
     title="IntelliPrint Preflight Web",
@@ -347,7 +439,7 @@ async def check_pdf(
     }
 
     # Persist Job JSON
-    job_json_path = JOBS_DIR / f"{job_id}.json"
+    job_json_path = get_job_json_path(job_id)
     with open(job_json_path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
 
@@ -360,7 +452,7 @@ async def handle_proofreading_action(
     action: str = Form(...), # accept, ignore, add_to_glossary
     word: str = Form(...)
 ):
-    job_json_path = JOBS_DIR / f"{job_id}.json"
+    job_json_path = get_job_json_path(job_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -398,7 +490,7 @@ async def release_production(
     decision: str = Form(...), # approved, approved_with_warnings, rejected
     notes: Optional[str] = Form("")
 ):
-    job_json_path = JOBS_DIR / f"{job_id}.json"
+    job_json_path = get_job_json_path(job_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -438,7 +530,7 @@ async def release_production(
 
 @app.get("/api/download-certificate/{job_id}")
 async def download_certificate_pdf(job_id: str):
-    job_json_path = JOBS_DIR / f"{job_id}.json"
+    job_json_path = get_job_json_path(job_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
     with open(job_json_path, "r", encoding="utf-8") as f:
@@ -464,7 +556,7 @@ async def download_client_report_pdf(job_id: str):
     Explica en lenguaje constructivo y claro qué incidencias existen y cómo resolverlas en InDesign / Illustrator.
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -489,7 +581,7 @@ async def download_client_report_pdf(job_id: str):
 
 @app.get("/api/report/{job_id}")
 async def download_json_report(job_id: str):
-    job_json_path = JOBS_DIR / f"{job_id}.json"
+    job_json_path = get_job_json_path(job_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Informe no encontrado.")
     return FileResponse(
@@ -599,7 +691,7 @@ def register_cumulative_fix(job_data: dict, output_path: str | Path, fix_name: s
 
 @app.get("/api/download-pdf/{job_id}")
 async def download_pdf_file(job_id: str):
-    job_json_path = JOBS_DIR / f"{job_id}.json"
+    job_json_path = get_job_json_path(job_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
     with open(job_json_path, "r", encoding="utf-8") as f:
@@ -627,7 +719,7 @@ async def convert_images_to_cmyk(
     - use_embedded_icc=false → usa custom_icc (nombre de archivo en icc_profiles/)
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -744,7 +836,7 @@ async def convert_images_to_cmyk(
 @app.get("/api/download-cmyk/{job_id}")
 async def download_cmyk_pdf(job_id: str):
     """Descarga el PDF con imágenes convertidas a CMYK."""
-    job_json_path = JOBS_DIR / f"{job_id}.json"
+    job_json_path = get_job_json_path(job_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -775,7 +867,7 @@ async def convert_spots_to_cmyk_endpoint(job_id: str, target_spots: Optional[str
     Preserva intactas las tintas técnicas como barnices, lacas y troqueles.
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -865,7 +957,7 @@ async def apply_overprint_fix(job_id: str, mode: str = "k100"):
     """
     # Validar job_id para evitar path traversal
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1014,7 +1106,7 @@ async def fix_hairlines_endpoint(job_id: str, target_width: float = 0.30):
     Fase 2: Engrosa trazos finos (< 0.25 pt / hairline) a un grosor seguro (0.30 pt).
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1090,7 +1182,7 @@ async def fix_hairlines_endpoint(job_id: str, target_width: float = 0.30):
 async def download_hairline_pdf(job_id: str):
     """Descarga el PDF con líneas finas engrosadas."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1119,7 +1211,7 @@ async def fix_output_intent_endpoint(job_id: str, icc_profile: Optional[str] = N
     Fase 2: Incrusta un OutputIntent estándar (FOGRA39 / ISO Coated v2) para certificar la condición de impresión.
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1208,7 +1300,7 @@ async def fix_output_intent_endpoint(job_id: str, icc_profile: Optional[str] = N
 async def download_icc_pdf(job_id: str):
     """Descarga el PDF con OutputIntent formal incrustado."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1237,7 +1329,7 @@ async def fix_bleed_geometry_endpoint(job_id: str, bleed_mm: float = 3.0):
     Fase 2: Ajuste de Cajas (TrimBox y BleedBox) y normalización de sangrado a 3 mm.
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1310,7 +1402,7 @@ async def fix_bleed_geometry_endpoint(job_id: str, bleed_mm: float = 3.0):
 async def download_bleed_pdf(job_id: str):
     """Descarga el PDF con TrimBox y BleedBox a 3 mm ajustados."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1339,7 +1431,7 @@ async def outline_fonts_endpoint(job_id: str, pages: Optional[str] = None):
     Fase 2: Traza tipografías no incrustadas a curvas vectoriales directas (<path>).
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1419,7 +1511,7 @@ async def outline_fonts_endpoint(job_id: str, pages: Optional[str] = None):
 async def download_outlined_fonts_pdf(job_id: str):
     """Descarga el PDF con textos trazados a curvas."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1448,7 +1540,7 @@ async def generate_mirror_bleed_endpoint(job_id: str, bleed_mm: float = 3.0):
     Fase 3: Genera sangrado sintético por reflejo de 3.0 mm en los bordes de la página.
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1521,7 +1613,7 @@ async def generate_mirror_bleed_endpoint(job_id: str, bleed_mm: float = 3.0):
 async def download_mirror_bleed_pdf(job_id: str):
     """Descarga el PDF con sangrado sintético por reflejo generado."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1555,7 +1647,7 @@ async def add_printer_marks_endpoint(
     Fase 3: Añade marcas de imprenta profesionales (corte, registro, tiras CMYK e información).
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1609,7 +1701,7 @@ async def add_printer_marks_endpoint(
 async def download_printer_marks_pdf(job_id: str):
     """Descarga el PDF con marcas de imprenta profesionales añadidas."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1641,7 +1733,7 @@ async def limit_tac_endpoint(
     Fase 3: Limita la cobertura total de tinta (TAC / TIC) al 300% (o valor especificado) mediante UCR.
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1687,7 +1779,7 @@ async def limit_tac_endpoint(
 async def download_tac_pdf(job_id: str):
     """Descarga el PDF con cobertura de tinta limitada (TAC <= 300%)."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1714,7 +1806,7 @@ async def download_tac_pdf(job_id: str):
 async def download_overprint_pdf(job_id: str):
     """Descarga el PDF con sobreimpresión corregida automáticamente."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1749,7 +1841,7 @@ async def apply_varnish_overprint_endpoint(job_id: str, target_spots: Optional[s
     brillos, troqueles) que se encuentren en calado (knockout).
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1829,7 +1921,7 @@ async def apply_varnish_overprint_endpoint(job_id: str, target_spots: Optional[s
 async def get_job_spot_colors(job_id: str):
     """Devuelve las tintas planas detectadas en el documento del trabajo."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1882,7 +1974,7 @@ async def get_page_separation(
     para verificar visualmente sobreimpresiones y calados como en Adobe Acrobat Output Preview.
     Aplica el perfil de simulación ICC escogido y soporta Soft Proofing (simulación de papel y tinta).
     """
-    job_json_path = JOBS_DIR / f"{job_id}.json"
+    job_json_path = get_job_json_path(job_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -1986,7 +2078,7 @@ async def render_comparison_endpoint(
     para el comparador interactivo con cortinilla (Split View Slider).
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -2047,7 +2139,7 @@ async def batch_fix_endpoint(
     Ejecuta secuencial y acumulativamente las correcciones estándar seleccionadas.
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -2357,7 +2449,7 @@ async def batch_fix_endpoint(
 async def download_batch_endpoint(job_id: str):
     """Descarga el PDF con las correcciones integrales del lote."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -2390,7 +2482,7 @@ async def download_batch_endpoint(job_id: str):
 async def calculate_imposition_endpoint(job_id: str, request: Request):
     """Calcula el plan geométrico de imposición y aprovechamiento de pliego."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -2434,7 +2526,7 @@ async def calculate_imposition_endpoint(job_id: str, request: Request):
 async def generate_imposition_endpoint(job_id: str, request: Request):
     """Genera el pliego de imposición montado en formato PDF de alta resolución."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -2499,7 +2591,7 @@ async def generate_imposition_endpoint(job_id: str, request: Request):
 async def download_imposition_endpoint(job_id: str):
     """Descarga el pliego de imposición PDF generado."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -2535,7 +2627,7 @@ async def preview_imposition_endpoint(
 ):
     """Renderiza una imagen JPEG de previsualización del pliego impuesto."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -2574,7 +2666,7 @@ async def calculate_cip3_endpoint(job_id: str, request: Request):
     y precalcula los archivos de salida CIP3 (.ppf) y Ficha de Tinteros (PDF).
     """
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -2676,7 +2768,7 @@ async def download_cip3_ppf_endpoint(
 
     # Si no existe, recalcular sobre la marcha
     if not ppf_path.exists():
-        job_json_path = JOBS_DIR / f"{safe_id}.json"
+        job_json_path = get_job_json_path(safe_id)
         if not job_json_path.exists():
             raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
         with open(job_json_path, "r", encoding="utf-8") as f:
@@ -2714,7 +2806,7 @@ async def download_cip3_pdf_endpoint(
 
     # Si no existe, recalcular sobre la marcha
     if not sheet_pdf_path.exists():
-        job_json_path = JOBS_DIR / f"{safe_id}.json"
+        job_json_path = get_job_json_path(safe_id)
         if not job_json_path.exists():
             raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
         with open(job_json_path, "r", encoding="utf-8") as f:
@@ -2745,7 +2837,7 @@ async def download_cip3_pdf_endpoint(
 async def inspect_barcodes_endpoint(job_id: str):
     """Inspecciona códigos de barras (EAN-13, EAN-8, UPC) y QR en busca de Rich Black o falta de Quiet Zone."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -2768,7 +2860,7 @@ async def inspect_barcodes_endpoint(job_id: str):
 async def fix_barcodes_endpoint(job_id: str, request: Request):
     """Corrige códigos de barras y QR forzándolos a 100% K puro e inyectando reserva blanca opaca."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -2825,7 +2917,7 @@ async def preview_barcode_endpoint(
 ):
     """Renderiza un recorte JPEG de previsualización de un código detectado."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -2988,7 +3080,7 @@ async def inspect_safety_margin_endpoint(
 ):
     """Inspecciona la proximidad de textos y elementos a los bordes de corte y lomo."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -3023,7 +3115,7 @@ async def preview_safety_margin_endpoint(
 ):
     """Renderiza una previsualización de la página con guías de corte, seguridad, lomo y resaltado de textos."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
@@ -3057,7 +3149,7 @@ async def preview_safety_margin_endpoint(
 async def verify_press_operator_endpoint(job_id: str):
     """Ficha Técnica de Producción y Trazabilidad en vivo para el Maquinista."""
     safe_id = Path(job_id).name
-    job_json_path = JOBS_DIR / f"{safe_id}.json"
+    job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo de impresión no encontrado.")
 
@@ -3090,24 +3182,28 @@ async def get_didactic_scenarios_endpoint():
 @app.post("/api/didactic/load-scenario/{scenario_id}")
 async def load_didactic_scenario_endpoint(scenario_id: str):
     """
-    Genera un PDF sintético con errores reales de taller para el reto indicado,
+    Carga el PDF real del reto didáctico seleccionado,
     lo procesa con el motor de preflight y devuelve el reporte completo para análisis en clase.
     """
     scenario = next((s for s in SCENARIOS_CATALOG if s["id"] == scenario_id), None)
     if not scenario:
         raise HTTPException(status_code=404, detail="Reto didáctico no encontrado.")
 
-    job_id = f"fp_{uuid.uuid4().hex[:6]}"
+    job_id = f"fp_{scenario_id}"
     job_folder = UPLOAD_DIR / job_id
     job_folder.mkdir(parents=True, exist_ok=True)
 
     filename = f"{scenario_id}.pdf"
     file_path = job_folder / filename
 
-    try:
-        generate_scenario_pdf(scenario_id, file_path)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generando PDF de reto didáctico: {e}")
+    src_pdf = DIDACTIC_SCENARIOS_DIR / filename
+    if src_pdf.exists():
+        shutil.copyfile(src_pdf, file_path)
+    else:
+        try:
+            generate_scenario_pdf(scenario_id, file_path)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error generando PDF de reto didáctico: {e}")
 
     file_size_mb = round(file_path.stat().st_size / (1024 * 1024), 2)
     with open(file_path, "rb") as f:
@@ -3136,7 +3232,7 @@ async def load_didactic_scenario_endpoint(scenario_id: str):
         "scenario_title": scenario["title"]
     }
 
-    job_json_path = JOBS_DIR / f"{job_id}.json"
+    job_json_path = get_job_json_path(job_id)
     with open(job_json_path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
 
@@ -3145,6 +3241,25 @@ async def load_didactic_scenario_endpoint(scenario_id: str):
         "scenario": scenario,
         "report": report
     }
+
+
+@app.get("/api/didactic/scenario/{scenario_id}/download")
+async def download_didactic_scenario_pdf_endpoint(scenario_id: str):
+    """
+    Descarga el archivo PDF real y original del reto para que alumnos y profesores
+    puedan abrirlo en InDesign, Illustrator o Acrobat e inspeccionar los fallos de arte final.
+    """
+    safe_id = Path(scenario_id).name
+    pdf_path = DIDACTIC_SCENARIOS_DIR / f"{safe_id}.pdf"
+    if not pdf_path.exists():
+        generate_scenario_pdf(safe_id, pdf_path)
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="PDF de reto didáctico no encontrado.")
+    return FileResponse(
+        pdf_path,
+        media_type="application/pdf",
+        filename=f"{safe_id}.pdf"
+    )
 
 
 @app.get("/api/didactic/simulate/register")

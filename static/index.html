@@ -6683,10 +6683,13 @@
             </div>
           </div>
 
-          <div class="pt-4 mt-2">
+          <div class="pt-3 mt-2 flex flex-col gap-2">
             <button onclick="loadDidacticScenario('${s.id}', this)" class="w-full py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-2 cursor-pointer">
               <i class="fa-solid fa-play text-amber-300"></i> Cargar Reto en IntelliPrint
             </button>
+            <a href="/api/didactic/scenario/${s.id}/download" download="${s.id}.pdf" class="w-full py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold rounded-lg transition flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer shadow-2xs" title="Descarga el PDF real del reto para abrirlo en InDesign, Illustrator o Acrobat">
+              <i class="fa-solid fa-file-arrow-down text-indigo-500"></i> Descargar PDF Real para Práctica
+            </a>
           </div>
         </div>
       `;
