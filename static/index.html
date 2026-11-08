@@ -34,6 +34,9 @@
             <button onclick="openDidacticModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-lg shadow-xs transition ml-2 cursor-pointer" title="Modo Didáctico y Simulador de Taller para Alumnos FP">
               <i class="fa-solid fa-graduation-cap text-amber-300"></i> Modo Didáctico FP
             </button>
+            <button onclick="openManualModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition ml-2 cursor-pointer" title="Manual Oficial de Usuario y Guía de Operación (PDF / Word)">
+              <i class="fa-solid fa-book-bookmark text-amber-300"></i> Manual
+            </button>
           </div>
           <p class="text-xs text-slate-400">Sistema Avanzado de Preflight mediante Redes Neuronales & Análisis PDF</p>
         </div>
@@ -223,6 +226,9 @@
             </button>
             <button onclick="openDidacticModal()" id="btnDidactic" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-700 to-purple-700 hover:from-indigo-800 hover:to-purple-800 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Modo Didáctico y Simulador de Taller FP para Alumnos">
               <i class="fa-solid fa-graduation-cap text-amber-300"></i> <span>Modo Alumnos FP</span>
+            </button>
+            <button onclick="openManualModal()" id="btnManual" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Manual de Usuario y Guía de Operación (PDF / Word)">
+              <i class="fa-solid fa-book-bookmark text-amber-300"></i> <span>Manual</span>
             </button>
             <button id="downloadJsonBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-code"></i> JSON Oficial
@@ -2007,12 +2013,172 @@
     </div>
   </div>
 
+  <!-- Modal: Manual Oficial de Usuario (PDF y Word) -->
+  <div id="manualModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeManualModal()"></div>
+
+    <!-- Panel -->
+    <div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-600/30 border border-blue-400/40 flex items-center justify-center text-amber-300 text-lg">
+            <i class="fa-solid fa-book-bookmark"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold tracking-tight text-white">Manual Oficial de Usuario y Guía de Operación Técnica</h3>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">v1.2.0</span>
+            </div>
+            <p class="text-xs text-slate-300">CPIFP Salesianos Urnieta LHIPI · CIFP Mendizabala LHII · Hezkuntza Saila (Gobierno Vasco)</p>
+          </div>
+        </div>
+        <button onclick="closeManualModal()" class="w-8 h-8 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-6 overflow-y-auto flex-1 bg-slate-50 space-y-6">
+
+        <!-- Download Cards Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          <!-- Card 1: PDF A4 Editorial -->
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-red-300 hover:shadow-md transition flex flex-col justify-between">
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="w-10 h-10 rounded-lg bg-red-50 text-red-600 border border-red-200 flex items-center justify-center text-xl">
+                  <i class="fa-solid fa-file-pdf"></i>
+                </div>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                  PDF A4 · 8 Págs (~520 KB)
+                </span>
+              </div>
+              <h4 class="text-sm font-bold text-slate-900">Manual en Formato PDF A4 Editorial</h4>
+              <p class="text-xs text-slate-600 leading-relaxed">
+                Documento de alta fidelidad maquetado con portada institucional, tablas densitométricas, cajas de advertencia y diagramación lista para imprimir o leer en tablets sin necesidad de software ofimático.
+              </p>
+            </div>
+
+            <div class="pt-4 mt-2 flex items-center gap-2">
+              <a href="/api/manual/download/pdf" download class="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-download"></i> Descargar PDF A4
+              </a>
+              <button onclick="window.open('/api/manual/download/pdf', '_blank')" class="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition cursor-pointer" title="Abrir en pestaña nueva">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Card 2: Microsoft Word .docx -->
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md transition flex flex-col justify-between">
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center text-xl">
+                  <i class="fa-solid fa-file-word"></i>
+                </div>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                  DOCX Editable (~714 KB)
+                </span>
+              </div>
+              <h4 class="text-sm font-bold text-slate-900">Manual en Microsoft Word (.docx)</h4>
+              <p class="text-xs text-slate-600 leading-relaxed">
+                Versión editable maquetada profesionalmente con portada, estilos tipográficos, tablas corporativas e imágenes institucionales para personalización docente o integración en proyectos de centro.
+              </p>
+            </div>
+
+            <div class="pt-4 mt-2">
+              <a href="/api/manual/download/docx" download class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-download"></i> Descargar Word (.docx)
+              </a>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Quick Summary Accordion of Chapters -->
+        <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              <i class="fa-solid fa-list-check text-indigo-600"></i> Contenido Estructurado del Manual (10 Capítulos)
+            </h4>
+            <span class="text-[11px] text-slate-400">Guía completa de taller gráfico</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+            <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-100 space-y-1">
+              <span class="font-bold text-slate-800">1. ¿Qué es IntelliPrint?</span>
+              <p class="text-[11px] text-slate-500">Filosofía Cero Errores y Cero Desperdicio, sostenibilidad y arquitectura.</p>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-100 space-y-1">
+              <span class="font-bold text-slate-800">2. Primeros Pasos</span>
+              <p class="text-[11px] text-slate-500">Conexión al servidor, requisitos PDF (1.3 a 2.0) y estructura de interfaz.</p>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-100 space-y-1">
+              <span class="font-bold text-slate-800">3. Configuración del Preflight</span>
+              <p class="text-[11px] text-slate-500">Inspección rápida, perfiles (Offset, Digital, Prensa) y catálogo de perfiles ICC.</p>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-100 space-y-1">
+              <span class="font-bold text-slate-800">4. El Informe de Verificación</span>
+              <p class="text-[11px] text-slate-500">Semáforo global, hallazgos, ortografía, mapa de TAC y separaciones CMYK.</p>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-100 space-y-1">
+              <span class="font-bold text-slate-800">5. Suite de Correcciones en 1 Clic</span>
+              <p class="text-[11px] text-slate-500">Taller en 1 Clic, RGB a CMYK, sobreimpresión, hairlines y sangre reflejada.</p>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-100 space-y-1">
+              <span class="font-bold text-slate-800">6. Módulos Avanzados</span>
+              <p class="text-[11px] text-slate-500">Imposición N-Up, códigos de barras 100% K, Hot-Folder y zona de seguridad.</p>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-100 space-y-1">
+              <span class="font-bold text-slate-800">7. Trazabilidad QR Maquinista</span>
+              <p class="text-[11px] text-slate-500">Inyección de QR en pliego y ficha técnica móvil a pie de máquina.</p>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-100 space-y-1">
+              <span class="font-bold text-slate-800">8. Modo Didáctico y Simulador FP</span>
+              <p class="text-[11px] text-slate-500">Retos prácticos, simulador físico interactivo, quiz y ficha de evaluación.</p>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-100 space-y-1">
+              <span class="font-bold text-slate-800">9. Documentación y Entregables</span>
+              <p class="text-[11px] text-slate-500">Certificado técnico A4, guía pedagógica para clientes y exportación JSON.</p>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-100 space-y-1">
+              <span class="font-bold text-slate-800">10. Preguntas Frecuentes (FAQ)</span>
+              <p class="text-[11px] text-slate-500">Respuestas técnicas a las incidencias de taller más comunes.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-between px-6 py-3.5 bg-slate-50 border-t border-slate-200 shrink-0">
+        <span class="text-[11px] text-slate-500 flex items-center gap-1.5">
+          <i class="fa-solid fa-graduation-cap text-indigo-600"></i>
+          Salesianos Urnieta · CIFP Mendizabala LHII · Hezkuntza Saila (Gobierno Vasco)
+        </span>
+        <button onclick="closeManualModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+          Cerrar
+        </button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Footer -->
   <footer class="bg-white border-t border-slate-200 py-6 mt-auto">
     <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
       <div>
         <p class="font-semibold text-slate-700">© 2026-2027 IntelliPrint · Sistema de Preflight Profesional</p>
-        <p class="text-slate-400 text-[11px]">Proyecto de Innovación Aplicada y Transferencia del Conocimiento en Formación Profesional</p>
+        <p class="text-slate-400 text-[11px]">
+          Proyecto de Innovación Aplicada y Transferencia del Conocimiento en Formación Profesional · 
+          <a href="#" onclick="openManualModal(); return false;" class="text-indigo-600 hover:text-indigo-700 font-semibold underline ml-1">
+            <i class="fa-solid fa-book-bookmark"></i> Manual de Usuario (PDF / Word)
+          </a>
+        </p>
       </div>
       <div class="flex items-center gap-4 bg-slate-50 px-3.5 py-1.5 rounded-lg border border-slate-200">
         <img src="/asset/logo-salesianos.svg" alt="Salesianos Urnieta" class="h-7 w-auto object-contain opacity-90 hover:opacity-100 transition" title="Salesianos Urnieta">
@@ -6117,6 +6283,20 @@
           btn.innerHTML = orig;
         }
       }
+    }
+
+    // =========================================================================
+    // MODAL DEL MANUAL DE USUARIO
+    // =========================================================================
+
+    function openManualModal() {
+      const modal = document.getElementById('manualModal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeManualModal() {
+      const modal = document.getElementById('manualModal');
+      if (modal) modal.classList.add('hidden');
     }
   </script>
 </body>

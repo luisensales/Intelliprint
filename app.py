@@ -3157,6 +3157,59 @@ async def download_worksheet_endpoint(filename: str):
     )
 
 
+# =============================================================================
+# ENDPOINTS: MANUAL DE USUARIO (PDF & DOCX)
+# =============================================================================
+
+@app.get("/api/manual/download/pdf")
+async def download_manual_pdf_endpoint():
+    """Descarga el Manual Oficial de Usuario en formato PDF A4."""
+    pdf_path = BASE_DIR / "Manual_de_Usuario_IntelliPrint.pdf"
+    if not pdf_path.exists():
+        from generate_manual_pdf import build_manual_pdf
+        build_manual_pdf()
+
+    return FileResponse(
+        pdf_path,
+        media_type="application/pdf",
+        filename="Manual_de_Usuario_IntelliPrint_v1.2.0.pdf"
+    )
+
+
+@app.get("/api/manual/download/docx")
+async def download_manual_docx_endpoint():
+    """Descarga el Manual Oficial de Usuario en formato Microsoft Word (.docx)."""
+    docx_path = BASE_DIR / "Manual_de_Usuario_IntelliPrint.docx"
+    if not docx_path.exists():
+        from generate_manual_docx import build_manual_docx
+        build_manual_docx()
+
+    return FileResponse(
+        docx_path,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename="Manual_de_Usuario_IntelliPrint_v1.2.0.docx"
+    )
+
+
+@app.get("/api/manual/info")
+async def get_manual_info_endpoint():
+    """Devuelve metadatos del Manual de Usuario y enlaces de descarga."""
+    pdf_path = BASE_DIR / "Manual_de_Usuario_IntelliPrint.pdf"
+    docx_path = BASE_DIR / "Manual_de_Usuario_IntelliPrint.docx"
+    return {
+        "title": "IntelliPrint v1.2.0 · Manual Oficial de Usuario y Guía Técnica",
+        "version": "1.2.0",
+        "centers": ["CPIFP Salesianos Urnieta LHIPI", "CIFP Mendizabala LHII"],
+        "government": "Departamento de Educación · Eusko Jaurlaritza / Gobierno Vasco",
+        "has_pdf": pdf_path.exists(),
+        "pdf_size_kb": round(pdf_path.stat().st_size / 1024, 1) if pdf_path.exists() else 0,
+        "has_docx": docx_path.exists(),
+        "docx_size_kb": round(docx_path.stat().st_size / 1024, 1) if docx_path.exists() else 0,
+        "pdf_download_url": "/api/manual/download/pdf",
+        "docx_download_url": "/api/manual/download/docx"
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     print("\n" + "="*50)
