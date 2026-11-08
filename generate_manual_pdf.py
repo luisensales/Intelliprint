@@ -24,6 +24,7 @@ FOOTER_Y = 810.0
 PALETTE = {
     "navy": (31 / 255, 38 / 255, 44 / 255),
     "blue": (37 / 255, 99 / 255, 235 / 255),
+    "cyan": (0 / 255, 163 / 255, 255 / 255),
     "purple": (109 / 255, 40 / 255, 217 / 255),
     "slate_dark": (51 / 255, 65 / 255, 85 / 255),
     "slate": (100 / 255, 116 / 255, 139 / 255),
@@ -127,17 +128,25 @@ def build_manual_pdf():
     if not p_imago.exists():
         p_imago = ASSETS_DIR / "Logo-intelliprint-imago.jpg"
 
-    y_cov = 170.0
+    y_cov = 160.0
     if p_full_logo.exists():
-        p_cov.insert_image(pymupdf.Rect(MARGIN_X + 100, y_cov, PAGE_W - MARGIN_X - 100, y_cov + 85), filename=str(p_full_logo), keep_proportion=True)
-        y_cov += 105
+        # Logo sin fondo oscuro centrado armónicamente
+        w_logo = 320.0
+        h_logo = w_logo * (300.0 / 1140.0)  # ~84 pt
+        x_logo = (PAGE_W - w_logo) / 2.0
+        p_cov.insert_image(pymupdf.Rect(x_logo, y_cov, x_logo + w_logo, y_cov + h_logo), filename=str(p_full_logo), keep_proportion=True)
+        y_cov += h_logo + 25.0
     elif p_imago.exists():
         p_cov.insert_image(pymupdf.Rect(PAGE_W / 2 - 40, y_cov, PAGE_W / 2 + 40, y_cov + 80), filename=str(p_imago), keep_proportion=True)
-        y_cov += 95
+        y_cov += 100.0
 
-    # Título y Subtítulo
-    p_cov.insert_text(pymupdf.Point(MARGIN_X, y_cov + 20), "INTELLIPRINT", fontsize=28.0, fontname="helv", color=PALETTE["navy"])
-    p_cov.insert_text(pymupdf.Point(MARGIN_X, y_cov + 45), "MANUAL OFICIAL DE USUARIO Y GUÍA DE OPERACIÓN TÉCNICA", fontsize=13.0, fontname="helv", color=PALETTE["blue"])
+    # Título con contraste marcado de peso: Intelli (Light) + Print (Heavy Cyan)
+    font_size_title = 28.0
+    w_intelli = pymupdf.get_text_length("Intelli", fontname="helv", fontsize=font_size_title)
+    p_cov.insert_text(pymupdf.Point(MARGIN_X, y_cov + 20), "Intelli", fontsize=font_size_title, fontname="helv", color=PALETTE["navy"])
+    p_cov.insert_text(pymupdf.Point(MARGIN_X + w_intelli + 1.0, y_cov + 20), "Print", fontsize=font_size_title, fontname="hebo", color=PALETTE["cyan"])
+
+    p_cov.insert_text(pymupdf.Point(MARGIN_X, y_cov + 45), "MANUAL OFICIAL DE USUARIO Y GUÍA DE OPERACIÓN TÉCNICA", fontsize=13.0, fontname="hebo", color=PALETTE["blue"])
     p_cov.insert_text(pymupdf.Point(MARGIN_X, y_cov + 62), "Versión 1.2.0 · Edición para Talleres Gráficos y Formación Profesional", fontsize=9.5, fontname="helv", color=PALETTE["slate"])
 
     p_cov.draw_line(pymupdf.Point(MARGIN_X, y_cov + 75), pymupdf.Point(PAGE_W - MARGIN_X, y_cov + 75), color=PALETTE["blue"], width=2.0)

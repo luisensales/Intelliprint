@@ -324,16 +324,22 @@ def build_manual_docx():
     elif p_imago.exists():
         p_logo.add_run().add_picture(get_docx_image_stream(p_imago), width=Inches(1.8))
 
-    # 3. Título Principal
+    # 3. Título Principal (Contraste de peso: Intelli Light 300 + Print Heavy 700 Cyan)
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_title.paragraph_format.space_before = Pt(6)
     p_title.paragraph_format.space_after = Pt(4)
-    r_t = p_title.add_run("INTELLIPRINT")
-    r_t.bold = True
-    r_t.font.name = "Calibri"
-    r_t.font.size = Pt(34.0)
-    r_t.font.color.rgb = C_NAVY
+    r_t1 = p_title.add_run("Intelli")
+    r_t1.bold = False
+    r_t1.font.name = "Calibri Light"
+    r_t1.font.size = Pt(36.0)
+    r_t1.font.color.rgb = C_NAVY
+
+    r_t2 = p_title.add_run("Print")
+    r_t2.bold = True
+    r_t2.font.name = "Calibri"
+    r_t2.font.size = Pt(36.0)
+    r_t2.font.color.rgb = RGBColor(0, 163, 255)  # Cyan de proceso (#00A3FF)
 
     # 4. Subtítulo y Versión
     p_sub = doc.add_paragraph()
@@ -1008,10 +1014,23 @@ def build_manual_docx():
     p_close.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_close.paragraph_format.space_before = Pt(120)
 
-    r_c1 = p_close.add_run("INTELLIPRINT PREFLIGHT & TALLER DIGITAL\n")
-    r_c1.bold = True
-    r_c1.font.name = "Calibri"
-    r_c1.font.size = Pt(14.0)
+    r_c1 = p_close.add_run("Intelli")
+    r_c1.bold = False
+    r_c1.font.name = "Calibri Light"
+    r_c1.font.size = Pt(16.0)
+    r_c1.font.color.rgb = C_NAVY
+
+    r_c2_logo = p_close.add_run("Print ")
+    r_c2_logo.bold = True
+    r_c2_logo.font.name = "Calibri"
+    r_c2_logo.font.size = Pt(16.0)
+    r_c2_logo.font.color.rgb = RGBColor(0, 163, 255)
+
+    r_c1_sub = p_close.add_run("· PREFLIGHT & TALLER DIGITAL\n")
+    r_c1_sub.bold = True
+    r_c1_sub.font.name = "Calibri"
+    r_c1_sub.font.size = Pt(14.0)
+    r_c1_sub.font.color.rgb = C_NAVY
     r_c1.font.color.rgb = C_NAVY
 
     r_c2 = p_close.add_run("Proyecto de Innovación Aplicada y Transferencia del Conocimiento en FP\n")
