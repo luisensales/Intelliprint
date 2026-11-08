@@ -1,40 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-  <defs>
-    <clipPath id="circleClip">
-      <circle cx="256" cy="256" r="145" />
-    </clipPath>
-  </defs>
-  <!-- Background Badge -->
-  <rect x="36" y="36" width="440" height="440" rx="110" fill="#0F172A" stroke="#334155" stroke-width="6"/>
-  
-  <!-- CMYK 4 Quadrants -->
-  <g clip-path="url(#circleClip)">
-    <!-- Top-Right: Cyan -->
-    <path d="M 256,256 L 256,111 A 145,145 0 0,1 401,256 Z" fill="#00A0E9" />
-    <!-- Bottom-Right: Magenta -->
-    <path d="M 256,256 L 401,256 A 145,145 0 0,1 256,401 Z" fill="#E6007E" />
-    <!-- Bottom-Left: Yellow -->
-    <path d="M 256,256 L 256,401 A 145,145 0 0,1 111,256 Z" fill="#FFD700" />
-    <!-- Top-Left: White/Key -->
-    <path d="M 256,256 L 111,256 A 145,145 0 0,1 256,111 Z" fill="#F8FAFC" />
-  </g>
+  <!-- Background Badge: Modern Carbon Squircle -->
+  <rect x="28" y="28" width="456" height="456" rx="120" fill="#090D18" stroke="#1E293B" stroke-width="5"/>
 
-  <!-- Crosshair Gaps -->
-  <line x1="256" y1="75" x2="256" y2="437" stroke="#0F172A" stroke-width="16" />
-  <line x1="75" y1="256" x2="437" y2="256" stroke="#0F172A" stroke-width="16" />
+  <!-- 'P' Loop in Electric Process Cyan -->
+  <rect x="192" y="105" width="218" height="195" rx="85" fill="#00A3FF"/>
 
-  <!-- Center Donut Cutout -->
-  <circle cx="256" cy="256" r="58" fill="#0F172A" stroke="#FFFFFF" stroke-width="5" />
-  
-  <!-- Outer Precision Alignment Ring -->
-  <circle cx="256" cy="256" r="169" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-opacity="0.9" />
+  <!-- Lower Shard in Hyper-Magenta -->
+  <path d="M 325 105 C 375 105, 410 145, 410 202 C 410 260, 375 300, 325 300 L 192 300 L 290 202 Z" fill="#FF006E"/>
 
-  <!-- 4 Registration Ticks -->
-  <line x1="256" y1="87" x2="256" y2="63" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" />
-  <line x1="256" y1="425" x2="256" y2="449" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" />
-  <line x1="87" y1="256" x2="63" y2="256" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" />
-  <line x1="425" y1="256" x2="449" y2="256" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" />
+  <!-- Inner Geometric Aperture (Negative Space) -->
+  <rect x="242" y="149" width="90" height="107" rx="38" fill="#090D18"/>
 
-  <!-- Optical Center Dot -->
-  <circle cx="256" cy="256" r="15" fill="#FFFFFF" />
+  <!-- Structural Vertical Pillar ('i' stem) in Crisp White -->
+  <rect x="105" y="180" width="75" height="225" rx="37" fill="#FFFFFF"/>
+
+  <!-- Precision Node ('i' dot) in Acid Yellow -->
+  <rect x="105" y="105" width="75" height="55" rx="26" fill="#F5EE00"/>
+
+  <!-- Top Laser Alignment Tick -->
+  <line x1="310" y1="80" x2="310" y2="105" stroke="#F5EE00" stroke-width="5" stroke-linecap="round"/>
 </svg>
