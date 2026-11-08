@@ -355,11 +355,31 @@ def _draw_registration_cross(page: pymupdf.Page, cx: float, cy: float, radius: f
     shape.commit()
 
 
-def _draw_cmyk_color_strip(page: pymupdf.Page, x_start: float, y_top: float, patch_w: float = 14.0, patch_h: float = 8.0):
-    """Dibuja la tira de control FOGRA / ISO 12647-2 con balance de grises y trapping."""
+def _draw_cmyk_color_strip(
+    page: pymupdf.Page,
+    x_start: float,
+    y_top: float,
+    patch_w: float = 6.0,
+    patch_h: float = 6.0,
+    max_x: Optional[float] = None,
+    skip_zones: Optional[List[Tuple[float, float]]] = None
+):
+    """Dibuja la tira de control FOGRA / ISO 12647-2 (repetida a todo lo ancho si se define max_x)."""
     try:
-        from control_strip_engine import draw_fogra_control_strip
-        draw_fogra_control_strip(page, x_start, y_top - 1.0, swatch_w=6.5, swatch_h=6.5, show_labels=True)
+        from control_strip_engine import draw_repeated_fogra_strip, draw_fogra_control_strip
+        if max_x is not None and max_x > x_start:
+            draw_repeated_fogra_strip(
+                page,
+                x_start=x_start,
+                y=y_top - 1.0,
+                max_x=max_x,
+                swatch_w=patch_w,
+                swatch_h=patch_h,
+                show_labels=True,
+                skip_zones=skip_zones
+            )
+        else:
+            draw_fogra_control_strip(page, x_start, y_top - 1.0, swatch_w=patch_w, swatch_h=patch_h, show_labels=True)
     except Exception:
         colors = [
             (0.0, 0.65, 0.90),      # Cyan 100%
@@ -372,11 +392,17 @@ def _draw_cmyk_color_strip(page: pymupdf.Page, x_start: float, y_top: float, pat
             (0.55, 0.55, 0.55),     # Black 50%
         ]
         cur_x = x_start
+        limit_x = max_x if max_x is not None else (x_start + len(colors) * (patch_w + 1.5))
         shape = page.new_shape()
-        for col in colors:
-            shape.draw_rect(pymupdf.Rect(cur_x, y_top, cur_x + patch_w, y_top + patch_h))
-            shape.finish(fill=col, color=(0.4, 0.4, 0.4), width=0.3)
-            cur_x += patch_w + 1.5
+        while cur_x + patch_w <= limit_x:
+            for col in colors:
+                if cur_x + patch_w > limit_x:
+                    break
+                shape.draw_rect(pymupdf.Rect(cur_x, y_top, cur_x + patch_w, y_top + patch_h))
+                shape.finish(fill=col, color=(0.4, 0.4, 0.4), width=0.3)
+                cur_x += patch_w + 1.5
+            if max_x is None:
+                break
         shape.commit()
 
 
@@ -760,12 +786,28 @@ def _decorate_sheet(
         _draw_registration_cross(sheet, reg_margin, cy_mid, r_cross)
         _draw_registration_cross(sheet, sheet_w_pt - reg_margin, cy_mid, r_cross)
 
-    # 3. Tiras de control densitométrico CMYK
+    # 3. Tira de control densitométrico FOGRA / ISO 12647-2 (Repetida a todo lo ancho del pliego)
     if add_color_bar:
-        bar_w = 8 * 15.0
-        bar_x = (sheet_w_pt - bar_w) / 2.0 + 35.0
+        # Arranca a la izquierda del pliego y se repite de forma modular continua hasta el margen derecho
         bar_y = 5.0 * PT_PER_MM
-        _draw_cmyk_color_strip(sheet, bar_x, bar_y, patch_w=12.0, patch_h=6.0)
+        x_left = 6.0 * PT_PER_MM
+        x_right = sheet_w_pt - 6.0 * PT_PER_MM
+
+        # Protección para la cruz de registro central superior para evitar solapes
+        skip_list = []
+        if add_reg_crosses:
+            cx_mid = sheet_w_pt / 2.0
+            skip_list.append((cx_mid - 9.0, cx_mid + 9.0))
+
+        _draw_cmyk_color_strip(
+            sheet,
+            x_start=x_left,
+            y_top=bar_y,
+            patch_w=6.0,
+            patch_h=6.0,
+            max_x=x_right,
+            skip_zones=skip_list,
+        )
 
     # 4. Información técnica del pliego (Slug)
     if add_slug:
