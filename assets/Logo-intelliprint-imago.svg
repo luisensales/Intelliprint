@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <clipPath id="circleClip">
+      <circle cx="256" cy="256" r="145" />
+    </clipPath>
+  </defs>
+  <!-- Background Badge -->
+  <rect x="36" y="36" width="440" height="440" rx="110" fill="#0F172A" stroke="#334155" stroke-width="6"/>
+  
+  <!-- CMYK 4 Quadrants -->
+  <g clip-path="url(#circleClip)">
+    <!-- Top-Right: Cyan -->
+    <path d="M 256,256 L 256,111 A 145,145 0 0,1 401,256 Z" fill="#00A0E9" />
+    <!-- Bottom-Right: Magenta -->
+    <path d="M 256,256 L 401,256 A 145,145 0 0,1 256,401 Z" fill="#E6007E" />
+    <!-- Bottom-Left: Yellow -->
+    <path d="M 256,256 L 256,401 A 145,145 0 0,1 111,256 Z" fill="#FFD700" />
+    <!-- Top-Left: White/Key -->
+    <path d="M 256,256 L 111,256 A 145,145 0 0,1 256,111 Z" fill="#F8FAFC" />
+  </g>
+
+  <!-- Crosshair Gaps -->
+  <line x1="256" y1="75" x2="256" y2="437" stroke="#0F172A" stroke-width="16" />
+  <line x1="75" y1="256" x2="437" y2="256" stroke="#0F172A" stroke-width="16" />
+
+  <!-- Center Donut Cutout -->
+  <circle cx="256" cy="256" r="58" fill="#0F172A" stroke="#FFFFFF" stroke-width="5" />
+  
+  <!-- Outer Precision Alignment Ring -->
+  <circle cx="256" cy="256" r="169" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-opacity="0.9" />
+
+  <!-- 4 Registration Ticks -->
+  <line x1="256" y1="87" x2="256" y2="63" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" />
+  <line x1="256" y1="425" x2="256" y2="449" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" />
+  <line x1="87" y1="256" x2="63" y2="256" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" />
+  <line x1="425" y1="256" x2="449" y2="256" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" />
+
+  <!-- Optical Center Dot -->
+  <circle cx="256" cy="256" r="15" fill="#FFFFFF" />
+</svg>
