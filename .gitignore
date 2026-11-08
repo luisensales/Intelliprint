@@ -33,4 +33,5 @@ Thumbs.db
 *.log
 ~$*
 *.docx
+!Manual_de_Usuario_IntelliPrint.docx
 

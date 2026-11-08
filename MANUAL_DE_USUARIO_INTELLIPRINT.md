@@ -372,3 +372,4 @@ Desde la botonera de resultados o la ficha de verificación, IntelliPrint genera
                        Departamento de Educación · Eusko Jaurlaritza
 ========================================================================================
 ```
+
