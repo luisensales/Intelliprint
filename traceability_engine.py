@@ -242,11 +242,13 @@ def render_press_operator_html(d: Dict[str, Any]) -> str:
   <!-- Top Brand Banner -->
   <header class="bg-slate-900 text-white px-4 py-3 border-b border-slate-800">
     <div class="max-w-md mx-auto flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <i class="fa-solid fa-qrcode text-amber-400 text-lg"></i>
+      <div class="flex items-center gap-2.5">
+        <img src="/asset/Logo-intelliprint-imago.svg" alt="IntelliPrint" class="h-8 w-auto rounded-lg shrink-0">
         <div>
-          <h1 class="text-xs font-black tracking-wider uppercase">IntelliPrint Prepress</h1>
-          <p class="text-[10px] text-slate-400">Trazabilidad de Pliego en Máquina</p>
+          <h1 class="text-sm flex items-baseline tracking-normal">
+            <span class="text-white font-light tracking-wide" style="font-weight: 300;">Intelli</span><span class="text-cyan-400 font-bold ml-0.5" style="font-weight: 700;">Print</span>
+          </h1>
+          <p class="text-[10px] text-slate-400">Ficha Técnica de Producción y Trazabilidad</p>
         </div>
       </div>
       <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded font-mono font-bold text-amber-300">

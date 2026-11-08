@@ -110,8 +110,12 @@ def build_manual_pdf():
         p_cov.insert_image(pymupdf.Rect(MARGIN_X + 340, 32, MARGIN_X + 490, 78), filename=str(p_edu), keep_proportion=True)
 
     # Logo central IntelliPrint
-    p_full_logo = ASSETS_DIR / "Logo-intelliprint.jpg"
-    p_imago = ASSETS_DIR / "Logo-intelliprint-imago.jpg"
+    p_full_logo = ASSETS_DIR / "Logo-intelliprint.png"
+    if not p_full_logo.exists():
+        p_full_logo = ASSETS_DIR / "Logo-intelliprint.jpg"
+    p_imago = ASSETS_DIR / "Logo-intelliprint-imago.png"
+    if not p_imago.exists():
+        p_imago = ASSETS_DIR / "Logo-intelliprint-imago.jpg"
 
     y_cov = 170.0
     if p_full_logo.exists():

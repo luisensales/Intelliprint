@@ -32,22 +32,30 @@ def _draw_header(page, assets_dir, p):
     """Dibuja la cabecera azul marino con logos en la página dada."""
     page.draw_rect(pymupdf.Rect(0, 0, PAGE_W, HEADER_H), fill=p["navy"])
 
-    imago_path     = assets_dir / "Logo-intelliprint-imago.jpg"
-    full_logo_path = assets_dir / "Logo-intelliprint.jpg"
+    imago_path = assets_dir / "Logo-intelliprint-imago.png"
+    if not imago_path.exists():
+        imago_path = assets_dir / "Logo-intelliprint-imago.jpg"
+    full_logo_path = assets_dir / "Logo-intelliprint.png"
+    if not full_logo_path.exists():
+        full_logo_path = assets_dir / "Logo-intelliprint.jpg"
 
     if imago_path.exists():
-        page.insert_image(pymupdf.Rect(28, 13, 76, 62), filename=str(imago_path), keep_proportion=True)
-        text_x = 84
+        page.insert_image(pymupdf.Rect(28, 12, 74, 58), filename=str(imago_path), keep_proportion=True)
+        text_x = 82
     elif full_logo_path.exists():
-        page.insert_image(pymupdf.Rect(28, 16, 150, 58), filename=str(full_logo_path), keep_proportion=True)
-        text_x = 158
+        page.insert_image(pymupdf.Rect(28, 14, 146, 54), filename=str(full_logo_path), keep_proportion=True)
+        text_x = 154
     else:
         text_x = 35
 
-    page.insert_text(pymupdf.Point(text_x, 35), "INTELLIPRINT · DICTAMEN OFICIAL",
-                     fontsize=11.5, color=(1, 1, 1), fontname="helv")
-    page.insert_text(pymupdf.Point(text_x, 52), "Certificado de Preflight y Control de Calidad",
-                     fontsize=8, color=(0.75, 0.82, 0.90), fontname="helv")
+    # Branding con contraste: Intelli (blanco) + Print (cian) + subtítulo
+    page.insert_text(pymupdf.Point(text_x, 33), "Intelli", fontsize=13, color=(1, 1, 1), fontname="helv")
+    w_intelli = pymupdf.get_text_length("Intelli", fontname="helv", fontsize=13)
+    page.insert_text(pymupdf.Point(text_x + w_intelli, 33), "Print", fontsize=13, color=(0.0, 0.64, 1.0), fontname="hebo")
+    w_print = pymupdf.get_text_length("Print", fontname="hebo", fontsize=13)
+    page.insert_text(pymupdf.Point(text_x + w_intelli + w_print + 6, 33), "· DICTAMEN OFICIAL", fontsize=10, color=(0.85, 0.90, 0.95), fontname="helv")
+    page.insert_text(pymupdf.Point(text_x, 49), "Certificado de Preflight y Control de Calidad ISO 12647",
+                     fontsize=7.8, color=(0.70, 0.78, 0.88), fontname="helv")
 
     p_sales = assets_dir / "logo-salesianos.png"
     p_mendi = assets_dir / "logo-mendizabala.png"

@@ -313,8 +313,12 @@ def build_manual_docx():
     p_logo.paragraph_format.space_before = Pt(0)
     p_logo.paragraph_format.space_after = Pt(16)
 
-    p_full_logo = ASSETS_DIR / "Logo-intelliprint.jpg"
-    p_imago = ASSETS_DIR / "Logo-intelliprint-imago.jpg"
+    p_full_logo = ASSETS_DIR / "Logo-intelliprint.png"
+    if not p_full_logo.exists():
+        p_full_logo = ASSETS_DIR / "Logo-intelliprint.jpg"
+    p_imago = ASSETS_DIR / "Logo-intelliprint-imago.png"
+    if not p_imago.exists():
+        p_imago = ASSETS_DIR / "Logo-intelliprint-imago.jpg"
     if p_full_logo.exists():
         p_logo.add_run().add_picture(get_docx_image_stream(p_full_logo), width=Inches(3.4))
     elif p_imago.exists():

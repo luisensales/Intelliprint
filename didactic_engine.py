@@ -1303,20 +1303,21 @@ def generate_student_worksheet_pdf(
     navy = (31 / 255, 38 / 255, 44 / 255)
     page.draw_rect(pymupdf.Rect(0, 0, PAGE_W, HEADER_H), fill=navy)
 
-    imago_path = assets_dir / "Logo-intelliprint-imago.jpg"
+    imago_path = assets_dir / "Logo-intelliprint-imago.png"
+    if not imago_path.exists():
+        imago_path = assets_dir / "Logo-intelliprint-imago.jpg"
+
     if imago_path.exists():
         page.insert_image(pymupdf.Rect(26, 12, 74, 58), filename=str(imago_path), keep_proportion=True)
         text_x = 84
     else:
         text_x = 35
 
-    page.insert_text(
-        pymupdf.Point(text_x, 32),
-        "INTELLIPRINT · FICHA DE PRÁCTICA Y EVALUACIÓN FP",
-        fontsize=11.0,
-        color=(1, 1, 1),
-        fontname="helv",
-    )
+    page.insert_text(pymupdf.Point(text_x, 32), "Intelli", fontsize=12.5, color=(1, 1, 1), fontname="helv")
+    w_intelli = pymupdf.get_text_length("Intelli", fontname="helv", fontsize=12.5)
+    page.insert_text(pymupdf.Point(text_x + w_intelli, 32), "Print", fontsize=12.5, color=(0.0, 0.64, 1.0), fontname="hebo")
+    w_print = pymupdf.get_text_length("Print", fontname="hebo", fontsize=12.5)
+    page.insert_text(pymupdf.Point(text_x + w_intelli + w_print + 5, 32), "· FICHA DE EVALUACIÓN FP", fontsize=9.5, color=(0.85, 0.90, 0.95), fontname="helv")
     page.insert_text(
         pymupdf.Point(text_x, 48),
         "Simulador Didáctico de Preimpresión y Consecuencias en Taller Gráfico",

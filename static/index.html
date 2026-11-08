@@ -121,7 +121,7 @@
           <div>
             <div class="flex items-center gap-2">
               <h1 class="text-2xl flex items-baseline tracking-normal select-none">
-                <span class="text-white tracking-wide" style="font-weight: 300; letter-spacing: 0.02em;">Intelli</span><span class="text-cyan-400 ml-0.5" style="font-weight: 800; letter-spacing: -0.02em;">Print</span>
+                <span class="text-white font-light tracking-wide" style="font-weight: 300; letter-spacing: 0.02em;">Intelli</span><span class="text-cyan-400 font-bold ml-0.5" style="font-weight: 700; letter-spacing: -0.01em;">Print</span>
               </h1>
               <span class="text-blue-400 text-xs font-normal border border-blue-500/30 px-2 py-0.5 rounded-full">v1.2.0</span>
               <span class="inline-flex items-center gap-1.5 text-xs text-emerald-400 bg-slate-800/80 border border-slate-700/60 px-2 py-0.5 rounded-full">
@@ -2776,14 +2776,17 @@
   <!-- Footer -->
   <footer class="bg-white border-t border-slate-200 py-6 mt-auto">
     <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
-      <div>
-        <p class="font-semibold text-slate-700">© 2026-2027 IntelliPrint · Sistema de Preflight Profesional</p>
-        <p class="text-slate-400 text-[11px]">
-          Proyecto de Innovación Aplicada y Transferencia del Conocimiento en Formación Profesional · 
-          <a href="#" onclick="openManualModal(); return false;" class="text-indigo-600 hover:text-indigo-700 font-semibold underline ml-1">
-            <i class="fa-solid fa-book-bookmark"></i> Manual de Usuario (PDF / Word)
-          </a>
-        </p>
+      <div class="flex items-center gap-3">
+        <img src="/asset/Logo-intelliprint-imago.svg" alt="IntelliPrint Logo" class="h-8 w-auto rounded-md shadow-2xs">
+        <div>
+          <p class="text-slate-700 font-medium">© 2026-2027 <span class="font-light text-slate-900" style="font-weight: 300;">Intelli</span><span class="text-cyan-600 font-bold ml-0.5" style="font-weight: 700;">Print</span> · Sistema de Preflight Profesional</p>
+          <p class="text-slate-400 text-[11px]">
+            Proyecto de Innovación Aplicada y Transferencia del Conocimiento en Formación Profesional · 
+            <a href="#" onclick="openManualModal(); return false;" class="text-indigo-600 hover:text-indigo-700 font-semibold underline ml-1">
+              <i class="fa-solid fa-book-bookmark"></i> Manual de Usuario (PDF / Word)
+            </a>
+          </p>
+        </div>
       </div>
       <div class="flex items-center gap-4 bg-slate-50 px-3.5 py-1.5 rounded-lg border border-slate-200">
         <img src="/asset/logo-salesianos.svg" alt="Salesianos Urnieta" class="h-7 w-auto object-contain opacity-90 hover:opacity-100 transition" title="Salesianos Urnieta">
