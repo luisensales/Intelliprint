@@ -100,50 +100,59 @@
 
   <!-- Header -->
   <header class="bg-slate-900 text-white shadow-md border-b border-slate-800">
-    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
-      <div class="flex items-center gap-3">
-        <img src="/asset/Logo-intelliprint-imago.jpg" alt="Logo IntelliPrint" class="h-10 w-auto object-contain">
-        <div>
-          <div class="flex items-center gap-2 flex-wrap">
-            <h1 class="text-xl font-bold tracking-tight">IntelliPrint</h1>
-            <span class="text-blue-400 text-xs font-normal border border-blue-500/30 px-2 py-0.5 rounded-full">v1.2.0</span>
-            <span class="inline-flex items-center gap-1.5 text-xs text-emerald-400 bg-slate-800/80 border border-slate-700/60 px-2.5 py-0.5 rounded-full ml-1">
-              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              Motor Activo
-            </span>
-            <button id="headerNewPdfBtn" onclick="resetToNewAnalysis()" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-xs transition ml-2 cursor-pointer" title="Comenzar desde el principio con otro PDF">
-              <i class="fa-solid fa-plus-circle"></i> Nuevo PDF
-            </button>
-            <button onclick="openDidacticModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-lg shadow-xs transition ml-2 cursor-pointer" title="Modo Didáctico y Simulador de Taller para Alumnos FP">
-              <i class="fa-solid fa-graduation-cap text-amber-300"></i> Modo Didáctico FP
-            </button>
-            <button onclick="openManualModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition ml-2 cursor-pointer" title="Manual Oficial de Usuario y Guía de Operación (PDF / Word)">
-              <i class="fa-solid fa-book-bookmark text-amber-300"></i> Manual
-            </button>
-            <button onclick="openProfileManagerModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 hover:text-white text-xs font-semibold rounded-lg border border-indigo-700/60 shadow-xs transition ml-2 cursor-pointer" title="Editor de Perfiles de Preflight Personalizados (Crear, Editar, Exportar JSON)">
-              <i class="fa-solid fa-sliders text-indigo-300"></i> Perfiles Preflight
-            </button>
-            <!-- Toggle Modo Cabina D50 / Kiosko -->
-            <button id="themeToggleBtn" onclick="toggleKioskTheme()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition ml-2 cursor-pointer" title="Conmutar Modo Cabina de Máquina D50 (Fondo oscuro antirreflejo para pupitres de prensa ISO 3664)">
-              <i class="fa-solid fa-moon text-amber-300"></i> <span id="themeToggleLabel">Cabina D50</span>
-            </button>
-            <!-- Toggle Pantalla Completa Kiosko -->
-            <button onclick="toggleFullScreen()" class="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition ml-1 cursor-pointer" title="Pantalla Completa / Kiosko Táctil para Pupitre de Máquina">
-              <i class="fa-solid fa-expand"></i>
-            </button>
+    <div class="max-w-7xl mx-auto px-4 py-2.5 flex flex-col xl:flex-row justify-between items-center gap-3">
+      
+      <!-- Brand & Main Navigation -->
+      <div class="flex flex-wrap items-center gap-4 justify-between w-full xl:w-auto">
+        <div class="flex items-center gap-3 shrink-0">
+          <img src="/asset/Logo-intelliprint-imago.jpg" alt="Logo IntelliPrint" class="h-10 w-auto object-contain shrink-0">
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-xl font-bold tracking-tight">IntelliPrint</h1>
+              <span class="text-blue-400 text-xs font-normal border border-blue-500/30 px-2 py-0.5 rounded-full">v1.2.0</span>
+              <span class="inline-flex items-center gap-1.5 text-xs text-emerald-400 bg-slate-800/80 border border-slate-700/60 px-2 py-0.5 rounded-full">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                Motor Activo
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400">Sistema Avanzado de Preflight mediante Redes Neuronales & Análisis PDF</p>
           </div>
-          <p class="text-xs text-slate-400">Sistema Avanzado de Preflight mediante Redes Neuronales & Análisis PDF</p>
+        </div>
+
+        <!-- Global Action Buttons -->
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button id="headerNewPdfBtn" onclick="resetToNewAnalysis()" class="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-xs transition cursor-pointer" title="Comenzar desde el principio con otro PDF">
+            <i class="fa-solid fa-plus-circle"></i> <span>Nuevo PDF</span>
+          </button>
+          <button onclick="openDidacticModal()" class="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer" title="Modo Didáctico y Simulador de Taller para Alumnos FP">
+            <i class="fa-solid fa-graduation-cap text-amber-300"></i> <span>Alumnos FP</span>
+          </button>
+          <button onclick="openManualModal()" class="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition cursor-pointer" title="Manual Oficial de Usuario y Guía de Operación (PDF / Word)">
+            <i class="fa-solid fa-book-bookmark text-amber-300"></i> <span>Manual</span>
+          </button>
+          <button onclick="openProfileManagerModal()" class="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 hover:text-white text-xs font-semibold rounded-lg border border-indigo-700/60 shadow-xs transition cursor-pointer" title="Editor de Perfiles de Preflight Personalizados (Crear, Editar, Exportar JSON)">
+            <i class="fa-solid fa-sliders text-indigo-300"></i> <span>Perfiles</span>
+          </button>
+          <!-- Toggle Modo Cabina D50 / Kiosko -->
+          <button id="themeToggleBtn" onclick="toggleKioskTheme()" class="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition cursor-pointer" title="Conmutar Modo Cabina de Máquina D50 (Fondo oscuro antirreflejo para pupitres de prensa ISO 3664)">
+            <i class="fa-solid fa-moon text-amber-300"></i> <span id="themeToggleLabel">Cabina D50</span>
+          </button>
+          <!-- Toggle Pantalla Completa Kiosko -->
+          <button onclick="toggleFullScreen()" class="hidden md:inline-flex items-center px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition cursor-pointer" title="Pantalla Completa / Kiosko Táctil para Pupitre de Máquina">
+            <i class="fa-solid fa-expand"></i>
+          </button>
         </div>
       </div>
 
       <!-- Institutional Logos: Salesianos, Mendizabala, Dept. Educación -->
-      <div class="flex items-center gap-4 bg-white/95 px-4 py-2 rounded-xl shadow-sm border border-slate-200">
-        <img src="/asset/logo-salesianos.svg" alt="Salesianos Urnieta" class="h-7 w-auto object-contain" title="Salesianos Urnieta">
-        <div class="h-6 w-px bg-slate-200"></div>
-        <img src="/asset/logo-mendizabala.png" alt="CIFP Mendizabala LHII" class="h-7 w-auto object-contain" title="CIFP Mendizabala LHII">
-        <div class="h-6 w-px bg-slate-200"></div>
-        <img src="/asset/logo-dept-educacion-1.svg" alt="Departamento de Educación · Eusko Jaurlaritza" class="h-7 w-auto object-contain" title="Departamento de Educación · Eusko Jaurlaritza">
+      <div class="shrink-0 flex items-center justify-between sm:justify-start gap-3 sm:gap-4 bg-white px-4 py-1.5 rounded-xl shadow-xs border border-slate-200 min-w-fit">
+        <img src="/asset/logo-salesianos.svg" alt="Salesianos Urnieta" class="h-6 sm:h-7 w-auto max-w-[110px] object-contain shrink-0" title="CPIFP Salesianos Urnieta LHIPI">
+        <div class="h-5 sm:h-6 w-px bg-slate-200 shrink-0"></div>
+        <img src="/asset/logo-mendizabala.png" alt="CIFP Mendizabala LHII" class="h-6 sm:h-7 w-auto max-w-[110px] object-contain shrink-0" title="CIFP Mendizabala LHII">
+        <div class="h-5 sm:h-6 w-px bg-slate-200 shrink-0"></div>
+        <img src="/asset/logo-dept-educacion-1.svg" alt="Departamento de Educación · Eusko Jaurlaritza" class="h-7 sm:h-8 w-auto max-w-[145px] object-contain shrink-0" title="Departamento de Educación · Eusko Jaurlaritza">
       </div>
+
     </div>
   </header>
 
