@@ -181,6 +181,14 @@ async def serve_index():
     with open(index_file, "r", encoding="utf-8") as f:
         return HTMLResponse(f.read())
 
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon_endpoint():
+    ico_path = STATIC_DIR / "favicon.ico"
+    if ico_path.exists():
+        return FileResponse(ico_path, media_type="image/x-icon")
+    return Response(status_code=404)
+
 @app.get("/api/profiles")
 async def get_profiles():
     """Devuelve la lista unificada de perfiles estándar y personalizados."""
