@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
 import pymupdf
+import pikepdf
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 PAGE_W = 595.3
@@ -42,8 +43,12 @@ FOOTER_Y = 808.0
 # ---------------------------------------------------------------------------
 
 SCENARIOS_CATALOG = [
+    # =========================================================================
+    # CATEGORÍA 1: INICIACIÓN FP (GRADO MEDIO / 1º GS) - 7 RETOS
+    # =========================================================================
     {
         "id": "reto_tarjeta_richblack",
+        "category": "iniciacion",
         "title": "Reto 1: Tarjeta Corporativa con Rich Black y Sin Sangrado",
         "level": "Iniciación FP (Grado Medio / 1º GS)",
         "module": "Tratamiento de Imagen y Preimpresión Digital",
@@ -62,12 +67,137 @@ SCENARIOS_CATALOG = [
         "iso_norm": "ISO 12647-2 / ISO 15930 (PDF/X-1a)"
     },
     {
+        "id": "reto_flyer_rgb_srgb",
+        "category": "iniciacion",
+        "title": "Reto 2: Flyer Nocturno en Espacio de Color RGB sin Separación",
+        "level": "Iniciación FP (Grado Medio / 1º GS)",
+        "module": "Tratamiento de Imagen y Colorimetría",
+        "doc_type": "Flyer Publicitario A6 (105 x 148 mm)",
+        "description": "Flyer para un festival nocturno con fotografías exportadas en sRGB y titulares en colores saturados fuera del gamut imprimible en cuatricromía offset.",
+        "target_errors": [
+            "Imágenes en espacio de color RGB (sRGB IEC61966-2.1) sin separación a CMYK.",
+            "Colores fuera de gama (gamut clipping) que perderán luminosidad al imprimir.",
+            "Ausencia de perfil de propósito de salida (Output Intent PDF/X)."
+        ],
+        "learning_goals": [
+            "Dominar la conversión de color con perfil estandarizado (ISO Coated v2 / FOGRA39).",
+            "Identificar los límites del espacio cromático CMYK frente al RGB de monitor.",
+            "Configurar el Output Intent para asegurar la fidelidad cromática en taller."
+        ],
+        "iso_norm": "ISO 12647-2 / FOGRA39 / PDF/X-4"
+    },
+    {
+        "id": "reto_triptico_sin_sangre",
+        "category": "iniciacion",
+        "title": "Reto 3: Tríptico Envolvente con Fondos al Corte y Cajas al Ras",
+        "level": "Iniciación FP (Grado Medio / 1º GS)",
+        "module": "Diseño y Ensamblado de Publicaciones",
+        "doc_type": "Tríptico A4 Plegado (297 x 210 mm)",
+        "description": "Folleto desplegable de 3 palas con fondos oscuros al corte exacto (0 mm de sangre) y bloques de texto que invaden las líneas de plegado (hendido).",
+        "target_errors": [
+            "Cero milímetros de sangrado en los 4 bordes perimetrales (0 mm BleedBox).",
+            "Textos ubicados a menos de 2 mm de las líneas de doblado de las palas.",
+            "Riesgo de filetes blancos en guillotina y corte de texto al plegar."
+        ],
+        "learning_goals": [
+            "Añadir +3 mm de sangrado perimetral en documentos plegados.",
+            "Respetar la zona de seguridad mínima de 4 mm respecto al corte y hendido.",
+            "Calcular la compensación de anchura de la pala interior envolvente (97-100-100 mm)."
+        ],
+        "iso_norm": "ISO 12647-2 (Tolerancia de corte mecánico ±0.5 mm)"
+    },
+    {
+        "id": "reto_poster_baja_resolucion",
+        "category": "iniciacion",
+        "title": "Reto 4: Cartel Promocional con Imágenes Web a 72 DPI",
+        "level": "Iniciación FP (Grado Medio / 1º GS)",
+        "module": "Tratamiento de Imagen y Resolución Digital",
+        "doc_type": "Cartel A3 (297 x 420 mm)",
+        "description": "Cartel de evento musical donde la imagen principal de fondo fue descargada de una red social y escalada al 400%, alcanzando una resolución efectiva de apenas 72 DPI.",
+        "target_errors": [
+            "Resolución efectiva de 72 DPI (muy inferior al estándar de 300 DPI en offset).",
+            "Pixelado y efecto escalera visible a simple vista en la imagen central.",
+            "Logotipo corporativo en mapa de bits con compresión JPEG agresiva."
+        ],
+        "learning_goals": [
+            "Calcular la resolución efectiva en función de la escala de colocación.",
+            "Diferenciar entre resolución nativa de archivo y resolución de salida a tamaño final.",
+            "Exigir la sustitución por originales en alta resolución (≥ 300 DPI)."
+        ],
+        "iso_norm": "ISO 12647-2 (Resolución recomendada ≥ 300 DPI para trama 150-175 lpi)"
+    },
+    {
+        "id": "reto_marcapaginas_fuentes_no_incrustadas",
+        "category": "iniciacion",
+        "title": "Reto 5: Marcapáginas Cultural con Tipografías No Incrustadas",
+        "level": "Iniciación FP (Grado Medio / 1º GS)",
+        "module": "Tipografía y Tecnologías de Preimpresión",
+        "doc_type": "Marcapáginas (50 x 200 mm)",
+        "description": "Marcapáginas con citas literarias en tipografías ornamentales que no fueron incrustadas en el PDF, provocando que el RIP del flujo de trabajo las sustituya por fuentes del sistema.",
+        "target_errors": [
+            "Tipografías no incrustadas en el archivo PDF (fuentes referenciadas externamente).",
+            "Riesgo crítico de reflow tipográfico y sustitución arbitraria por Courier/Helvetica.",
+            "Textos en cuerpo 7 pt con tracking negativo que se empastarán en tirada."
+        ],
+        "learning_goals": [
+            "Comprobar que todas las fuentes estén incrustadas como subconjunto (Subset).",
+            "Entender el peligro de la sustitución automática de glifos en los RIP PostScript/PDF.",
+            "Aplicar la vectorización de emergencia o incrustación obligatoria según PDF/X."
+        ],
+        "iso_norm": "ISO 15930-1 (PDF/X-1a: Incrustación obligatoria del 100% de fuentes)"
+    },
+    {
+        "id": "reto_adhesivo_corte_inexistente",
+        "category": "iniciacion",
+        "title": "Reto 6: Adhesivo Promocional sin Cajas de Página (TrimBox/BleedBox)",
+        "level": "Iniciación FP (Grado Medio / 1º GS)",
+        "module": "Geometría del PDF y Preimpresión Digital",
+        "doc_type": "Adhesivo Cuadrado (60 x 60 mm)",
+        "description": "Archivo PDF exportado desde un software ofimático donde solo existe MediaBox, careciendo de TrimBox (línea de corte) y BleedBox (sangrado), impidiendo el posicionado automático en el RIP.",
+        "target_errors": [
+            "Ausencia de TrimBox y BleedBox normalizados en la estructura del PDF.",
+            "Tamaño de lienzo indefinido que bloquea el centrado en mesa de corte digital.",
+            "Textos a menos de 1 mm del borde perimetral del adhesivo."
+        ],
+        "learning_goals": [
+            "Conocer la jerarquía de cajas PDF: MediaBox, CropBox, BleedBox y TrimBox.",
+            "Ajustar las cajas de página con herramientas de producción y preflight.",
+            "Garantizar la interoperabilidad con mesas de corte Kongsberg y plotters."
+        ],
+        "iso_norm": "ISO 15930-7 (Definición geométrica exacta en PDF/X-4)"
+    },
+    {
+        "id": "reto_cupon_descuento_tramado",
+        "category": "iniciacion",
+        "title": "Reto 7: Cupón Descuento con Texto Legal en Gris Tramado al 40%",
+        "level": "Iniciación FP (Grado Medio / 1º GS)",
+        "module": "Control de Calidad y Tramado en Offset",
+        "doc_type": "Cupón Promocional (140 x 70 mm)",
+        "description": "Cupón con letra legal minúscula (cuerpo 4.5 pt) coloreada en gris mediante un tramado de semitono al 40% K, lo que rompe los trazos finos de las letras al formarse por puntos de trama dispersos.",
+        "target_errors": [
+            "Texto de cuerpo pequeño (4.5 pt) tramado con punto de semitono al 40% K.",
+            "Pérdida de legibilidad por el tamaño de los puntos de trama en relación al ojo de la letra.",
+            "Falta de sangre en la zona del cupón perforado."
+        ],
+        "learning_goals": [
+            "Reconocer por qué las letras menores de 7 pt deben ser trazo continuo (100% K).",
+            "Comprender la relación entre lineatura de trama (lpi) y definición de contornos tipográficos.",
+            "Ajustar estilos de carácter para textos legales en imprenta."
+        ],
+        "iso_norm": "ISO 12647-2 (Reproducción tipográfica y umbrales de legibilidad)"
+    },
+
+    # =========================================================================
+    # CATEGORÍA 2: INTERMEDIO FP (1º GRADO SUPERIOR / TALLER) - 7 RETOS
+    # =========================================================================
+    {
         "id": "reto_folleto_tac_hairlines",
-        "title": "Reto 2: Folleto Promocional con TAC 360% y Líneas Pelo (CTP)",
+        "category": "intermedio",
+        "title": "Reto 8: Folleto Promocional con TAC 365% y Líneas Pelo (CTP)",
         "level": "Intermedio (Taller de Impresión Offset / Digital)",
         "module": "Impresión Offset y Control de Producción",
         "doc_type": "Folleto A5 (148 x 210 mm)",
-        "description": "Folleto publicitario con un fondo fotográfico nocturno cuya cobertura total de tinta (TAC) alcanza el 365% y filetes dorados decorativos de 0.06 pt.",
+        "description": "Folleto publicitario con un fondo fotográfico nocturno cuya cobertura total de tinta (TAC) alcanza el 365% y filetes dorados decorativos de 0.06 pt no reproducibles en CTP.",
         "target_errors": [
             "Exceso extremo de cobertura de tinta (TAC 365% vs límite de 300%-320%).",
             "Líneas ultrafinas (0.06 pt) no reproducibles en plancha CTP térmica.",
@@ -81,12 +211,137 @@ SCENARIOS_CATALOG = [
         "iso_norm": "ISO 12647-2: Cobertura máxima de tinta ≤ 300% (Offset hojas)"
     },
     {
+        "id": "reto_catalogo_pantone_excesivo",
+        "category": "intermedio",
+        "title": "Reto 9: Catálogo Comercial con 5 Tintas Planas Pantone Directas",
+        "level": "Intermedio (1º Grado Superior)",
+        "module": "Gestión del Color y Costes de Taller",
+        "doc_type": "Catálogo A4 (210 x 297 mm)",
+        "description": "Catálogo comercial diseñado con 5 tintas planas Pantone diferentes además de cuatricromía CMYK, disparando los costes de producción en una máquina offset estándar de 4 colores.",
+        "target_errors": [
+            "5 colores directos Pantone en un trabajo presupuestado para 4 tintas CMYK.",
+            "Imposibilidad de imprimir en máquina de 4 cuerpos en una sola tirada sin 2ª pasada.",
+            "Diferencias tonales en conversión descontrolada de Pantone a CMYK."
+        ],
+        "learning_goals": [
+            "Identificar y convertir tintas planas a CMYK usando tablas LAB oficiales.",
+            "Diferenciar entre trabajos de tirada cuatricromía estándar vs colores corporativos obligatorios.",
+            "Calcular el impacto en costes de planchas CTP y horas de máquina."
+        ],
+        "iso_norm": "ISO 12647-2 / Especificaciones ECI para Impresión Comercial"
+    },
+    {
+        "id": "reto_dossier_sobreimpresion_blanco",
+        "category": "intermedio",
+        "title": "Reto 10: Dossier Corporativo con Blanco en Sobreimpresión (White Overprint)",
+        "level": "Intermedio (1º Grado Superior)",
+        "module": "Preimpresión y Separaciones de Color",
+        "doc_type": "Dossier A4 (210 x 297 mm)",
+        "description": "El logotipo corporativo blanco situado sobre un fondo fotográfico oscuro tiene activado accidentalmente el atributo de sobreimpresión (overprint), haciendo que desaparezca en la plancha.",
+        "target_errors": [
+            "Elemento vectorial blanco con sobreimpresión activada (/OP true).",
+            "Desaparición total del logotipo al rasterizar y separar en planchas CTP.",
+            "Error invisible en visores PDF convencionales que no simulan sobreimpresión."
+        ],
+        "learning_goals": [
+            "Comprender la diferencia entre Calado (Knockout) y Sobreimpresión (Overprint).",
+            "Activar la previsualización de separaciones y sobreimpresión en el flujo de trabajo.",
+            "Reparar automáticamente el blanco en sobreimpresión forzando su calado."
+        ],
+        "iso_norm": "Ghent Workgroup (GWG) Preflight Specification: White Overprint = ERROR"
+    },
+    {
+        "id": "reto_menu_trapping_descalce",
+        "category": "intermedio",
+        "title": "Reto 11: Carta de Menú con Texto Amarillo sobre Azul sin Reventado (Trapping)",
+        "level": "Intermedio (1º Grado Superior)",
+        "module": "Impresión Offset y Control de Registro",
+        "doc_type": "Carta de Restaurante (150 x 300 mm)",
+        "description": "Tipografía amarilla (100% Y) colocada sobre un fondo azul oscuro (100% C + 70% M) sin ningún trazo de reventado (trapping), provocando filetes blancos en cuanto la máquina vibra.",
+        "target_errors": [
+            "Falta de reventado (trapping) en colores adyacentes de alta luminancia.",
+            "Aparición de filetes blancos de papel entre el amarillo y el azul por descalce mecánico.",
+            "Carencia de margen de auto-trapping (mínimo 0.15 pt / 0.05 mm en offset)."
+        ],
+        "learning_goals": [
+            "Aprender la teoría del reventado: ensanchar el color más claro sobre el más oscuro.",
+            "Configurar motores de auto-trapping en el RIP antes de filmar planchas.",
+            "Inspeccionar las separaciones de color para verificar el solape entre tintas."
+        ],
+        "iso_norm": "ISO 12647-2 (Tolerancia de descalce de registro en máquina offset ≤ 0.08 mm)"
+    },
+    {
+        "id": "reto_diploma_guilloche_fino",
+        "category": "intermedio",
+        "title": "Reto 12: Orla de Diploma con Filetes Guilloche de 0.08 pt y TAC Elevado",
+        "level": "Intermedio (1º Grado Superior)",
+        "module": "Tecnología CTP y Productos de Seguridad",
+        "doc_type": "Diploma A4 Horizontal (297 x 210 mm)",
+        "description": "Orla decorativa clásica de diploma académico con complejos trazos guilloche de seguridad de 0.08 pt y masa perimetral con TAC al 330% sobre papel verjurado no estucado.",
+        "target_errors": [
+            "Trazos ornamentales de 0.08 pt por debajo del umbral mínimo de plancha CTP (0.25 pt).",
+            "Riesgo de desaparición de la orla durante el tiraje por arrastre de emulsión.",
+            "Exceso de tinta (TAC 330%) en papel poroso no estucado (Offset / WLC)."
+        ],
+        "learning_goals": [
+            "Ajustar el grosor mínimo de filete según la resolución CTP y soporte de impresión.",
+            "Aplicar curvas de compensación de ganancia de punto para líneas finas.",
+            "Adecuar el límite de tinta al tipo de papel según norma ISO (260% en offset no estucado)."
+        ],
+        "iso_norm": "ISO 12647-2 (Papel Tipo 4 no estucado: TAC máx. 260%-280%)"
+    },
+    {
+        "id": "reto_manual_k_knockout",
+        "category": "intermedio",
+        "title": "Reto 13: Manual de Taller con Texto 100% K en Calado (Knockout)",
+        "level": "Intermedio (1º Grado Superior)",
+        "module": "Preimpresión Editorial y Flujos de Trabajo",
+        "doc_type": "Manual Técnico A5 (148 x 210 mm)",
+        "description": "Cuerpo de texto en negro 100% K que cala las masas de color de fondo en vez de sobreimprimir, dejando huecos blancos en las planchas CMY vulnerables a cualquier descalce de registro.",
+        "target_errors": [
+            "Texto negro 100% K configurado en calado (knockout) sobre fondos de color.",
+            "Huecos en blanco en las planchas de Cyan, Magenta y Amarillo para cada letra.",
+            "Bordes blancos y halos alrededor de las letras en máquina offset."
+        ],
+        "learning_goals": [
+            "Comprender la regla de oro de preimpresión: Texto 100% K debe sobreimprimir siempre.",
+            "Aplicar la regla de auto-sobreimpresión de negro en el RIP o motor de preflight.",
+            "Ahorrar tiempos de ajuste de registro en la puesta a punto de máquina."
+        ],
+        "iso_norm": "Ghent Workgroup: 100% Black text must overprint"
+    },
+    {
+        "id": "reto_calendario_tinteros_descompensados",
+        "category": "intermedio",
+        "title": "Reto 14: Calendario de Sobremesa con Descompensación de Tinteros CIP3",
+        "level": "Intermedio (1º Grado Superior)",
+        "module": "Impresión Offset y Estandarización CIP3",
+        "doc_type": "Calendario Triangular (210 x 100 mm)",
+        "description": "Diseño con una gran masa oscura continua en el lateral izquierdo (cobertura 90%) y área totalmente blanca en el derecho (0%), generando una descompensación extrema entre las llaves de tinta del tintero.",
+        "target_errors": [
+            "Desequilibrio lateral extremo de entintado entre zonas adyacentes de tintero.",
+            "Riesgo de emulsión de agua en los rodillos dadores de las llaves con consumo 0%.",
+            "Dificultad de regulación del equilibrio agua-tinta y posible efecto fantasma (ghosting)."
+        ],
+        "learning_goals": [
+            "Calcular los perfiles zonales de apertura de tintero CIP3 / PPF.",
+            "Comprender la mecánica de las llaves de tintero y los rodillos zonales.",
+            "Diseñar franjas de compensación (take-off bars) para mantener consumo uniforme."
+        ],
+        "iso_norm": "CIP3 Print Production Format (PPF) v3.0 / ISO 12647-2"
+    },
+
+    # =========================================================================
+    # CATEGORÍA 3: AVANZADO FP (2º GS / MÁSTER PACKAGING Y EDITORIAL) - 6 RETOS
+    # =========================================================================
+    {
         "id": "reto_packaging_barcode_cmyk",
-        "title": "Reto 3: Estuche Packaging con Código de Barras en 4 Tintas",
+        "category": "avanzado",
+        "title": "Reto 15: Estuche Packaging con Código de Barras EAN-13 en 4 Tintas",
         "level": "Avanzado (Packaging y Troquelado)",
         "module": "Troquelado, Packaging y Trazabilidad",
         "doc_type": "Estuche Cosmético (120 x 180 mm)",
-        "description": "Estuche desplegado con código de barras EAN-13 impreso en 4 tintas sin reserva blanca, y textos de ingredientes a 1.2 mm del trazo de hendido/troquel.",
+        "description": "Estuche desplegado con código de barras EAN-13 impreso en 4 tintas sin reserva blanca, y textos legales a 1.2 mm del trazo de hendido y troquel.",
         "target_errors": [
             "Código de barras EAN-13 tramado en cuatricromía (provoca rechazo en escáneres ópticos).",
             "Falta de zona de silencio lateral (Quiet Zone) en el código de barras.",
@@ -101,11 +356,12 @@ SCENARIOS_CATALOG = [
     },
     {
         "id": "reto_revista_seguridad_lomo",
-        "title": "Reto 4: Portada de Revista con Textos en el Medianil/Lomo",
+        "category": "avanzado",
+        "title": "Reto 16: Portada y Pliegos de Revista con Textos en el Medianil/Lomo",
         "level": "Avanzado (Imposición y Encuadernación)",
         "module": "Gestión de la Producción Gráfica y Acabados",
         "doc_type": "Revista A4 (210 x 297 mm, 16 págs)",
-        "description": "Publicación editorial grapada en la que los folios explicativos y pies de foto tocan el pliegue del lomo (medianil) y la imagen de portada está en RGB sRGB.",
+        "description": "Publicación editorial grapada en la que los folios explicativos y pies de foto tocan el pliegue del lomo (medianil) a 2 mm del pliegue sin considerar la trepa o desplazamiento.",
         "target_errors": [
             "Textos e información crítica ubicados dentro de la zona de hendido del lomo (8 mm).",
             "Imágenes no separadas a CMYK (perfil de cámara sRGB).",
@@ -117,6 +373,86 @@ SCENARIOS_CATALOG = [
             "Comprender el efecto físico de la guillotina trilateral en publicaciones plegadas."
         ],
         "iso_norm": "ISO 12647-2 / Especificaciones ECI para Edición Gráfica"
+    },
+    {
+        "id": "reto_etiqueta_barniz_calado",
+        "category": "avanzado",
+        "title": "Reto 17: Etiqueta de Vino con Barniz UVI Calando en vez de Sobreimprimir",
+        "level": "Avanzado (Acabados Especiales y Etiquetas)",
+        "module": "Serigrafía, Barnices y Acabados de Alto Valor",
+        "doc_type": "Etiqueta Enológica (90 x 130 mm)",
+        "description": "Etiqueta adhesiva de vino con una capa de barniz serigráfico selectivo (Varnish) colocada con atributo knockout, provocando que se elimine la impresión CMYK inferior.",
+        "target_errors": [
+            "Tinta especial de barniz serigráfico calando las tintas de cuatricromía subyacentes.",
+            "Aparición de huecos blancos no entintados debajo de la capa de brillo.",
+            "Definición errónea de la separación técnica de barniz en el PDF."
+        ],
+        "learning_goals": [
+            "Configurar las tintas de acabado técnico (Barniz, Stamping, Golpe seco) en sobreimpresión obligatoria.",
+            "Definir nombres normalizados de tintas directas técnicas en flujos packaging.",
+            "Verificar en Adobe Acrobat Output Preview o IntelliPrint el comportamiento de las capas."
+        ],
+        "iso_norm": "ISO 12647-2 / Especificaciones GWG Packaging"
+    },
+    {
+        "id": "reto_prospecto_qr_richblack",
+        "category": "avanzado",
+        "title": "Reto 18: Prospecto Farmacéutico con Código QR en 4 Tintas sobre Papel Fino",
+        "level": "Avanzado (Packaging Farmacéutico)",
+        "module": "Prospectos y Control de Calidad Farmacéutica",
+        "doc_type": "Prospecto Médico Plegado (140 x 210 mm)",
+        "description": "Prospecto farmacéutico con código QR para prospecto digital impreso en papel biblia de 45 g/m² compuesto en negro enriquecido (Rich Black), empastándose los módulos.",
+        "target_errors": [
+            "Código QR de alta densidad compuesto en 4 tintas (Rich Black 300%).",
+            "Ganancia de punto excesiva en papel biblia fino no estucado que cierra los micropíxeles.",
+            "Imposibilidad de escaneo por pacientes o farmacéuticos."
+        ],
+        "learning_goals": [
+            "Generar códigos 2D bidimensionales (QR, DataMatrix) estrictamente en 100% K puro.",
+            "Calcular la ganancia de punto en papeles de bajo gramaje (38-50 g/m²).",
+            "Verificar la legibilidad con lectores ópticos de control de calidad."
+        ],
+        "iso_norm": "ISO/IEC 18004 (Código QR) / ISO 15378 (Materiales de envasado farmacéutico)"
+    },
+    {
+        "id": "reto_imposicion_sra3_descuadre",
+        "category": "avanzado",
+        "title": "Reto 19: Pliego de Imposición SRA3 sin Calles de Corte ni Marcas de Taller",
+        "level": "Avanzado (Imposición y Montaje de Pliegos)",
+        "module": "Imposición Digital y CTP",
+        "doc_type": "Pliego SRA3 Montado a Mano (450 x 320 mm)",
+        "description": "Pliego SRA3 montado artesanalmente por un diseñador con 8 tarjetas pegadas a corte cero sin calle de separación, sin marcas de corte, sin cruces de registro y sin tira FOGRA.",
+        "target_errors": [
+            "Ausencia de calles de corte y sangre intermedia entre poses (gutter 0 mm).",
+            "Carencia de marcas de imprenta (cruces de registro, marcas de corte y colas de alondra).",
+            "Falta de tira de control densitométrica ISO 12647-2 para ajuste de color en máquina."
+        ],
+        "learning_goals": [
+            "Utilizar el motor de imposición paramétrica de taller en vez de montaje manual.",
+            "Calcular las calles mínimas de corte según la cuchilla de la guillotina (mínimo 4 mm).",
+            "Incorporar tiras de control espectrofotométrico normalizadas (FOGRA / Idealliance)."
+        ],
+        "iso_norm": "ISO 12647-2 / CIP3 / CIP4 JDF Imposition Standards"
+    },
+    {
+        "id": "reto_caja_pegado_barnizado",
+        "category": "avanzado",
+        "title": "Reto 20: Envase Alimentario con Masa de Tinta y Barniz en la Solapa de Pegado",
+        "level": "Avanzado (Troquelado y Líneas de Encolado)",
+        "module": "Plegado y Pegado de Envases Plegables",
+        "doc_type": "Caja de Cartoncillo Plegable (200 x 280 mm)",
+        "description": "Envase alimentario cuya pestaña lateral de pegado (glue flap) está completamente cubierta por tinta negra y barniz de sobreimpresión, impidiendo la adhesión química de la cola PUR caliente en la plegadora-pegadora.",
+        "target_errors": [
+            "Masa de tinta y barniz cubriendo la solapa de encolado (Glue Flap de 15 mm).",
+            "Riesgo de apertura espontánea del envase en la línea de envasado del cliente.",
+            "Costosa parada de máquina plegadora-pegadora por fallo de pegado."
+        ],
+        "learning_goals": [
+            "Diseñar reservas en blanco obligatorias en las solapas de pegado de packaging.",
+            "Comprender la química de los adhesivos hot-melt y colas frías sobre cartón.",
+            "Supervisar los planos de troquel y trazado estructural en preimpresión."
+        ],
+        "iso_norm": "ECMA Packaging Standards / ISO 12647-2"
     }
 ]
 
@@ -128,35 +464,30 @@ def generate_scenario_pdf(scenario_id: str, output_path: Path) -> Path:
     """
     Genera un PDF sintético con los errores intencionados del reto seleccionado
     para que el alumno pueda inspeccionarlo directamente con el motor de preflight.
+    Soporta los 20 retos del catálogo en las 3 categorías formativas de FP.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc = pymupdf.open()
 
+    # -----------------------------------------------------------------------
+    # RETO 1: Tarjeta Corporativa con Rich Black y Sin Sangrado
+    # -----------------------------------------------------------------------
     if scenario_id == "reto_tarjeta_richblack":
-        # Tarjeta 85 x 55 mm = 240.94 x 155.91 pt
-        w, h = 240.94, 155.91
+        w, h = 240.94, 155.91 # 85 x 55 mm
         page = doc.new_page(width=w, height=h)
-        # TrimBox y MediaBox exactos (sin BleedBox = 0 mm sangre)
-        page.set_trimbox(pymupdf.Rect(0, 0, w, h))
+        page.set_trimbox(page.rect)
         page.set_mediabox(pymupdf.Rect(0, 0, w, h))
 
         # Fondo oscuro al corte exacto (Rich black C=60, M=50, Y=40, K=100)
-        # En PyMuPDF representamos el Rich Black con color RGB equivalente oscuro
         page.draw_rect(pymupdf.Rect(0, 0, w, h), fill=(0.04, 0.03, 0.03))
-
-        # Cuadro decorativo claro
         page.draw_rect(pymupdf.Rect(10, 10, w - 10, h - 10), color=(0.85, 0.70, 0.20), width=0.8)
 
-        # Texto corporativo
         page.insert_text(pymupdf.Point(20, 40), "SERVICIOS GRÁFICOS NORTE", fontsize=11, fontname="helv", color=(1, 1, 1))
         page.insert_text(pymupdf.Point(20, 56), "Consultoría Gráfica & Packaging", fontsize=7.5, fontname="helv", color=(0.85, 0.70, 0.20))
-
-        # Texto muy fino en 4 tintas (Simulado en RGB oscuro para detonar Rich Black)
         page.insert_text(pymupdf.Point(20, 85), "Director Técnico: Martin Otegui", fontsize=6.0, fontname="helv", color=(0.05, 0.05, 0.06))
         page.insert_text(pymupdf.Point(20, 97), "Tel: +34 943 00 11 22 · info@graficasnorte.eus", fontsize=5.5, fontname="helv", color=(0.05, 0.05, 0.06))
         page.insert_text(pymupdf.Point(20, 108), "Parque Tecnológico Miramon, Donostia", fontsize=5.5, fontname="helv", color=(0.05, 0.05, 0.06))
 
-        # Insignia baja resolución simulada
         img = Image.new("RGB", (40, 40), color=(220, 180, 50))
         d = ImageDraw.Draw(img)
         d.rectangle([5, 5, 35, 35], outline=(30, 30, 30), width=2)
@@ -165,13 +496,137 @@ def generate_scenario_pdf(scenario_id: str, output_path: Path) -> Path:
         img.save(buf, format="PNG")
         page.insert_image(pymupdf.Rect(w - 60, 30, w - 20, 70), stream=buf.getvalue())
 
-    elif scenario_id == "reto_folleto_tac_hairlines":
-        # Folleto A5: 148 x 210 mm = 419.5 x 595.3 pt
-        w, h = 419.5, 595.3
+    # -----------------------------------------------------------------------
+    # RETO 2: Flyer Nocturno en Espacio de Color RGB sin Separación
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_flyer_rgb_srgb":
+        w, h = 297.64, 419.53 # A6
         page = doc.new_page(width=w, height=h)
-        page.set_trimbox(pymupdf.Rect(0, 0, w, h))
+        page.set_trimbox(page.rect)
 
-        # Fondo con gran densidad de tinta (simula TAC 360%)
+        # Fondo con gradiente simulado en RGB vivo
+        page.draw_rect(pymupdf.Rect(0, 0, w, h), fill=(0.05, 0.02, 0.15))
+        page.insert_text(pymupdf.Point(30, 50), "ELECTRO NIGHT FESTIVAL 2026", fontsize=15, fontname="helv", color=(0.0, 0.95, 0.95))
+        page.insert_text(pymupdf.Point(30, 75), "Live Acts · Visuals · Kursaal Donostia", fontsize=9, fontname="helv", color=(1.0, 0.1, 0.7))
+
+        # Imagen decorativa en RGB puro de cámara (sRGB no separado)
+        img_rgb = Image.new("RGB", (180, 120), color=(15, 30, 80))
+        idraw = ImageDraw.Draw(img_rgb)
+        idraw.ellipse([20, 10, 160, 110], fill=(0, 240, 255), outline=(255, 0, 180), width=4)
+        idraw.text((40, 50), "sRGB GAMUT CLIP", fill=(255, 255, 255))
+        buf = io.BytesIO()
+        img_rgb.save(buf, format="JPEG", quality=85)
+        page.insert_image(pymupdf.Rect(30, 100, w - 30, 220), stream=buf.getvalue())
+
+        page.insert_text(pymupdf.Point(30, 260), "Artistas Confirmados:", fontsize=11, fontname="helv", color=(1, 1, 1))
+        page.insert_text(pymupdf.Point(30, 285), "DJ SynthWave · Visual Beats Crew · Neon Live", fontsize=8.5, fontname="helv", color=(0.7, 0.8, 1))
+        page.insert_text(pymupdf.Point(30, 360), "Entradas a la venta en www.electrofpeuskadi.eus", fontsize=8, fontname="helv", color=(0.0, 0.9, 0.8))
+
+    # -----------------------------------------------------------------------
+    # RETO 3: Tríptico Envolvente con Fondos al Corte y Cajas al Ras
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_triptico_sin_sangre":
+        w, h = 841.89, 595.28 # A4 Horizontal
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        panel_w = w / 3.0 # 280.6 pt cada pala
+        # Pala 1 (Izquierda)
+        page.draw_rect(pymupdf.Rect(0, 0, panel_w, h), fill=(0.12, 0.22, 0.35))
+        # Pala 2 (Centro)
+        page.draw_rect(pymupdf.Rect(panel_w, 0, panel_w * 2, h), fill=(0.16, 0.28, 0.42))
+        # Pala 3 (Derecha)
+        page.draw_rect(pymupdf.Rect(panel_w * 2, 0, w, h), fill=(0.20, 0.35, 0.50))
+
+        # Líneas de plegado (hendido)
+        page.draw_line(pymupdf.Point(panel_w, 0), pymupdf.Point(panel_w, h), color=(0.8, 0.8, 0.9), width=0.5)
+        page.draw_line(pymupdf.Point(panel_w * 2, 0), pymupdf.Point(panel_w * 2, h), color=(0.8, 0.8, 0.9), width=0.5)
+
+        # Textos invadiendo líneas de plegado (a 1 pt de distancia)
+        page.insert_text(pymupdf.Point(panel_w - 90, 80), "PALA INTERIOR", fontsize=12, fontname="helv", color=(1, 1, 1))
+        page.insert_text(pymupdf.Point(panel_w - 4, 140), "TEXTO AL BORDE DEL PLIEGUE (PELIGRO DE CORTE)", fontsize=6.5, fontname="helv", color=(1, 0.4, 0.4))
+        page.insert_text(pymupdf.Point(panel_w * 2 - 4, 140), "COLUMNA DE CONTACTO PEGADA AL HENDIDO", fontsize=6.5, fontname="helv", color=(1, 0.4, 0.4))
+
+    # -----------------------------------------------------------------------
+    # RETO 4: Cartel Promocional con Imágenes Web a 72 DPI
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_poster_baja_resolucion":
+        w, h = 841.89, 1190.55 # A3
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        page.draw_rect(pymupdf.Rect(0, 0, w, 200), fill=(0.15, 0.15, 0.20))
+        page.insert_text(pymupdf.Point(60, 110), "BIZKAIA GRAPHIC EXPO 2026", fontsize=32, fontname="helv", color=(1, 1, 1))
+        page.insert_text(pymupdf.Point(60, 150), "Feria Internacional de Artes Gráficas y Packaging", fontsize=16, fontname="helv", color=(0.85, 0.70, 0.20))
+
+        # Imagen web de 72 DPI estirada en gran formato
+        img_72 = Image.new("RGB", (120, 160), color=(180, 70, 40))
+        idraw = ImageDraw.Draw(img_72)
+        idraw.rectangle([10, 10, 110, 150], outline=(255, 255, 255), width=3)
+        idraw.text((20, 70), "LOW-RES 72 DPI", fill=(255, 255, 255))
+        buf = io.BytesIO()
+        img_72.save(buf, format="JPEG", quality=40)
+        # Se coloca en un cuadro enorme de 600x500 pt -> resolución resultante ~17 DPI
+        page.insert_image(pymupdf.Rect(120, 260, 720, 760), stream=buf.getvalue())
+        page.insert_text(pymupdf.Point(120, 800), "Imagen principal colocada a escala 450% sin resolución nativa suficiente", fontsize=11, fontname="helv", color=(0.4, 0.4, 0.4))
+
+    # -----------------------------------------------------------------------
+    # RETO 5: Marcapáginas Cultural con Tipografías No Incrustadas
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_marcapaginas_fuentes_no_incrustadas":
+        w, h = 141.73, 566.93 # 50 x 200 mm
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        page.draw_rect(pymupdf.Rect(0, 0, w, h), fill=(0.96, 0.94, 0.90))
+        page.draw_rect(pymupdf.Rect(8, 8, w - 8, h - 8), color=(0.5, 0.3, 0.2), width=1)
+        page.insert_text(pymupdf.Point(20, 60), "DONOSTIA", fontsize=14, fontname="times-bold", color=(0.4, 0.2, 0.1))
+        page.insert_text(pymupdf.Point(20, 85), "HIRIBURU KULTURALA", fontsize=7, fontname="times-italic", color=(0.6, 0.4, 0.2))
+
+        # Texto que invade márgenes perimetrales (1 mm = 2.8 pt)
+        page.insert_text(pymupdf.Point(3.0, 250), "«Irakurtzea bidaia bat da mugitu gabe»", fontsize=6.8, fontname="times-roman", color=(0.2, 0.2, 0.2))
+        page.insert_text(pymupdf.Point(3.0, 320), "Fuente tipográfica no incrustada en el PDF", fontsize=5.8, fontname="times-roman", color=(0.8, 0.1, 0.1))
+
+    # -----------------------------------------------------------------------
+    # RETO 6: Adhesivo Promocional sin Cajas de Página (TrimBox/BleedBox)
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_adhesivo_corte_inexistente":
+        w, h = 170.08, 170.08 # 60 x 60 mm
+        page = doc.new_page(width=w, height=h)
+        # No asignamos TrimBox ni BleedBox (solo MediaBox por defecto)
+
+        page.draw_circle(pymupdf.Point(w / 2, h / 2), 80, fill=(0.1, 0.5, 0.3))
+        page.insert_text(pymupdf.Point(25, 75), "ECO BASQUE", fontsize=15, fontname="helv", color=(1, 1, 1))
+        page.insert_text(pymupdf.Point(35, 95), "100% ORGANIKOA", fontsize=8.5, fontname="helv", color=(0.9, 0.9, 0.2))
+        # Texto rozando el borde perimetral
+        page.insert_text(pymupdf.Point(4.0, 155), "Certificado Euskadi Calidad · Lote 2026", fontsize=5.5, fontname="helv", color=(0.2, 0.2, 0.2))
+
+    # -----------------------------------------------------------------------
+    # RETO 7: Cupón Descuento con Texto Legal en Gris Tramado al 40%
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_cupon_descuento_tramado":
+        w, h = 396.85, 198.43 # 140 x 70 mm
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        page.draw_rect(pymupdf.Rect(0, 0, w, h), fill=(0.98, 0.98, 0.95))
+        page.draw_rect(pymupdf.Rect(10, 10, w - 10, h - 10), color=(0.8, 0.2, 0.2), width=1.5)
+        page.insert_text(pymupdf.Point(25, 50), "VALE DESCUENTO 20%", fontsize=18, fontname="helv", color=(0.8, 0.1, 0.1))
+        page.insert_text(pymupdf.Point(25, 75), "En servicios de encuadernación y plastificado", fontsize=9.5, fontname="helv", color=(0.3, 0.3, 0.3))
+
+        # Texto legal en gris 40% tramado de cuerpo diminuto (4.5 pt)
+        page.insert_text(pymupdf.Point(25, 120), "Condiciones legales: Válido hasta el 31/12/2026 en establecimientos asociados. No acumulable a otras promociones.", fontsize=4.5, fontname="helv", color=(0.60, 0.60, 0.60))
+        page.insert_text(pymupdf.Point(25, 132), "El texto gris en cuerpo 4.5 pt produce puntos de semitono rotos e ilegibles al imprimir en máquina offset.", fontsize=4.5, fontname="helv", color=(0.60, 0.60, 0.60))
+
+    # -----------------------------------------------------------------------
+    # RETO 8: Folleto Promocional con TAC 365% y Líneas Pelo (CTP)
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_folleto_tac_hairlines":
+        w, h = 419.53, 595.28 # A5
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        # Fondo con gran densidad de tinta (simula TAC 365%)
         page.draw_rect(pymupdf.Rect(0, 0, w, h), fill=(0.02, 0.01, 0.01))
 
         # Líneas pelo (hairlines < 0.25 pt)
@@ -183,64 +638,301 @@ def generate_scenario_pdf(scenario_id: str, output_path: Path) -> Path:
         page.insert_text(pymupdf.Point(40, 145), "Gran Gala de Apertura · Temporada 2026/2027", fontsize=11, fontname="helv", color=(0.9, 0.8, 0.4))
         page.insert_text(pymupdf.Point(40, 180), "Auditorio Kursaal · Donostia-San Sebastián", fontsize=10, fontname="helv", color=(0.8, 0.8, 0.8))
 
-        # Recuadro informativo con texto
         page.draw_rect(pymupdf.Rect(35, 220, w - 35, 480), fill=(0.08, 0.06, 0.07), color=(0.9, 0.8, 0.4), width=0.1)
         page.insert_text(pymupdf.Point(50, 260), "Programa de Obras:", fontsize=12, fontname="helv", color=(1, 1, 1))
         page.insert_text(pymupdf.Point(50, 290), "1. Obertura Festiva - D. Shostakovich", fontsize=9, fontname="helv", color=(0.85, 0.85, 0.85))
         page.insert_text(pymupdf.Point(50, 315), "2. Sinfonía Nº 9 en Mi menor - A. Dvorak", fontsize=9, fontname="helv", color=(0.85, 0.85, 0.85))
         page.insert_text(pymupdf.Point(50, 340), "3. Danzas Polovtsianas - A. Borodin", fontsize=9, fontname="helv", color=(0.85, 0.85, 0.85))
 
-    elif scenario_id == "reto_packaging_barcode_cmyk":
-        # Estuche Packaging: 120 x 180 mm = 340.16 x 510.24 pt
-        w, h = 340.16, 510.24
+    # -----------------------------------------------------------------------
+    # RETO 9: Catálogo Comercial con 5 Tintas Planas Pantone Directas
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_catalogo_pantone_excesivo":
+        w, h = 595.28, 841.89 # A4
         page = doc.new_page(width=w, height=h)
-        page.set_trimbox(pymupdf.Rect(0, 0, w, h))
+        page.set_trimbox(page.rect)
+
+        page.draw_rect(pymupdf.Rect(0, 0, w, 140), fill=(0.1, 0.15, 0.25))
+        page.insert_text(pymupdf.Point(50, 70), "CATÁLOGO DE TENDENCIAS OTOÑO/INVIERNO", fontsize=18, fontname="helv", color=(1, 1, 1))
+        page.insert_text(pymupdf.Point(50, 100), "Edición Coleccionista con 5 Tintas Directas Pantone", fontsize=11, fontname="helv", color=(0.9, 0.7, 0.3))
+
+        # Muestrario de las 5 tintas spot
+        pantones = [
+            ("PANTONE 186 C (Rojo)", (0.85, 0.1, 0.2)),
+            ("PANTONE 286 C (Azul Real)", (0.1, 0.2, 0.8)),
+            ("PANTONE 368 C (Verde)", (0.3, 0.75, 0.2)),
+            ("PANTONE 123 C (Amarillo)", (0.95, 0.8, 0.1)),
+            ("PANTONE Reflex Blue C", (0.05, 0.1, 0.5))
+        ]
+        y_pos = 180
+        for name, col in pantones:
+            page.draw_rect(pymupdf.Rect(50, y_pos, 110, y_pos + 40), fill=col)
+            page.insert_text(pymupdf.Point(130, y_pos + 25), name, fontsize=10, fontname="helv", color=(0.2, 0.2, 0.2))
+            y_pos += 65
+
+    # -----------------------------------------------------------------------
+    # RETO 10: Dossier Corporativo con Blanco en Sobreimpresión (White Overprint)
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_dossier_sobreimpresion_blanco":
+        w, h = 595.28, 841.89 # A4
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        # Fondo oscuro continuo
+        page.draw_rect(pymupdf.Rect(0, 0, w, h), fill=(0.08, 0.12, 0.22))
+        page.insert_text(pymupdf.Point(50, 80), "MEMORIA ANUAL DE SOSTENIBILIDAD", fontsize=20, fontname="helv", color=(0.3, 0.7, 0.9))
+
+        # Logotipo blanco con advertencia de White Overprint
+        page.draw_rect(pymupdf.Rect(50, 180, 250, 280), fill=(1, 1, 1))
+        page.insert_text(pymupdf.Point(70, 240), "LOGO BLANCO", fontsize=16, fontname="helv", color=(0.08, 0.12, 0.22))
+        page.insert_text(pymupdf.Point(50, 310), "AVISO TÉCNICO: Elemento blanco configurado con /OP true (Sobreimpresión activa).", fontsize=8.5, fontname="helv", color=(1, 0.4, 0.4))
+        page.insert_text(pymupdf.Point(50, 325), "En el RIP de preimpresión este logotipo desaparecerá al filmar las planchas.", fontsize=8.5, fontname="helv", color=(0.8, 0.8, 0.8))
+
+    # -----------------------------------------------------------------------
+    # RETO 11: Carta de Menú con Texto Amarillo sobre Azul sin Reventado
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_menu_trapping_descalce":
+        w, h = 425.20, 850.39 # 150 x 300 mm
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        # Fondo azul intenso (100% Cyan + 50% Magenta)
+        page.draw_rect(pymupdf.Rect(0, 0, w, h), fill=(0.0, 0.4, 0.85))
+
+        page.insert_text(pymupdf.Point(40, 90), "RESTAURANTE MARITIMO", fontsize=18, fontname="helv", color=(1, 1, 1))
+        # Texto amarillo puro sobre azul sin trapping
+        page.insert_text(pymupdf.Point(40, 150), "MENÚ DEGUSTACIÓN CANTÁBRICO", fontsize=13, fontname="helv", color=(1.0, 0.95, 0.0))
+        page.insert_text(pymupdf.Point(40, 180), "Primeros Platos (Texto 100% Y sobre 100% C):", fontsize=10, fontname="helv", color=(1.0, 0.95, 0.0))
+        page.insert_text(pymupdf.Point(40, 210), "· Txangurro a la Donostiarra al Horno", fontsize=9, fontname="helv", color=(1.0, 0.95, 0.0))
+        page.insert_text(pymupdf.Point(40, 230), "· Kokotxas de Merluza al Pil-Pil Tradicional", fontsize=9, fontname="helv", color=(1.0, 0.95, 0.0))
+        page.insert_text(pymupdf.Point(40, 320), "Incidencia: Falta de auto-trapping en bordes de alto contraste luminotécnico.", fontsize=8, fontname="helv", color=(1, 1, 1))
+
+    # -----------------------------------------------------------------------
+    # RETO 12: Orla de Diploma con Filetes Guilloche de 0.08 pt y TAC Elevado
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_diploma_guilloche_fino":
+        w, h = 841.89, 595.28 # A4 Horizontal
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        page.draw_rect(pymupdf.Rect(0, 0, w, h), fill=(0.99, 0.98, 0.95))
+        # Filetes ornamentales ultrafinos (0.07 pt y 0.09 pt)
+        for offset in range(12, 32, 4):
+            page.draw_rect(pymupdf.Rect(offset, offset, w - offset, h - offset), color=(0.7, 0.5, 0.1), width=0.07)
+
+        page.insert_text(pymupdf.Point(120, 140), "DIPLOMA DE EXCELENCIA TÉCNICA EN ARTES GRÁFICAS", fontsize=18, fontname="times-bold", color=(0.2, 0.2, 0.2))
+        page.insert_text(pymupdf.Point(220, 220), "Se otorga el presente reconocimiento al alumno/a por su destreza en preimpresión.", fontsize=10, fontname="times-italic", color=(0.3, 0.3, 0.3))
+
+        # Medallón oscuro con TAC 340%
+        page.draw_circle(pymupdf.Point(w / 2, 380), 50, fill=(0.04, 0.02, 0.02), color=(0.7, 0.5, 0.1), width=0.08)
+        page.insert_text(pymupdf.Point(w / 2 - 25, 385), "SELLO CTP", fontsize=10, fontname="helv", color=(0.9, 0.8, 0.3))
+
+    # -----------------------------------------------------------------------
+    # RETO 13: Manual de Taller con Texto 100% K en Calado (Knockout)
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_manual_k_knockout":
+        w, h = 419.53, 595.28 # A5
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        page.draw_rect(pymupdf.Rect(0, 0, w, 100), fill=(0.2, 0.5, 0.8))
+        page.insert_text(pymupdf.Point(30, 60), "MANUAL DE OPERACIÓN DE PRENSA", fontsize=14, fontname="helv", color=(1, 1, 1))
+
+        # Franja de color donde el texto negro está calando
+        page.draw_rect(pymupdf.Rect(20, 140, w - 20, 300), fill=(0.9, 0.6, 0.2))
+        page.insert_text(pymupdf.Point(35, 175), "INSTRUCCIÓN CRÍTICA DE SEGURIDAD:", fontsize=11, fontname="helv", color=(0, 0, 0))
+        page.insert_text(pymupdf.Point(35, 205), "El texto negro 100% K está configurado en calado (knockout).", fontsize=9, fontname="helv", color=(0, 0, 0))
+        page.insert_text(pymupdf.Point(35, 225), "Esto genera huecos en blanco en las planchas de color inferiores.", fontsize=8.5, fontname="helv", color=(0, 0, 0))
+        page.insert_text(pymupdf.Point(35, 245), "Cualquier descalce de registro en máquina dejará ver el papel blanco.", fontsize=8.5, fontname="helv", color=(0, 0, 0))
+
+    # -----------------------------------------------------------------------
+    # RETO 14: Calendario de Sobremesa con Descompensación de Tinteros CIP3
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_calendario_tinteros_descompensados":
+        w, h = 595.28, 283.46 # 210 x 100 mm
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        # Mitad izquierda: masa negra densa (cobertura ~90%)
+        page.draw_rect(pymupdf.Rect(0, 0, w / 2, h), fill=(0.02, 0.02, 0.02))
+        page.insert_text(pymupdf.Point(20, 50), "CALENDARIO 2026", fontsize=18, fontname="helv", color=(1, 1, 1))
+        page.insert_text(pymupdf.Point(20, 90), "ZONA DE LLAVES 1-8: COBERTURA 92%", fontsize=10, fontname="helv", color=(0.8, 0.8, 0.2))
+
+        # Mitad derecha: completamente blanca (cobertura 0%)
+        page.insert_text(pymupdf.Point(w / 2 + 20, 50), "ZONA DE LLAVES 9-16: COBERTURA 0%", fontsize=10, fontname="helv", color=(0.2, 0.2, 0.2))
+        page.insert_text(pymupdf.Point(w / 2 + 20, 90), "Desbalance extremo de consumo en el tintero CIP3", fontsize=8.5, fontname="helv", color=(0.5, 0.5, 0.5))
+
+    # -----------------------------------------------------------------------
+    # RETO 15: Estuche Packaging con Código de Barras EAN-13 en 4 Tintas
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_packaging_barcode_cmyk":
+        w, h = 340.16, 510.24 # 120 x 180 mm
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
 
         page.draw_rect(pymupdf.Rect(0, 0, w, h), fill=(0.95, 0.94, 0.92))
-
-        # Título producto
         page.insert_text(pymupdf.Point(30, 60), "CREMA DERMO-REPARADORA BIO", fontsize=14, fontname="helv", color=(0.2, 0.4, 0.3))
         page.insert_text(pymupdf.Point(30, 80), "Con Extracto Puro de Caléndula y Karité", fontsize=8.5, fontname="helv", color=(0.4, 0.5, 0.4))
 
         # Texto legal que invade zona de seguridad (a 1.2 mm = 3.4 pt del borde)
         page.insert_text(pymupdf.Point(3.4, 150), "Lote: 2026-X9 / Caducidad: 12/2028 / Fabricado en la UE para Laboratorios DermoLab S.L.", fontsize=5.0, fontname="helv", color=(0.1, 0.1, 0.1))
 
-        # Simular código de barras EAN-13 en 4 tintas (color RGB no puro sin quiet zone)
-        # Dibuja barras con colores compuestos
+        # Código de barras en 4 tintas
         bx, by = 60.0, 360.0
         bw, bh = 140.0, 60.0
-        # Fondo sin reserva (directo sobre fondo gris)
         page.insert_text(pymupdf.Point(bx, by - 10), "Código de Barras Comercial (EAN-13):", fontsize=7.5, fontname="helv", color=(0.2, 0.2, 0.2))
 
-        # Dibuja barras tramadas
         random.seed(42)
         cur_x = bx
         while cur_x < bx + bw:
             bar_w = random.choice([1.2, 2.4, 3.6])
-            # Color marrón oscuro/morado (simulando 4 tintas)
             page.draw_rect(pymupdf.Rect(cur_x, by, cur_x + bar_w, by + bh), fill=(0.15, 0.10, 0.08))
             cur_x += bar_w + random.choice([1.2, 2.4])
 
         page.insert_text(pymupdf.Point(bx + 15, by + bh + 12), "8 412345 678905", fontsize=9, fontname="helv", color=(0.15, 0.10, 0.08))
 
-    else: # reto_revista_seguridad_lomo u otro
-        w, h = 595.3, 841.9 # A4
+    # -----------------------------------------------------------------------
+    # RETO 16: Portada y Pliegos de Revista con Textos en el Medianil/Lomo
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_revista_seguridad_lomo":
+        w, h = 595.28, 841.89 # A4
         page = doc.new_page(width=w, height=h)
-        page.set_trimbox(pymupdf.Rect(0, 0, w, h))
+        page.set_trimbox(page.rect)
 
-        # Cabecera
         page.draw_rect(pymupdf.Rect(0, 0, w, 120), fill=(0.10, 0.25, 0.45))
         page.insert_text(pymupdf.Point(40, 70), "REVISTA TÉCNICA DE FP INDUSTRIAL", fontsize=20, fontname="helv", color=(1, 1, 1))
         page.insert_text(pymupdf.Point(40, 95), "Edición Euskadi 2026 · Nuevas Tecnologías en Artes Gráficas", fontsize=10, fontname="helv", color=(0.8, 0.9, 1))
 
         # Texto que invade el medianil (a 3 mm del lomo izquierdo)
         page.insert_text(pymupdf.Point(8.5, 200), "NOTA EDITORIAL AL BORDE DEL PLIEGUE (PELIGRO DE PÉRDIDA EN ENCUADERNACIÓN)", fontsize=6.5, fontname="helv", color=(0.8, 0.1, 0.1))
-
-        # Columnas de texto
         page.insert_text(pymupdf.Point(40, 240), "La digitalización de los procesos de preimpresión...", fontsize=10, fontname="helv", color=(0.2, 0.2, 0.2))
+
+    # -----------------------------------------------------------------------
+    # RETO 17: Etiqueta de Vino con Barniz UVI Calando en vez de Sobreimprimir
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_etiqueta_barniz_calado":
+        w, h = 255.12, 368.50 # 90 x 130 mm
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        page.draw_rect(pymupdf.Rect(0, 0, w, h), fill=(0.15, 0.10, 0.12))
+        page.insert_text(pymupdf.Point(25, 60), "SEÑORÍO DE ÁLAVA", fontsize=16, fontname="times-bold", color=(0.9, 0.8, 0.4))
+        page.insert_text(pymupdf.Point(25, 85), "Gran Reserva 2020 · Rioja Alavesa", fontsize=9, fontname="times-italic", color=(0.7, 0.7, 0.7))
+
+        # Hueco calado para barniz que elimina la tinta inferior
+        page.draw_rect(pymupdf.Rect(30, 140, w - 30, 240), fill=(1, 1, 1))
+        page.insert_text(pymupdf.Point(40, 180), "ZONA DE BARNIZ UVI EN CALADO", fontsize=8.5, fontname="helv", color=(0.8, 0.1, 0.1))
+        page.insert_text(pymupdf.Point(40, 200), "Fallo: Deja hueco blanco al calar en vez de sobreimprimir", fontsize=7.0, fontname="helv", color=(0.3, 0.3, 0.3))
+
+    # -----------------------------------------------------------------------
+    # RETO 18: Prospecto Farmacéutico con Código QR en 4 Tintas
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_prospecto_qr_richblack":
+        w, h = 396.85, 595.28 # 140 x 210 mm
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        page.insert_text(pymupdf.Point(25, 40), "PARACETAMOL RETARD 1000 mg", fontsize=14, fontname="helv", color=(0, 0, 0))
+        page.insert_text(pymupdf.Point(25, 60), "Comprimidos de liberación prolongada EFG", fontsize=8.5, fontname="helv", color=(0.3, 0.3, 0.3))
+
+        # QR denso en Rich Black
+        qrx, qry = 30.0, 100.0
+        qrs = 100.0
+        page.draw_rect(pymupdf.Rect(qrx, qry, qrx + qrs, qry + qrs), fill=(1, 1, 1), color=(0.04, 0.03, 0.04), width=1)
+        # Módulos QR en 4 tintas
+        for row in range(10):
+            for col in range(10):
+                if (row + col) % 2 == 0 or (row in (0, 9) and col in (0, 9)):
+                    page.draw_rect(
+                        pymupdf.Rect(qrx + col * 10, qry + row * 10, qrx + (col + 1) * 10, qry + (row + 1) * 10),
+                        fill=(0.04, 0.03, 0.04) # Rich Black
+                    )
+        page.insert_text(pymupdf.Point(qrx, qry + qrs + 15), "QR médico en Rich Black (falla en escáner por empastado)", fontsize=7, fontname="helv", color=(0.8, 0.1, 0.1))
+
+    # -----------------------------------------------------------------------
+    # RETO 19: Pliego de Imposición SRA3 sin Calles de Corte ni Marcas de Taller
+    # -----------------------------------------------------------------------
+    elif scenario_id == "reto_imposicion_sra3_descuadre":
+        w, h = 1275.59, 907.09 # SRA3 (450 x 320 mm)
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        # Montaje de 8 poses pegadas con gutter 0 mm
+        cw, ch = 240.94, 155.91
+        start_x, start_y = 150.0, 150.0
+        for r in range(2):
+            for c in range(4):
+                px = start_x + c * cw
+                py = start_y + r * ch
+                page.draw_rect(pymupdf.Rect(px, py, px + cw, py + ch), fill=(0.15, 0.25, 0.40), color=(1, 1, 1), width=0.5)
+                page.insert_text(pymupdf.Point(px + 20, py + 40), f"TARJETA #{r*4 + c + 1}", fontsize=11, fontname="helv", color=(1, 1, 1))
+                page.insert_text(pymupdf.Point(px + 20, py + 70), "Gutter 0 mm (Sin calle de corte)", fontsize=7.5, fontname="helv", color=(0.9, 0.8, 0.2))
+
+        page.insert_text(pymupdf.Point(150, 520), "MONTAJE SRA3 MANUAL: Sin marcas de corte, sin cruces de registro, sin tira de control.", fontsize=12, fontname="helv", color=(0.8, 0.1, 0.1))
+
+    # -----------------------------------------------------------------------
+    # RETO 20: Envase Alimentario con Masa de Tinta y Barniz en la Solapa de Pegado
+    # -----------------------------------------------------------------------
+    else: # reto_caja_pegado_barnizado u otros
+        w, h = 566.93, 793.70 # 200 x 280 mm
+        page = doc.new_page(width=w, height=h)
+        page.set_trimbox(page.rect)
+
+        # Solapa de pegado (15 mm = 42.5 pt)
+        flap_w = 42.5
+        page.draw_rect(pymupdf.Rect(0, 0, flap_w, h), fill=(0.02, 0.02, 0.02))
+        page.insert_text(pymupdf.Point(6, 200), "SOLAPA DE PEGADO", fontsize=7.0, fontname="helv", color=(1, 1, 1), rotate=90)
+        page.insert_text(pymupdf.Point(22, 200), "ERROR: Tinta y barniz en área de cola", fontsize=6.5, fontname="helv", color=(1, 0.4, 0.4), rotate=90)
+
+        # Cuerpo del envase
+        page.draw_rect(pymupdf.Rect(flap_w, 0, w, h), fill=(0.94, 0.92, 0.88))
+        page.insert_text(pymupdf.Point(flap_w + 30, 80), "COPOS DE AVENA INTEGRAL BIO", fontsize=18, fontname="helv", color=(0.2, 0.4, 0.2))
+        page.insert_text(pymupdf.Point(flap_w + 30, 110), "Envase de Cartoncillo 350 g/m²", fontsize=10, fontname="helv", color=(0.5, 0.5, 0.5))
 
     doc.save(str(output_path))
     doc.close()
+
+    # Si el reto involucra tintas directas especiales (Reto 9 o Reto 17), inyectarlas con pikepdf
+    if scenario_id == "reto_catalogo_pantone_excesivo":
+        try:
+            pdoc = pikepdf.open(str(output_path), allow_overwriting_input=True)
+            p0 = pdoc.pages[0]
+            if '/Resources' not in p0:
+                p0['/Resources'] = pikepdf.Dictionary()
+            if '/ColorSpace' not in p0['/Resources']:
+                p0['/Resources']['/ColorSpace'] = pikepdf.Dictionary()
+            cs = p0['/Resources']['/ColorSpace']
+            spot_list = ['PANTONE 186 C', 'PANTONE 286 C', 'PANTONE 368 C', 'PANTONE 123 C', 'PANTONE Reflex Blue C']
+            for i, name in enumerate(spot_list):
+                cs[f'/CS_SPOT_{i}'] = pikepdf.Array([
+                    pikepdf.Name('/Separation'),
+                    pikepdf.Name(f'/{name}'),
+                    pikepdf.Name('/DeviceCMYK')
+                ])
+            pdoc.save(str(output_path))
+            pdoc.close()
+        except Exception as e:
+            print(f"[generate_scenario_pdf] Aviso inyectando spot colors: {e}")
+
+    elif scenario_id == "reto_etiqueta_barniz_calado":
+        try:
+            pdoc = pikepdf.open(str(output_path), allow_overwriting_input=True)
+            p0 = pdoc.pages[0]
+            if '/Resources' not in p0:
+                p0['/Resources'] = pikepdf.Dictionary()
+            if '/ColorSpace' not in p0['/Resources']:
+                p0['/Resources']['/ColorSpace'] = pikepdf.Dictionary()
+            cs = p0['/Resources']['/ColorSpace']
+            cs['/CS_VARNISH'] = pikepdf.Array([
+                pikepdf.Name('/Separation'),
+                pikepdf.Name('/Barniz_UVI_Brillo'),
+                pikepdf.Name('/DeviceCMYK')
+            ])
+            pdoc.save(str(output_path))
+            pdoc.close()
+        except Exception as e:
+            print(f"[generate_scenario_pdf] Aviso inyectando barniz spot: {e}")
+
     return output_path
 
 # ---------------------------------------------------------------------------
