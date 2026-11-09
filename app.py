@@ -2447,12 +2447,33 @@ async def batch_fix_endpoint(
     with open(job_json_path, "w", encoding="utf-8") as f:
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
+    pending_errors = [
+        {
+            "page": f.get("page"),
+            "category": f.get("category", "General"),
+            "title": f.get("title", "Error crítico"),
+            "message": f.get("message", "")
+        }
+        for f in all_findings if f.get("severity") == "ERROR"
+    ]
+    pending_warnings = [
+        {
+            "page": f.get("page"),
+            "category": f.get("category", "Aviso"),
+            "title": f.get("title", "Advertencia"),
+            "message": f.get("message", "")
+        }
+        for f in all_findings if f.get("severity") == "WARNING"
+    ]
+
     return {
         "success": True,
         "message": f"Se aplicaron {len(steps_applied)} acciones de corrección en lote con éxito.",
         "steps_applied": steps_applied,
         "errors_count": errs,
         "warnings_count": warns,
+        "pending_errors": pending_errors,
+        "pending_warnings": pending_warnings,
         "verdict": tech["verdict"],
         "download_url": f"/api/download-batch/{job_id}"
     }

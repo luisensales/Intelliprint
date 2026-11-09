@@ -1231,13 +1231,13 @@
   <!-- =====================================================================
        MODAL: Taller de Preimpresión en 1 Clic (Batch Fixer)
   ====================================================================== -->
-  <div id="batchFixModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="batchModalTitle">
+  <div id="batchFixModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="batchModalTitle">
     <!-- Backdrop -->
     <div class="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onclick="closeBatchFixModal()"></div>
-    <!-- Panel -->
-    <div class="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden animate-fade-in">
+    <!-- Panel con altura máxima segura para que siempre quepa en pantalla -->
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[92vh] flex flex-col border border-slate-200 overflow-hidden animate-fade-in my-auto">
       <!-- Header -->
-      <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-emerald-700 to-teal-700 text-white">
+      <div class="flex items-center justify-between px-6 py-3.5 bg-gradient-to-r from-emerald-700 to-teal-700 text-white shrink-0">
         <div class="flex items-center gap-2.5">
           <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center">
             <i class="fa-solid fa-wand-magic-sparkles text-amber-300 text-sm"></i>
@@ -1247,13 +1247,13 @@
             <p class="text-xs text-emerald-100 font-normal">Selecciona las correcciones a aplicar en lote</p>
           </div>
         </div>
-        <button onclick="closeBatchFixModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white">
+        <button onclick="closeBatchFixModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white cursor-pointer">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
 
-      <!-- Body -->
-      <div class="px-6 py-5 space-y-3 max-h-[65vh] overflow-y-auto">
+      <!-- Body con scroll interno propio -->
+      <div class="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
         <p class="text-xs text-slate-600 pb-1 border-b border-slate-100">
           Las correcciones se aplican de forma <strong>secuencial y acumulativa</strong> en el orden indicado, conservando la cadena de ediciones previas.
         </p>
@@ -1368,22 +1368,24 @@
           </div>
           <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-300 shrink-0 ml-2">Opcional</span>
         </label>
+
+        <!-- Footer / Resultado integrado en el scroll interno -->
+        <div id="batchResultArea" class="hidden pt-2">
+          <div id="batchResultContent" class="p-3.5 rounded-xl border text-xs space-y-2"></div>
+        </div>
       </div>
 
-      <!-- Footer / Resultado -->
-      <div id="batchResultArea" class="hidden px-6 pb-4 pt-2">
-        <div id="batchResultContent" class="p-3.5 rounded-xl border text-xs space-y-2"></div>
-      </div>
-
-      <!-- Footer buttons -->
-      <div class="flex items-center justify-between gap-3 px-6 py-4 bg-slate-50 border-t border-slate-200">
-        <button onclick="closeBatchFixModal()" id="batchCancelBtn" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition">
+      <!-- Footer buttons fijos abajo -->
+      <div class="flex items-center justify-between gap-3 px-6 py-3.5 bg-slate-50 border-t border-slate-200 shrink-0">
+        <button onclick="closeBatchFixModal()" id="batchCancelBtn" class="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 transition cursor-pointer">
           Cancelar
         </button>
         <button onclick="executeBatchFix(this)" id="batchRunBtn" class="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer">
           <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Aplicar correcciones seleccionadas
         </button>
       </div>
+    </div>
+  </div>
     </div>
   </div>
 
@@ -5407,24 +5409,82 @@
         resultArea.classList.remove('hidden');
 
         if (resp.ok && data.success) {
+          const escapeBHtml = (str) => {
+            if (!str) return '';
+            return String(str)
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#39;');
+          };
+
           const stepsHtml = (data.steps_applied || []).map(s =>
-            `<li class="flex items-center gap-1.5"><i class="fa-solid fa-circle-check text-emerald-600"></i> ${s.title}</li>`
+            `<li class="flex items-center gap-1.5"><i class="fa-solid fa-circle-check text-emerald-600"></i> ${escapeBHtml(s.title)}</li>`
           ).join('');
           const verdictClass = data.errors_count === 0 && data.warnings_count === 0 ? 'bg-emerald-600 text-white' :
                                data.errors_count === 0 ? 'bg-amber-500 text-white' : 'bg-red-600 text-white';
+
+          let pendingDetailsHtml = '';
+          if (data.pending_errors && data.pending_errors.length > 0) {
+            const errList = data.pending_errors.map(e => `
+              <li class="p-2.5 bg-red-100/80 border border-red-300 rounded-lg text-left">
+                <div class="flex items-center justify-between font-bold text-red-950 text-xs">
+                  <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle-xmark text-red-600"></i> ${escapeBHtml(e.title || 'Error')}</span>
+                  ${e.page ? `<span class="text-[10px] bg-red-200 text-red-900 px-1.5 py-0.5 rounded font-bold">Pág. ${e.page}</span>` : ''}
+                </div>
+                ${e.message ? `<p class="text-[11px] text-red-800 mt-1 leading-snug">${escapeBHtml(e.message)}</p>` : ''}
+              </li>
+            `).join('');
+            pendingDetailsHtml += `
+              <div class="mt-2.5 pt-2 border-t border-red-200">
+                <p class="font-bold text-red-900 text-xs mb-1.5 flex items-center gap-1.5">
+                  <i class="fa-solid fa-triangle-exclamation text-red-600"></i> Errores pendientes que impiden la aprobación (${data.pending_errors.length}):
+                </p>
+                <ul class="space-y-1.5">${errList}</ul>
+              </div>`;
+          }
+
+          if (data.pending_warnings && data.pending_warnings.length > 0) {
+            const warnList = data.pending_warnings.map(w => `
+              <li class="p-2 bg-amber-100/70 border border-amber-300 rounded-lg text-left">
+                <div class="flex items-center justify-between font-bold text-amber-950 text-xs">
+                  <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle-exclamation text-amber-600"></i> ${escapeBHtml(w.title || 'Aviso')}</span>
+                  ${w.page ? `<span class="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-bold">Pág. ${w.page}</span>` : ''}
+                </div>
+                ${w.message ? `<p class="text-[11px] text-amber-800 mt-0.5 leading-snug">${escapeBHtml(w.message)}</p>` : ''}
+              </li>
+            `).join('');
+            pendingDetailsHtml += `
+              <div class="mt-2.5 pt-2 border-t border-amber-200">
+                <p class="font-bold text-amber-900 text-xs mb-1.5 flex items-center gap-1.5">
+                  <i class="fa-solid fa-circle-info text-amber-600"></i> Avisos pendientes (${data.pending_warnings.length}):
+                </p>
+                <ul class="space-y-1.5">${warnList}</ul>
+              </div>`;
+          }
+
           resultContent.className = 'p-3.5 rounded-xl border border-emerald-300 bg-emerald-50 text-xs space-y-2';
           resultContent.innerHTML = `
-            <p class="font-bold text-emerald-800"><i class="fa-solid fa-check-double mr-1"></i> ${data.message}</p>
+            <p class="font-bold text-emerald-800"><i class="fa-solid fa-check-double mr-1"></i> ${escapeBHtml(data.message)}</p>
             <ul class="space-y-1 text-emerald-700 pl-1">${stepsHtml}</ul>
             <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-emerald-200 mt-1">
               <span class="font-semibold text-emerald-900">Dictamen tras el lote:</span>
               <span class="font-bold px-2 py-0.5 rounded-full text-xs ${verdictClass}">${data.verdict}</span>
               <span class="text-slate-600">${data.errors_count} error(es) &middot; ${data.warnings_count} aviso(s) pendiente(s)</span>
             </div>
-            <a href="/api/download-batch/${currentJobId}" target="_blank"
-               class="inline-flex items-center gap-1.5 mt-1 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg shadow text-xs transition">
-              <i class="fa-solid fa-file-arrow-down"></i> Descargar PDF con lote aplicado
-            </a>`;
+            ${pendingDetailsHtml}
+            <div class="pt-2">
+              <a href="/api/download-batch/${currentJobId}" target="_blank"
+                 class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg shadow text-xs transition">
+                <i class="fa-solid fa-file-arrow-down"></i> Descargar PDF con lote aplicado
+              </a>
+            </div>`;
+
+          // Auto-scroll para que los resultados y errores pendientes sean inmediatamente visibles
+          setTimeout(() => {
+            resultArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }, 80);
 
           const badge = document.getElementById('findingsCount');
           if (badge) badge.textContent = (data.errors_count || 0) + (data.warnings_count || 0);
