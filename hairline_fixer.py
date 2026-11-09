@@ -41,7 +41,7 @@ def fix_hairlines(
     lines_fixed = 0
 
     try:
-        pdf = pikepdf.open(str(pdf_path))
+        pdf = pikepdf.open(str(pdf_path), allow_overwriting_input=True)
     except Exception as e:
         return {
             "success": False,

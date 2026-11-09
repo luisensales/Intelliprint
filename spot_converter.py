@@ -135,7 +135,7 @@ def convert_spot_colors_to_cmyk(
     pages_modified_count = 0
 
     try:
-        pdf = pikepdf.open(str(pdf_path))
+        pdf = pikepdf.open(str(pdf_path), allow_overwriting_input=True)
     except Exception as e:
         return {
             "success": False,

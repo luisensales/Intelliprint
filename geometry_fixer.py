@@ -70,7 +70,7 @@ def fix_pdf_boxes_and_bleed(
     pages_modified = 0
     pages_detail = []
 
-    with pikepdf.open(pdf_path) as pdf:
+    with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
         for idx, page in enumerate(pdf.pages):
             p_num = idx + 1
             # Obtener MediaBox

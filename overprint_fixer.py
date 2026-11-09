@@ -70,7 +70,7 @@ def apply_overprint_to_dark_text(
     text_100_fixed = 0
 
     try:
-        pdf = pikepdf.open(str(pdf_path))
+        pdf = pikepdf.open(str(pdf_path), allow_overwriting_input=True)
     except Exception as e:
         return {
             "success": False,
@@ -369,7 +369,7 @@ def fix_white_overprint(
     objects_fixed = 0
 
     try:
-        pdf = pikepdf.open(str(pdf_path))
+        pdf = pikepdf.open(str(pdf_path), allow_overwriting_input=True)
     except Exception as e:
         return {"success": False, "pages_modified": 0, "objects_fixed": 0,
                 "errors": [f"No se pudo abrir el PDF: {e}"]}
@@ -548,7 +548,7 @@ def apply_overprint_to_technical_inks(
     technical_spots_found = set()
 
     try:
-        pdf = pikepdf.open(str(pdf_path))
+        pdf = pikepdf.open(str(pdf_path), allow_overwriting_input=True)
     except Exception as e:
         return {
             "success": False,
@@ -742,7 +742,7 @@ def fix_rich_black_small_text(
     texts_fixed = 0
 
     try:
-        pdf = pikepdf.open(str(pdf_path))
+        pdf = pikepdf.open(str(pdf_path), allow_overwriting_input=True)
     except Exception as e:
         return {"success": False, "pages_modified": 0, "texts_fixed": 0,
                 "errors": [f"No se pudo abrir el PDF: {e}"]}

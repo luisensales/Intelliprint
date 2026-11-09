@@ -140,7 +140,7 @@ def convert_rgb_images_to_cmyk(
 
     # Abrir con pikepdf para reemplazar los streams
     try:
-        pike_doc = pikepdf.open(str(pdf_path))
+        pike_doc = pikepdf.open(str(pdf_path), allow_overwriting_input=True)
     except Exception as e:
         result["errors"].append(f"No se pudo abrir el PDF con pikepdf: {e}")
         return result

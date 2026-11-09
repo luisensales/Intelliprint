@@ -38,7 +38,7 @@ def limit_pdf_tac(
     peak_tac_found = 0.0
 
     doc_mu = pymupdf.open(pdf_path)
-    pike_doc = pikepdf.open(pdf_path)
+    pike_doc = pikepdf.open(pdf_path, allow_overwriting_input=True)
 
     seen_xrefs = set()
 
