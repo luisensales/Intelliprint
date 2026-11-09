@@ -16,9 +16,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import pymupdf
 from pdf_utils import copy_pdf
 from upload_security import validate_pdf_filename, discard_failed_upload
+from manual_content import MANUAL_SOURCE, MANUAL_EDITION, MANUAL_UPDATED, MANUAL_TITLE, render_manual_page
 
 from preflight_engine import IntelliPrintEngine
-from icc_manager import get_available_icc_profiles, detect_pdf_output_intent, apply_icc_to_pdf, ICC_DIR
+from icc_manager import get_available_icc_profiles, detect_pdf_output_intent, apply_icc_to_pdf, resolve_icc_profile, ICC_DIR
 from spellcheck_engine import save_word_to_glossary
 from report_generator import generate_preflight_certificate_pdf
 from client_report_generator import generate_client_educational_report_pdf
@@ -737,6 +738,7 @@ async def download_pdf_file(job_id: str):
 @app.post("/api/convert-to-cmyk/{job_id}")
 async def convert_images_to_cmyk(
     job_id: str,
+    request: Request,
     use_embedded_icc: bool = True,
     custom_icc: Optional[str] = None,
 ):
@@ -745,6 +747,15 @@ async def convert_images_to_cmyk(
     - use_embedded_icc=true  → usa el OutputIntent embebido en el PDF (o fallback FOGRA39)
     - use_embedded_icc=false → usa custom_icc (nombre de archivo en icc_profiles/)
     """
+    # The web selector posts FormData; keep query parameters for API clients.
+    form = await request.form()
+    if "use_embedded_icc" in form:
+        choice = str(form["use_embedded_icc"]).lower()
+        if choice not in ("true", "false"):
+            raise HTTPException(status_code=400, detail="Selección ICC no válida.")
+        use_embedded_icc = choice == "true"
+    if "custom_icc" in form:
+        custom_icc = str(form["custom_icc"])
     safe_id = Path(job_id).name
     job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
@@ -780,11 +791,13 @@ async def convert_images_to_cmyk(
     else:
         if not custom_icc:
             raise HTTPException(status_code=400, detail="Se requiere un perfil ICC personalizado.")
-        # Validar nombre para evitar path traversal
-        safe_name = Path(custom_icc).name
-        dst_icc_path = str(ICC_PROFILES_DIR / safe_name)
-        if not os.path.exists(dst_icc_path):
-            raise HTTPException(status_code=400, detail=f"Perfil ICC no encontrado: {safe_name}")
+        try:
+            selected_path, family = resolve_icc_profile(custom_icc)
+            if family != "CMYK":
+                raise ValueError("Selecciona un perfil ICC CMYK para convertir las imágenes.")
+            dst_icc_path = str(selected_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     output_path = JOBS_DIR / f"{safe_id}_cmyk_converted.pdf"
 
@@ -2827,7 +2840,9 @@ async def calculate_cip3_endpoint(job_id: str, request: Request):
     source = str(body.get("source", "auto"))
 
     # Determinar el PDF a analizar: Si se solicita el pliego de imposición y existe, se usa ese
-    imposed_path = job_meta.get("last_imposition_plan", {}).get("imposed_pdf_path")
+    last_plan = job_meta.get("last_imposition_plan") or {}
+    imposed_path = (job_meta.get("imposed_pdf_path") or last_plan.get("output_pdf_path")
+                    or last_plan.get("imposed_pdf_path"))
     if source == "imposed" and imposed_path and Path(imposed_path).exists():
         target_pdf = imposed_path
         sheet_label = "Pliego_Imposicion"
@@ -3522,7 +3537,7 @@ async def download_manual_pdf_endpoint():
     return FileResponse(
         pdf_path,
         media_type="application/pdf",
-        filename="Manual_de_Usuario_IntelliPrint_v1.2.0.pdf"
+        filename=f"Manual_de_Usuario_IntelliPrint_{MANUAL_EDITION}.pdf"
     )
 
 
@@ -3537,7 +3552,20 @@ async def download_manual_docx_endpoint():
     return FileResponse(
         docx_path,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename="Manual_de_Usuario_IntelliPrint_v1.2.0.docx"
+        filename=f"Manual_de_Usuario_IntelliPrint_{MANUAL_EDITION}.docx"
+    )
+
+
+@app.get("/manual", response_class=HTMLResponse)
+async def read_manual_endpoint(embed: bool = False):
+    return HTMLResponse(render_manual_page(embedded=embed))
+
+
+@app.get("/api/manual/download/md")
+async def download_manual_markdown_endpoint():
+    return FileResponse(
+        MANUAL_SOURCE, media_type="text/markdown; charset=utf-8",
+        filename=f"Manual_de_Usuario_IntelliPrint_{MANUAL_EDITION}.md",
     )
 
 
@@ -3547,8 +3575,9 @@ async def get_manual_info_endpoint():
     pdf_path = BASE_DIR / "Manual_de_Usuario_IntelliPrint.pdf"
     docx_path = BASE_DIR / "Manual_de_Usuario_IntelliPrint.docx"
     return {
-        "title": "IntelliPrint v1.2.0 · Manual Oficial de Usuario y Guía Técnica",
-        "version": "1.2.0",
+        "title": MANUAL_TITLE,
+        "version": MANUAL_EDITION,
+        "updated": MANUAL_UPDATED,
         "centers": ["CPIFP Salesianos Urnieta LHIPI", "CIFP Mendizabala LHII"],
         "government": "Departamento de Educación · Eusko Jaurlaritza / Gobierno Vasco",
         "has_pdf": pdf_path.exists(),
@@ -3556,7 +3585,9 @@ async def get_manual_info_endpoint():
         "has_docx": docx_path.exists(),
         "docx_size_kb": round(docx_path.stat().st_size / 1024, 1) if docx_path.exists() else 0,
         "pdf_download_url": "/api/manual/download/pdf",
-        "docx_download_url": "/api/manual/download/docx"
+        "docx_download_url": "/api/manual/download/docx",
+        "markdown_download_url": "/api/manual/download/md",
+        "web_url": "/manual",
     }
 
 

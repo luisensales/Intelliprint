@@ -37,6 +37,21 @@ test('all inline JavaScript parses', () => {
   }
 });
 
+test('the complete manual loads on first opening and keeps the reading position', () => {
+  const document = fakeDocument();
+  const reader = document.getElementById('manualReader');
+  reader.dataset = { src: '/manual?embed=1' };
+  reader.getAttribute = () => reader.src;
+  const context = { document };
+  loadFunctions(context, ['openManualModal', 'closeManualModal']);
+  context.openManualModal();
+  assert.equal(reader.src, '/manual?embed=1');
+  reader.src = '/manual?embed=1#6-modulos-de-produccion';
+  context.closeManualModal();
+  context.openManualModal();
+  assert.equal(reader.src, '/manual?embed=1#6-modulos-de-produccion');
+});
+
 test('imported profile markup is inert and selection uses the literal ID', () => {
   const document = fakeDocument();
   const attack = `<img src=x onerror="alert('xss')">`;
