@@ -1,19 +1,34 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- Background Badge: Modern Carbon Squircle -->
-  <rect x="28" y="28" width="456" height="456" rx="120" fill="#090D18" stroke="#1E293B" stroke-width="5"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Capa_2" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 512 512">
+  <!-- Generator: Adobe Illustrator 30.8.2, SVG Export Plug-In . SVG Version: 2.1.4 Build 7)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: #f5ee00;
+      }
 
-  <!-- 'P' Loop in Electric Process Cyan -->
-  <rect x="192" y="105" width="218" height="195" rx="85" fill="#00A3FF"/>
+      .st1 {
+        fill: #ff006e;
+      }
 
-  <!-- Lower / Right Shard in Hyper-Magenta strictly inside the 'P' loop arc -->
-  <path d="M 325 105 A 85 85 0 0 1 410 190 L 410 215 A 85 85 0 0 1 325 300 L 275 202 Z" fill="#FF006E"/>
+      .st2 {
+        fill: #fff;
+      }
 
-  <!-- Inner Geometric Aperture (Negative Space) -->
-  <rect x="242" y="149" width="90" height="107" rx="38" fill="#090D18"/>
+      .st3 {
+        fill: #090d18;
+        stroke: #1e293b;
+        stroke-width: 5px;
+      }
 
-  <!-- Structural Vertical Pillar ('i' stem) in Crisp White -->
-  <rect x="105" y="180" width="75" height="225" rx="37" fill="#FFFFFF"/>
-
-  <!-- Precision Node ('i' dot) in Acid Yellow -->
-  <rect x="105" y="105" width="75" height="55" rx="26" fill="#F5EE00"/>
+      .st4 {
+        fill: #00a3ff;
+      }
+    </style>
+  </defs>
+  <rect class="st3" x="28" y="28" width="456" height="456" rx="120" ry="120"/>
+  <path class="st4" d="M325,105h-48c-46.94,0-85,38.06-85,85v25c0,46.94,38.06,85,85,85h48c46.94,0,85-38.06,85-85v-25c0-46.94-38.06-85-85-85ZM332,218c0,20.99-17.01,38-38,38h-14c-20.99,0-38-17.01-38-38v-31c0-20.99,17.01-38,38-38h14c20.99,0,38,17.01,38,38v31Z"/>
+  <rect class="st2" x="105" y="180" width="75" height="225" rx="37" ry="37"/>
+  <rect class="st0" x="105" y="105" width="75" height="55" rx="26" ry="26"/>
+  <path class="st1" d="M330.4,105.19l-24.05,45.87c14.92,5.13,25.65,19.28,25.65,35.94v31c0,20.99-17.01,38-38,38h-14c-9.16,0-17.57-3.24-24.13-8.65l-18.45,35.19-3.12,5.95c3.14,1.83,6.4,3.46,9.78,4.88,10.12,4.27,21.24,6.63,32.92,6.63h48c46.94,0,85-38.06,85-85v-25c0-45.13-35.17-82.02-79.6-84.81Z"/>
 </svg>
