@@ -443,6 +443,55 @@ _CACHED_STRIP_PDF: Optional[pymupdf.Document] = None
 _CACHED_STRIP_CROP = pymupdf.Rect(15.0, 155.0, 1348.5, 188.5)
 
 
+def _inline_svg_css(svg_bytes: bytes) -> bytes:
+    """Convierte clases CSS de bloques <style> a atributos XML inline para compatibilidad con MuPDF."""
+    try:
+        import re
+        import xml.etree.ElementTree as ET
+        svg_text = svg_bytes.decode("utf-8", errors="ignore")
+        style_match = re.search(r"<style[^>]*>(.*?)</style>", svg_text, re.DOTALL)
+        if not style_match:
+            return svg_bytes
+
+        css_content = style_match.group(1)
+        rules = {}
+        for block in re.finditer(r"([^{]+)\{([^}]+)\}", css_content):
+            selectors = [s.strip() for s in block.group(1).split(",")]
+            props = {}
+            for decl in block.group(2).split(";"):
+                if ":" in decl:
+                    k, v = decl.split(":", 1)
+                    props[k.strip()] = v.strip()
+            for sel in selectors:
+                if sel.startswith("."):
+                    rules.setdefault(sel[1:], {}).update(props)
+
+        ET.register_namespace("", "http://www.w3.org/2000/svg")
+        tree = ET.fromstring(svg_text)
+        for elem in tree.iter():
+            classes = elem.attrib.get("class", "").split()
+            merged = {}
+            for c in classes:
+                if c in rules:
+                    merged.update(rules[c])
+            if "font-family" in merged:
+                merged["font-family"] = "Helvetica, Arial, sans-serif"
+            for k, v in merged.items():
+                if k not in elem.attrib:
+                    elem.attrib[k] = v
+            # También estilo inline directo
+            parts = [f"{k}: {v}" for k, v in merged.items()]
+            if parts:
+                cur_st = elem.attrib.get("style", "")
+                if cur_st and not cur_st.endswith(";"):
+                    cur_st += "; "
+                elem.attrib["style"] = cur_st + "; ".join(parts)
+
+        return ET.tostring(tree, encoding="utf-8")
+    except Exception:
+        return svg_bytes
+
+
 def _get_strip_pdf_doc() -> Optional[pymupdf.Document]:
     """Carga y convierte a PDF vectorial en memoria la Tira de control 25-50-75.svg."""
     global _CACHED_STRIP_PDF
@@ -456,7 +505,9 @@ def _get_strip_pdf_doc() -> Optional[pymupdf.Document]:
     for p in possible_paths:
         if p.exists():
             try:
-                svg_doc = pymupdf.open("svg", p.read_bytes())
+                raw_svg = p.read_bytes()
+                inlined_svg = _inline_svg_css(raw_svg)
+                svg_doc = pymupdf.open("svg", inlined_svg)
                 pdf_bytes = svg_doc.convert_to_pdf()
                 svg_doc.close()
                 _CACHED_STRIP_PDF = pymupdf.open("pdf", pdf_bytes)
