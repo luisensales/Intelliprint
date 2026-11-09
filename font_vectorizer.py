@@ -70,11 +70,34 @@ def outline_fonts_in_pdf(
             page_doc.close()
 
             p_dest = doc_dest[-1]
-            # Preservar exactamente las cajas geométricas
-            p_dest.set_mediabox(p_orig.mediabox)
-            p_dest.set_cropbox(p_orig.cropbox)
-            p_dest.set_trimbox(p_orig.trimbox)
-            p_dest.set_bleedbox(p_orig.bleedbox)
+            # Preservar exactamente las cajas geométricas de forma segura
+            try:
+                p_dest.set_mediabox(p_orig.mediabox)
+            except Exception:
+                pass
+
+            try:
+                # CropBox debe estar estrictamente dentro de MediaBox
+                safe_crop = p_orig.cropbox & p_orig.mediabox
+                if safe_crop.is_valid and not safe_crop.is_empty:
+                    p_dest.set_cropbox(safe_crop)
+                else:
+                    p_dest.set_cropbox(p_orig.mediabox)
+            except Exception:
+                try:
+                    p_dest.set_cropbox(p_dest.mediabox)
+                except Exception:
+                    pass
+
+            try:
+                p_dest.set_trimbox(p_orig.trimbox)
+            except Exception:
+                pass
+
+            try:
+                p_dest.set_bleedbox(p_orig.bleedbox)
+            except Exception:
+                pass
 
             pages_vectorized += 1
         else:
@@ -87,17 +110,24 @@ def outline_fonts_in_pdf(
     doc_dest.close()
     doc_orig.close()
 
-    # Preservar OutputIntents con pikepdf si existían en el original
+    # Preservar exactamente las cajas geométricas y OutputIntents con pikepdf
     try:
-        with pikepdf.open(pdf_path) as src, pikepdf.open(temp_vector_path) as dst:
+        with pikepdf.open(pdf_path) as src, pikepdf.open(temp_vector_path, allow_overwriting_input=True) as dst:
             if "/OutputIntents" in src.Root:
                 dst.Root.OutputIntents = pikepdf.Array([dst.copy_foreign(x) for x in src.Root.OutputIntents])
+            for i, dst_page in enumerate(dst.pages):
+                if i < len(src.pages):
+                    src_page = src.pages[i]
+                    for box_name in ["/MediaBox", "/CropBox", "/TrimBox", "/BleedBox", "/ArtBox"]:
+                        if box_name in src_page:
+                            try:
+                                dst_page[box_name] = dst.copy_foreign(src_page[box_name])
+                            except Exception:
+                                pass
             dst.save(output_path)
-        # Limpiar temporal
         Path(temp_vector_path).unlink(missing_ok=True)
     except Exception as e:
         print(f"[font_vectorizer] Advertencia preservando metadatos pikepdf: {e}")
-        # Si fallase pikepdf, renombrar el temporal directamente
         Path(temp_vector_path).replace(output_path)
 
     return {
