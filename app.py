@@ -1788,7 +1788,7 @@ async def limit_tac_endpoint(
     max_tac: Optional[float] = None
 ):
     """
-    Fase 3: Limita la cobertura total de tinta (TAC / TIC) al 300% (o valor especificado) mediante UCR.
+    Limita las imágenes CMYK al máximo del perfil o al indicado y reanaliza el PDF.
     """
     safe_id = Path(job_id).name
     job_json_path = get_job_json_path(safe_id)
@@ -1814,6 +1814,7 @@ async def limit_tac_endpoint(
         raise HTTPException(status_code=422, detail="No se pudo limitar la tinta de todas las imagenes.")
 
     job_meta["has_tac_limited"] = True
+    job_meta["tac_limited_max_percent"] = max_tac
     job_meta["tac_limited_pdf_path"] = str(output_path)
     register_cumulative_fix(job_data, output_path, "tac_limited")
 
@@ -1844,7 +1845,7 @@ async def limit_tac_endpoint(
 
 @app.get("/api/download-tac/{job_id}")
 async def download_tac_pdf(job_id: str):
-    """Descarga el PDF con cobertura de tinta limitada (TAC <= 300%)."""
+    """Descarga el PDF tratado con el límite de imágenes CMYK elegido."""
     safe_id = Path(job_id).name
     job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
@@ -1862,10 +1863,12 @@ async def download_tac_pdf(job_id: str):
 
     filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
     clean_name = filename.replace(".pdf", "")
+    limit = job_data.get("job_meta", {}).get("tac_limited_max_percent")
+    suffix = f"TAC{float(limit):g}" if limit is not None else "TAC_limitado"
     return FileResponse(
         path=fixed_path,
         media_type="application/pdf",
-        filename=f"IntelliPrint_{clean_name}_TAC300.pdf"
+        filename=f"IntelliPrint_{clean_name}_{suffix}.pdf"
     )
 
 

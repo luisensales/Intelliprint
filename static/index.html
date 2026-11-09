@@ -398,7 +398,7 @@
             <button onclick="applyPrinterMarks(this)" id="btnPrinterMarks" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer" title="Inyectar marcas de corte, cruces de registro y tiras FOGRA CMYK">
               <i class="fa-solid fa-crop-simple text-amber-500"></i> <span>Marcas FOGRA</span>
             </button>
-            <button onclick="applyTacLimiter(this)" id="btnTacLimiter" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer" title="Limitar cobertura total de tinta al 300%">
+            <button onclick="applyTacLimiter(this)" id="btnTacLimiter" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer" title="Limitar las imágenes CMYK según el perfil del trabajo">
               <i class="fa-solid fa-droplet text-cyan-600"></i> <span>Limitar TAC</span>
             </button>
             <button onclick="openBarcodeModal()" id="btnOpenBarcodes" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer" title="Inspector y Corrector de Códigos de Barras y Códigos QR">
@@ -541,6 +541,7 @@
             </div>
           </div>
 
+          <div id="tacCorrectionStatus" role="status" aria-live="polite" class="hidden"></div>
           <div id="findingsList" class="space-y-2.5">
             <!-- Dynamic findings -->
           </div>
@@ -1351,7 +1352,7 @@
           <div class="flex items-center gap-3">
             <input type="checkbox" id="batchChkTac" checked class="rounded accent-emerald-600 w-4 h-4">
             <div>
-              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">9. Limitar Cobertura de Tinta (TAC ≤ 300%)</p>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">9. Limitar cobertura de tinta al máximo del perfil</p>
               <p class="text-[11px] text-slate-500">Reduce píxeles CMYK con cobertura excesiva para evitar repintado</p>
             </div>
           </div>
@@ -3033,6 +3034,15 @@
 
     // Render Results
     function renderResults(data) {
+      const tacStatus = document.getElementById('tacCorrectionStatus');
+      if (tacStatus) { tacStatus.classList.add('hidden'); tacStatus.textContent = ''; }
+      const tacButton = document.getElementById('btnTacLimiter');
+      if (tacButton) {
+        const limit = getTacLimit(data);
+        tacButton.disabled = false;
+        tacButton.innerHTML = `<i class="fa-solid fa-droplet text-cyan-600"></i> <span>Limitar TAC a ${limit} %</span>`;
+        tacButton.title = `Limitar las imágenes CMYK a ${limit} % y volver a analizar`;
+      }
       document.getElementById('resFileName').textContent = data.job_meta.filename;
       document.getElementById('resProfileBadge').textContent = data.job_meta.profile_id;
       document.getElementById('resFileHash').textContent = data.job_meta.sha256.substring(0, 16) + '...';
@@ -3096,6 +3106,7 @@
           const isBleedMissing = (f.rule_id === 'BLEED_GEOMETRY_3MM');
           const isFontMissing = (f.rule_id === 'USED_FONTS_EMBEDDED');
           const isRgbImage = (f.rule_id === 'SOURCE_COLOR_DIAGNOSTIC') || (f.category === 'Color' && f.title.toLowerCase().includes('rgb'));
+          const isTacExcess = f.rule_id === 'MAX_INK_COVERAGE';
 
           let cardStyle = '';
           let iconHtml = '';
@@ -3171,6 +3182,10 @@
                 </button>
               </div>
             `;
+          } else if (isTacExcess) {
+            cardStyle = 'bg-red-50/50 border-red-200 text-red-900';
+            iconHtml = '<i class="fa-solid fa-droplet text-red-600 text-sm"></i>';
+            actionHtml = renderTacCorrectionAction(data);
           } else if (isErr) {
             cardStyle = 'bg-red-50/50 border-red-200 text-red-900';
             iconHtml = '<i class="fa-solid fa-circle-xmark text-red-600 text-sm"></i>';
@@ -4255,17 +4270,54 @@
     }
 
     // -----------------------------------------------------------------------
-    // Fase 3: Limitador de Cobertura Total de Tinta (TAC 300%)
+    // Limitador de imágenes CMYK con el máximo del perfil activo.
     // -----------------------------------------------------------------------
+    function getTacLimit(report) {
+      const limit = Number(report?.job_summary?.max_tac_limit);
+      return Number.isFinite(limit) && limit >= 100 && limit <= 400 ? limit : 300;
+    }
+
+    function renderTacCorrectionAction(report) {
+      const limit = getTacLimit(report);
+      return `<div class="mt-2.5 pt-2 border-t border-red-200 flex items-center justify-between gap-3 flex-wrap">
+        <span class="text-[11px] text-red-800">Limita las imágenes CMYK y comprueba de nuevo el PDF. Los excesos en otros objetos pueden requerir revisión en el original o el RIP.</span>
+        <button onclick="applyTacLimiter(this)" class="btn-fix-tac inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-lg text-xs font-semibold transition cursor-pointer">
+          <i class="fa-solid fa-droplet"></i> Limitar TAC a ${limit} %
+        </button></div>`;
+    }
+
+    function showTacCorrectionResult(data, report, requestedLimit) {
+      const status = document.getElementById('tacCorrectionStatus');
+      if (!status) return;
+      const measurement = report?.job_summary?.tac_measurement;
+      const limit = Number(data.target_max_tac ?? requestedLimit);
+      const changed = Number(data.images_clamped) || 0;
+      const remaining = report?.findings?.some(f => f.rule_id === 'MAX_INK_COVERAGE');
+      const measured = measurement?.measured && Number.isFinite(measurement.peak_percent);
+      const withinLimit = measured && !remaining && measurement.peak_percent <= limit + 0.5;
+      status.className = `mb-3 rounded-lg border p-3 text-xs ${withinLimit ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-amber-300 bg-amber-50 text-amber-950'}`;
+      const summary = `${changed} imágenes CMYK limitadas a ${limit} %. `;
+      if (withinLimit) {
+        status.textContent = summary + `TAC estimado tras la corrección: ${measurement.peak_percent} %. Comprueba el color y confirma el resultado en el RIP de producción.`;
+      } else if (measured) {
+        status.textContent = summary + `El TAC estimado sigue en ${measurement.peak_percent} %. ` +
+          (changed ? 'Quedan excesos que no resuelve el limitador de imágenes. ' : 'No se han encontrado imágenes CMYK corregibles. ') +
+          'Revisa vectores, tintas y sobreimpresiones en el archivo original o en el RIP; el error permanece pendiente.';
+      } else {
+        status.textContent = summary + 'No se ha podido verificar el TAC final. Revisa el informe y compruébalo en el RIP de producción.';
+      }
+      status.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+    }
+
     async function applyTacLimiter(btn) {
       if (!currentJobId) {
         alert('No hay ningún trabajo activo.');
         return;
       }
-      const maxTac = currentReport?.job_summary?.max_tac_limit ?? 300;
+      const maxTac = getTacLimit(currentReport);
       const origHtml = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Limitando TAC a 300%...';
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1"></i> Limitando TAC a ${maxTac} %...`;
 
       try {
         const res = await fetch(`/api/limit-tac/${currentJobId}?max_tac=${maxTac}`, { method: 'POST' });
@@ -4274,13 +4326,15 @@
           if (data.report) {
             currentReport = data.report;
             renderResults(currentReport);
+            showTacCorrectionResult(data, currentReport, maxTac);
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
             return;
           }
 
           btn.disabled = false;
-          btn.innerHTML = '<i class="fa-solid fa-circle-check text-cyan-400 mr-1"></i> TAC ≤ 300% OK';
-          btn.classList.remove('bg-slate-800', 'hover:bg-slate-700', 'bg-white', 'hover:bg-slate-100', 'text-slate-700', 'border-slate-200');
-          btn.classList.add('bg-cyan-800', 'hover:bg-cyan-900', 'text-white', 'border-cyan-700');
+          btn.innerHTML = origHtml;
+          showTacCorrectionResult(data, null, maxTac);
 
           // Actualizar botón de descarga de la cabecera
           const pdfBtn = document.getElementById('downloadPdfBtn');
@@ -4291,7 +4345,7 @@
             pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
           }
           if (pdfBtnLabel) {
-            pdfBtnLabel.textContent = 'Descargar PDF (TAC ≤ 300%)';
+            pdfBtnLabel.textContent = `Descargar PDF (limitación TAC a ${maxTac} %)`;
           }
 
           // Abrir PDF con TAC limitado en pestaña nueva

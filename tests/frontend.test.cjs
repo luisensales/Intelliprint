@@ -128,13 +128,61 @@ for (const name of ['applyCmykImageConversion', 'convertImagesToCmyk', 'applyTac
       renderResults: data => { rendered = data; }, updateSeparationPreview() {},
       alert: message => assert.fail(message), console,
     };
-    loadFunctions(context, [name]);
+    loadFunctions(context, name === 'applyTacLimiter' ? ['getTacLimit', 'showTacCorrectionResult', name] : [name]);
     await context[name]({ innerHTML: 'Convertir', closest: () => null });
     assert.equal(rendered, report);
     assert.equal(context.currentReport.triple_result.technical.status, 'FAIL');
     assert.equal(context.currentReport.findings.length, 1);
   });
 }
+
+test('TAC findings offer correction using the profile limit and plain scope', () => {
+  const context = {};
+  loadFunctions(context, ['getTacLimit', 'renderTacCorrectionAction']);
+  for (const limit of [240,300,320]) {
+    const markup = context.renderTacCorrectionAction({job_summary:{max_tac_limit:limit}});
+    assert.ok(markup.includes(`Limitar TAC a ${limit} %`));
+    assert.ok(markup.includes('onclick="applyTacLimiter(this)"'));
+    assert.ok(markup.includes('imágenes CMYK'));
+  }
+  for (const value of [null, NaN, 0, 999, '<img>']) {
+    assert.equal(context.getTacLimit({job_summary:{max_tac_limit:value}}),300);
+  }
+});
+
+test('TAC correction posts 320 percent and reports a remaining excess honestly', async () => {
+  const document=fakeDocument();
+  const report={job_summary:{max_tac_limit:320,tac_measurement:{measured:true,peak_percent:346.7}},
+    findings:[{rule_id:'MAX_INK_COVERAGE'}]};
+  let requested;
+  const context={document,currentJobId:'digital',currentReport:report,renderResults(){},
+    fetch:async url=>{requested=url;return {ok:true,json:async()=>({status:'success',report,images_clamped:0,target_max_tac:320})}},
+    alert:assert.fail,console};
+  loadFunctions(context,['getTacLimit','showTacCorrectionResult','applyTacLimiter']);
+  const button={innerHTML:'Limitar TAC a 320 %'};
+  await context.applyTacLimiter(button);
+  assert.equal(requested,'/api/limit-tac/digital?max_tac=320');
+  assert.equal(button.disabled,false);
+  const status=document.getElementById('tacCorrectionStatus');
+  assert.ok(status.textContent.includes('346.7 %'));
+  assert.ok(status.textContent.includes('el error permanece pendiente'));
+  assert.ok(!status.className.includes('emerald'));
+});
+
+test('TAC feedback confirms a measured result and never approves an unmeasured one', () => {
+  const document=fakeDocument();
+  const context={document};
+  loadFunctions(context,['showTacCorrectionResult']);
+  const report={findings:[],job_summary:{tac_measurement:{measured:true,peak_percent:319.6}}};
+  context.showTacCorrectionResult({images_clamped:1,target_max_tac:320},report,320);
+  const status=document.getElementById('tacCorrectionStatus');
+  assert.ok(status.className.includes('emerald'));
+  assert.ok(status.textContent.includes('319.6 %'));
+  report.job_summary.tac_measurement={measured:false};
+  context.showTacCorrectionResult({images_clamped:1,target_max_tac:320},report,320);
+  assert.ok(!status.className.includes('emerald'));
+  assert.ok(status.textContent.includes('No se ha podido verificar'));
+});
 
 test('mass correction preserves individual failed and rejected outcomes', async () => {
   const context = {
