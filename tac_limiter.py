@@ -125,6 +125,7 @@ def limit_pdf_tac(
         pike_doc.close()
 
     return {
+        "success": True,
         "status": "success",
         "images_inspected": images_inspected,
         "images_clamped": images_clamped,

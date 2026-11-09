@@ -5402,7 +5402,17 @@
           printer_marks: marks
         });
         const resp = await fetch(`/api/batch-fix/${currentJobId}?${params.toString()}`, { method: 'POST' });
-        const data = await resp.json();
+        let data = {};
+        try {
+          data = await resp.json();
+        } catch (jsonErr) {
+          data = {
+            success: false,
+            detail: resp.status === 504 || resp.status === 502
+              ? 'El servidor tardó demasiado en responder (Timeout). Las correcciones han sido optimizadas; por favor, vuelve a intentarlo.'
+              : `Error del servidor (${resp.status}): ${resp.statusText || 'Respuesta no válida'}`
+          };
+        }
 
         const resultArea    = document.getElementById('batchResultArea');
         const resultContent = document.getElementById('batchResultContent');
@@ -5535,7 +5545,17 @@
         const resultContent = document.getElementById('batchResultContent');
         resultArea.classList.remove('hidden');
         resultContent.className = 'p-3.5 rounded-xl border border-red-300 bg-red-50 text-xs';
-        resultContent.innerHTML = '<p class="font-bold text-red-800">Error de conexion al ejecutar el lote.</p>';
+        const isTimeout = err.name === 'AbortError' || (err.message && err.message.toLowerCase().includes('timeout'));
+        resultContent.innerHTML = `
+          <p class="font-bold text-red-800 flex items-center gap-1.5">
+            <i class="fa-solid fa-triangle-exclamation text-red-600"></i> Error de conexión al ejecutar el lote
+          </p>
+          <p class="text-red-700 mt-1 leading-snug">
+            ${isTimeout ? 'La conexión con el servidor ha caducado por exceso de tiempo.' : (err.message || 'No se pudo comunicar con el servidor.')}
+          </p>
+          <div class="mt-2 text-[11px] text-slate-600">
+            Consejo: Si el archivo es muy pesado, prueba de nuevo tras esta optimización o desmarca opciones no críticas.
+          </div>`;
         btn.disabled = false; btn.innerHTML = origHtml;
         if (cancelBtn) cancelBtn.disabled = false;
       }

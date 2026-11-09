@@ -2134,7 +2134,7 @@ async def render_comparison_endpoint(
 
 
 @app.post("/api/batch-fix/{job_id}")
-async def batch_fix_endpoint(
+def batch_fix_endpoint(
     job_id: str,
     trapping: bool = True,
     hairlines: bool = True,
@@ -2237,29 +2237,50 @@ async def batch_fix_endpoint(
 
         # 3. Trazado de tipografías a curvas
         if fonts:
-            step3_out = JOBS_DIR / f"{safe_id}_bstep3_fonts.pdf"
-            temp_files.append(step3_out)
-            font_res = outline_fonts_in_pdf(str(current_in), str(step3_out))
-            if font_res.get("success") and step3_out.exists():
-                current_in = step3_out
+            font_error_pages = [
+                f.get("page") for f in job_data.get("findings", [])
+                if (f.get("rule_id") == "USED_FONTS_EMBEDDED"
+                    or "no incrustada" in f.get("title", "").lower()
+                    or "incrustada" in f.get("title", "").lower())
+                and f.get("page") is not None
+            ]
+            has_general_font_issue = any(
+                f.get("rule_id") == "USED_FONTS_EMBEDDED" or "no incrustada" in f.get("title", "").lower()
+                for f in job_data.get("findings", [])
+            )
+
+            # Si no hay incidencias de tipografías no incrustadas, se omite el re-renderizado pesado a SVG
+            if not has_general_font_issue and not font_error_pages:
                 steps_applied.append({
                     "action": "fonts",
-                    "title": "Tipografías Trazadas a Curvas",
-                    "details": font_res
+                    "title": "Tipografías Vectoriales (Fuentes 100% incrustadas y conformes)",
+                    "details": {"status": "success", "pages_vectorized": 0}
                 })
-                job_data["findings"] = [
-                    f for f in job_data.get("findings", [])
-                    if f.get("rule_id") != "USED_FONTS_EMBEDDED"
-                    and "incrustada" not in f.get("title", "").lower()
-                    and "fuente" not in f.get("title", "").lower()
-                ]
+            else:
+                step3_out = JOBS_DIR / f"{safe_id}_bstep3_fonts.pdf"
+                temp_files.append(step3_out)
+                target_pages = list(set(font_error_pages)) if font_error_pages else None
+                font_res = outline_fonts_in_pdf(str(current_in), str(step3_out), target_pages=target_pages)
+                if (font_res.get("success") or font_res.get("status") == "success") and step3_out.exists():
+                    current_in = step3_out
+                    steps_applied.append({
+                        "action": "fonts",
+                        "title": f"Tipografías Trazadas a Curvas ({font_res.get('pages_vectorized', 0)} págs)",
+                        "details": font_res
+                    })
+                    job_data["findings"] = [
+                        f for f in job_data.get("findings", [])
+                        if f.get("rule_id") != "USED_FONTS_EMBEDDED"
+                        and "incrustada" not in f.get("title", "").lower()
+                        and "fuente" not in f.get("title", "").lower()
+                    ]
 
         # 4. Normalización de Cajas de Página y Sangrado 3 mm
         if geometry:
             step4_out = JOBS_DIR / f"{safe_id}_bstep4_geometry.pdf"
             temp_files.append(step4_out)
             geom_res = fix_pdf_boxes_and_bleed(str(current_in), str(step4_out), target_bleed_mm=3.0)
-            if geom_res.get("success") and step4_out.exists():
+            if (geom_res.get("success") or geom_res.get("status") == "success") and step4_out.exists():
                 current_in = step4_out
                 steps_applied.append({
                     "action": "geometry",
@@ -2380,7 +2401,7 @@ async def batch_fix_endpoint(
             step6_out = JOBS_DIR / f"{safe_id}_bstep6_tac.pdf"
             temp_files.append(step6_out)
             tac_res = limit_pdf_tac(str(current_in), str(step6_out), max_tac_percent=300.0)
-            if tac_res.get("success") and step6_out.exists():
+            if (tac_res.get("success") or tac_res.get("status") == "success") and step6_out.exists():
                 current_in = step6_out
                 steps_applied.append({
                     "action": "tac",

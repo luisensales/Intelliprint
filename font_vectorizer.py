@@ -28,6 +28,16 @@ def outline_fonts_in_pdf(
     :param target_pages: Lista opcional de páginas (1-based) a trazar. Si es None, traza todas las páginas con fuentes.
     :return: Diccionario con estadísticas del proceso.
     """
+    if target_pages is not None and len(target_pages) == 0:
+        import shutil
+        shutil.copy2(pdf_path, output_path)
+        return {
+            "success": True,
+            "status": "success",
+            "total_pages": 0,
+            "pages_vectorized": 0
+        }
+
     doc_orig = pymupdf.open(pdf_path)
     doc_dest = pymupdf.open()
 
@@ -91,6 +101,7 @@ def outline_fonts_in_pdf(
         Path(temp_vector_path).replace(output_path)
 
     return {
+        "success": True,
         "status": "success",
         "total_pages": total_pages,
         "pages_vectorized": pages_vectorized

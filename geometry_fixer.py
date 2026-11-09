@@ -162,6 +162,7 @@ def fix_pdf_boxes_and_bleed(
         pdf.save(output_path)
 
     return {
+        "success": True,
         "status": "success",
         "pages_modified": pages_modified,
         "bleed_mm": target_bleed_mm,
