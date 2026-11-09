@@ -2,10 +2,32 @@
 
 import os
 import tempfile
+import math
 from contextlib import contextmanager
 from pathlib import Path
 
 import pikepdf
+
+
+def pdf_numbers(values):
+    """Serialize finite PDF coordinates without locale-dependent formatting."""
+    if not all(math.isfinite(float(value)) for value in values):
+        raise ValueError('Coordenadas PDF no válidas.')
+    return ' '.join(format(float(value), '.8f').rstrip('0').rstrip('.') or '0' for value in values)
+
+
+def rect_clip(rect):
+    x0, y0, x1, y1 = map(float, rect)
+    return pdf_numbers((x0, y0, x1 - x0, y1 - y0)) + ' re W n\n'
+
+
+def add_form_resource(page, form):
+    """Do not mutate a resource dictionary captured by an existing page Form."""
+    resources = pikepdf.Dictionary(page.resources)
+    if '/XObject' in resources:
+        resources.XObject = pikepdf.Dictionary(resources.XObject)
+    page.Resources = resources
+    return page.add_resource(form, pikepdf.Name.XObject, prefix='IntelliPrint')
 
 
 @contextmanager

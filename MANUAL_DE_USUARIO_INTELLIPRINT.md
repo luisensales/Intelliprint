@@ -1,6 +1,6 @@
 # Manual de usuario de IntelliPrint
 
-**Edición 2026.11 · Actualizado el 9 de noviembre de 2026**
+**Edición 2026.11.1 · Actualizado el 9 de noviembre de 2026**
 
 Guía de operación para preimpresión, taller gráfico y Formación Profesional.
 
@@ -344,13 +344,13 @@ Esto no dibuja ilustración nueva en un borde vacío. Un PDF puede tener una Ble
 
 ### Generar sangre reflejada
 
-La sangre reflejada extiende sintéticamente muestras del borde para disponer de contenido exterior. Es una ayuda para casos determinados, no una reconstrucción del diseño original. En líneas diagonales, rostros, textos pegados al borde o elementos repetitivos puede producir reflejos o continuidades artificiales.
+**Extender el fondo al sangrado (reflejo)** prolonga las franjas del borde mediante copias reflejadas del contenido PDF original. Conserva las tintas, los vectores y las coordenadas del diseño; no reduce la pieza para hacer sitio a la sangre. Utiliza la medida de sangrado del perfil, que habitualmente es 3 mm, y conserva el contenido de sangre real que ya exista. Es una ayuda para casos determinados, no una reconstrucción del diseño original. En líneas diagonales, rostros, textos pegados al borde o elementos repetitivos puede producir reflejos o continuidades artificiales.
 
 Comprueba el resultado al tamaño de producción y con el comparador. Para un encargo sensible, la solución preferible suele ser ampliar correctamente el fondo en el archivo de diseño. La sangre reflejada no desplaza los textos hacia dentro ni crea por sí sola margen de seguridad.
 
 ### Añadir Marcas FOGRA
 
-**Marcas FOGRA** añade elementos de taller como marcas de corte, registro, tira de control y datos exteriores, según el generador disponible. Amplía el área exterior; por tanto, las dimensiones de página pueden cambiar. Revisa que las marcas no invadan el corte ni el contenido útil.
+**Marcas FOGRA**, también denominada **Añadir pautas de corte y registro** en el taller, añade marcas de corte, registro, tira de control y datos exteriores. Las pautas se alinean con el TrimBox y empiezan fuera de la zona de sangre. El área exterior aumenta para alojarlas, mientras el tamaño de corte y el diseño mantienen sus medidas. Se conserva el fondo extendido; no se encaja la página completa dentro del corte. Revisa siempre las marcas y el contenido útil.
 
 La tira es un elemento gráfico de control. Imprimirla no calibra una prensa ni acredita conformidad con una norma. Sus parches deben medirse con el instrumento y procedimiento adecuados. La lámina FOGRA descargable es una guía independiente: descargarla no añade marcas al trabajo.
 
@@ -376,14 +376,16 @@ Este panel corrige **un trabajo**, con sus opciones seleccionadas. No es la cola
 | Líneas finas | Activada | Engrosamiento según los umbrales aplicables. Revisar detalles de precisión. |
 | Fuentes | Activada | Trazado de páginas con incidencias de fuentes; se omite el trabajo pesado si no hace falta. |
 | Geometría y cajas | Activada | Normalización de corte y espacio de sangrado. No crea por sí sola contenido exterior. |
-| Sangre reflejada | Desactivada | Extensión sintética del borde. Activar solo tras evaluar la imagen. |
+| Extender el fondo al sangrado | Activada en perfiles de imprenta con sangre mayor que cero | Reflejo de los bordes sin reducir el diseño ni cambiar sus tintas. Revisar imágenes y elementos cercanos al corte. |
 | Imágenes RGB a CMYK | Activada | Conversión de imágenes en los destinos CMYK; no es conversión de todos los objetos. |
 | Tintas planas a CMYK | Desactivada | Descomposición de tintas comerciales tratables preservando las técnicas identificadas. |
 | OutputIntent ICC | Activada | Declaración ICC de destino del flujo. Revisar cuál queda informado en el resultado. |
 | Limitación TAC | Activada | Limitación de imágenes CMYK según el perfil. No garantiza que desaparezca cualquier exceso vectorial. |
-| Marcas de imprenta | Desactivada | Elementos de taller en el margen exterior. Evitar duplicaciones antes de imponer. |
+| Pautas de corte y registro | Activada en perfiles CMYK de imprenta | Marcas fuera de la sangre, conservando el tamaño de corte. Desactivar si el destino no requiere marcas en la pieza individual. |
 
-El flujo sigue un orden de correcciones; no ejecuta necesariamente las casillas en el orden en que las pulsas. Los controles que no correspondan a un destino RGB no deben utilizarse como receta de impresión. Revisa los pasos aplicados, errores pendientes, avisos y dictamen final. **Lote completado** indica que terminó el procesamiento, no una autorización de salida.
+Al abrir el taller por primera vez para un trabajo de imprenta se proponen la extensión del fondo y las pautas. En un perfil RGB de pantalla se dejan desmarcadas y el flujo no añade marcas de imprenta. Puedes desmarcar cualquiera de las opciones propuestas; al volver a abrir el panel del mismo trabajo se conserva tu elección. Para otro trabajo se vuelven a proponer las opciones de su perfil.
+
+El flujo sigue un orden de correcciones; no ejecuta necesariamente las casillas en el orden en que las pulsas. Normalizar cajas define espacio; Extender el fondo lo llena con contenido reflejado y Pautas de corte coloca las marcas por fuera. Revisa los pasos aplicados, errores pendientes, avisos y dictamen final. **Lote completado** indica que terminó el procesamiento, no una autorización de salida.
 
 ## 6 Módulos de producción
 
@@ -793,4 +795,4 @@ Conserva el mensaje y el identificador del trabajo para el administrador. Antes 
 | Soft proof | Simulación visual de una condición de reproducción; requiere interpretar sus límites. |
 | SHA 256 | Huella calculada a partir de los bytes de un archivo de referencia. |
 
-**Fin del manual · Edición 2026.11**
+**Fin del manual · Edición 2026.11.1**

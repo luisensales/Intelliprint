@@ -22,7 +22,7 @@ function fakeDocument() {
   return {
     getElementById(id) {
       if (!elements.has(id)) elements.set(id, {
-        value: '', checked: false, innerHTML: '',
+        value: '', checked: false, innerHTML: '', dataset: {},
         classList: { add() {}, remove() {}, toggle() {} },
         querySelectorAll() { return []; },
       });
@@ -36,6 +36,28 @@ test('all inline JavaScript parses', () => {
     if (!/\bsrc\s*=/.test(script[1])) new vm.Script(script[2]);
   }
 });
+
+for (const profile of [
+  {id:'OFFSET_300',color_family:'CMYK',min_bleed_mm:3,bleed:true,marks:true},
+  {id:'PANTALLA_RGB',color_family:'RGB',min_bleed_mm:0,bleed:false,marks:false},
+  {id:'CUSTOM_RGB',color_family:'RGB',min_bleed_mm:0,bleed:false,marks:false},
+  {id:'CUSTOM_ZERO',color_family:'CMYK',min_bleed_mm:0,bleed:false,marks:true},
+]) {
+  test(`the workshop selects bleed and crop marks for ${profile.id}`, () => {
+    const document=fakeDocument();
+    const context={document,currentJobId:'first',currentReport:{job_meta:{profile_id:profile.id}},
+      cachedTargetProfiles:[profile],alert:assert.fail};
+    loadFunctions(context,['openBatchFixModal']);
+    context.openBatchFixModal();
+    assert.equal(document.getElementById('batchChkMirrorBleed').checked,profile.bleed);
+    assert.equal(document.getElementById('batchChkMarks').checked,profile.marks);
+    document.getElementById('batchChkMarks').checked=false;
+    context.openBatchFixModal();
+    assert.equal(document.getElementById('batchChkMarks').checked,false,'Keep the operator choice for this job');
+    context.currentJobId='second';context.openBatchFixModal();
+    assert.equal(document.getElementById('batchChkMarks').checked,profile.marks);
+  });
+}
 
 test('the complete manual loads on first opening and keeps the reading position', () => {
   const document = fakeDocument();

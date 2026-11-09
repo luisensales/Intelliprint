@@ -5,10 +5,12 @@ tiras de control densitométrico CMYK e información de archivo en el área de s
 """
 
 from datetime import datetime
+from io import BytesIO
+import math
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import pymupdf
-from pdf_utils import preserve_output_intents
+from pdf_utils import atomic_output, add_form_resource, pdf_numbers, rect_clip
 import pikepdf
 
 
@@ -37,44 +39,37 @@ def add_printer_marks_to_pdf(
     :param job_filename: Nombre visible del archivo para la tira de información.
     :return: Diccionario con estadísticas.
     """
-    bleed_pt = bleed_mm * 72.0 / 25.4
-    slug_pt = slug_margin_mm * 72.0 / 25.4
-    margin = bleed_pt + slug_pt
-    offset = 2.0 * 72.0 / 25.4  # Separación de 2 mm desde el corte
-    mark_len = 5.0 * 72.0 / 25.4  # Longitud de 5 mm de las marcas
+    if (not all(math.isfinite(v) for v in (bleed_mm, slug_margin_mm))
+            or not 0 <= bleed_mm <= 100 or not 8 <= slug_margin_mm <= 100):
+        raise ValueError('Sangrado o margen de marcas no válido (margen mínimo 8 mm).')
 
-    src_doc = pymupdf.open(pdf_path)
+    src_doc = pikepdf.open(pdf_path)
     dst_doc = pymupdf.open()
 
-    total_pages = len(src_doc)
+    total_pages = len(src_doc.pages)
     doc_name = job_filename or Path(pdf_path).name
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    black = (0.0, 0.0, 0.0)
+    black = (0.0, 0.0, 0.0, 1.0)
 
-    for idx, page in enumerate(src_doc):
-        # Determinar el tamaño neto de corte (TrimBox original o página completa)
-        if page.trimbox.width > 0 and page.trimbox.height > 0 and page.trimbox != page.mediabox:
-            trim = page.trimbox
-        else:
-            trim = page.rect
-
-        w_pt = trim.width
-        h_pt = trim.height
-        tot_w = round(w_pt + 2 * margin, 2)
-        tot_h = round(h_pt + 2 * margin, 2)
+    for idx, page in enumerate(src_doc.pages):
+        trim = list(map(float, page.trimbox))
+        unit = float(page.obj.get('/UserUnit', 1))
+        if not math.isfinite(unit) or unit <= 0:
+            raise ValueError('Unidad de página PDF no válida.')
+        factor = 72 / 25.4 / unit
+        bleed_pt, slug_pt = bleed_mm * factor, slug_margin_mm * factor
+        margin = bleed_pt + slug_pt
+        offset = bleed_pt + 1 * factor  # Marks begin OUTSIDE the artwork bleed.
+        mark_len = 5 * factor
+        w_pt, h_pt = trim[2] - trim[0], trim[3] - trim[1]
+        if w_pt <= 0 or h_pt <= 0:
+            raise ValueError('Caja de corte no válida.')
+        tot_w, tot_h = w_pt + 2 * margin, h_pt + 2 * margin
 
         np = dst_doc.new_page(width=tot_w, height=tot_h)
-        np.set_mediabox(np.rect)
-        np.set_bleedbox(pymupdf.Rect(slug_pt, slug_pt, tot_w - slug_pt, tot_h - slug_pt))
-        np.set_trimbox(pymupdf.Rect(margin, margin, margin + w_pt, margin + h_pt))
-
-        # Colocar el contenido de la página original centrado en el TrimBox
-        np.show_pdf_page(
-            pymupdf.Rect(margin, margin, margin + w_pt, margin + h_pt),
-            src_doc,
-            idx
-        )
+        # This transparent page contains ONLY marks. Native source content is
+        # kept in place below; fitting a whole bled page into TrimBox shrank it.
 
         tx0 = margin
         ty0 = margin
@@ -110,10 +105,13 @@ def add_printer_marks_to_pdf(
         # 3. Tira de Control Normalizada FOGRA / ISO 12647-2 (Media Wedge con Balance de Grises)
         try:
             from control_strip_engine import draw_fogra_control_strip
-            strip_w_est = 245.0
-            start_x = max(margin + 180.0, tot_w - margin - strip_w_est)
-            start_y = slug_pt / 2 - 3.5
-            draw_fogra_control_strip(np, start_x, start_y, swatch_w=5.5, swatch_h=5.5, show_labels=True)
+            with pymupdf.open() as strip_doc:
+                strip_page = strip_doc.new_page(width=400, height=20)
+                strip_width = draw_fogra_control_strip(strip_page, 0, 1, swatch_w=5.5, swatch_h=5.5, show_labels=True)
+                scale = min(1 / unit, max(w_pt / 2 - 10 / unit, 1) / strip_width)
+                rect = pymupdf.Rect(margin, tot_h - slug_pt / 2 - 6 * scale,
+                                    margin + strip_width * scale, tot_h - slug_pt / 2 + 6 * scale)
+                np.show_pdf_page(rect, strip_doc, 0, clip=pymupdf.Rect(0, 0, strip_width, 12))
         except Exception as e:
             # Fallback a tira básica si hubiera algún problema
             colors = [
@@ -129,7 +127,11 @@ def add_printer_marks_to_pdf(
 
         # 4. Información de Trabajo (Slug)
         info_text = f"{doc_name} · Pág {idx + 1}/{total_pages} · {now_str} · IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII"
-        np.insert_text(pymupdf.Point(margin, slug_pt / 2 + 2), info_text, fontsize=6.5, color=(0.2, 0.2, 0.2))
+        font_size = 6.5 / unit
+        available = max(w_pt / 2 - 10 / unit, 1)
+        while info_text and pymupdf.get_text_length(info_text, fontsize=font_size) > available:
+            info_text = info_text[:-1]
+        np.insert_text(pymupdf.Point(margin, slug_pt / 2 + 2 / unit), info_text, fontsize=font_size, color=black)
 
         # Código QR de Trazabilidad para el Maquinista
         if job_id:
@@ -141,18 +143,36 @@ def add_printer_marks_to_pdf(
             except Exception:
                 pass
 
-    temp_marked_path = str(output_path) + ".tmp.pdf"
-    dst_doc.save(temp_marked_path)
-    dst_doc.close()
-    src_doc.close()
-
     try:
-        preserve_output_intents(pdf_path, temp_marked_path, output_path)
+        with pikepdf.open(BytesIO(dst_doc.tobytes())) as marks:
+            for page, overlay in zip(src_doc.pages, marks.pages):
+                trim = list(map(float, page.trimbox))
+                unit = float(page.obj.get('/UserUnit', 1))
+                bleed = bleed_mm * 72 / 25.4 / unit
+                slug = slug_margin_mm * 72 / 25.4 / unit
+                bb = [trim[0] - bleed, trim[1] - bleed, trim[2] + bleed, trim[3] + bleed]
+                media = [bb[0] - slug, bb[1] - slug, bb[2] + slug, bb[3] + slug]
+                # Clip old slug/marks, retaining all artwork INCLUDING its bleed.
+                page.contents_add(('q\n' + rect_clip(bb)).encode('ascii'), prepend=True)
+                page.contents_add(b'\nQ\n')
+                form = src_doc.copy_foreign(overlay.as_form_xobject(handle_transformations=False))
+                form.BBox = list(map(float, overlay.mediabox))
+                name = add_form_resource(page, form)
+                page.contents_add(('q\n' + pdf_numbers([1, 0, 0, 1, media[0], media[1]]) +
+                                   f' cm\n{name} Do\nQ\n').encode('ascii'))
+                page.MediaBox = media
+                page.CropBox = media
+                page.TrimBox = trim
+                page.BleedBox = bb
+            with atomic_output(output_path) as temporary:
+                src_doc.save(temporary)
+                src_doc.close()  # Release the source before replacing it on Windows.
     finally:
-        Path(temp_marked_path).unlink(missing_ok=True)
+        dst_doc.close()
+        src_doc.close()
 
     return {
-        "status": "success",
+        "status": "success", "success": True,
         "pages_processed": total_pages,
         "bleed_mm": bleed_mm,
         "slug_margin_mm": slug_margin_mm

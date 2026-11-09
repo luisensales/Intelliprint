@@ -7,7 +7,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
 MANUAL_SOURCE = BASE_DIR / 'MANUAL_DE_USUARIO_INTELLIPRINT.md'
-MANUAL_EDITION = '2026.11'
+MANUAL_EDITION = '2026.11.1'
 MANUAL_UPDATED = '2026-11-09'
 MANUAL_TITLE = 'Manual de usuario de IntelliPrint'
 

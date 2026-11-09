@@ -1296,8 +1296,8 @@
           <div class="flex items-center gap-3">
             <input type="checkbox" id="batchChkGeometry" checked class="rounded accent-emerald-600 w-4 h-4">
             <div>
-              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">4. Normalizar Cajas y Sangrado 3 mm</p>
-              <p class="text-[11px] text-slate-500">Ajusta MediaBox, TrimBox y BleedBox según norma ISO offset</p>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">4. Normalizar cajas de corte y sangrado</p>
+              <p class="text-[11px] text-slate-500">Define el espacio de sangre del perfil. La opción siguiente extiende el fondo hasta llenarlo.</p>
             </div>
           </div>
           <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded border border-amber-200 shrink-0 ml-2">Aviso</span>
@@ -1305,10 +1305,10 @@
 
         <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
           <div class="flex items-center gap-3">
-            <input type="checkbox" id="batchChkMirrorBleed" class="rounded accent-emerald-600 w-4 h-4">
+            <input type="checkbox" id="batchChkMirrorBleed" checked class="rounded accent-emerald-600 w-4 h-4">
             <div>
-              <p class="text-xs font-bold text-slate-900 group-hover:text-indigo-700 transition">5. Sangrado Sintético por Reflejo (Mirror Bleed 3 mm)</p>
-              <p class="text-[11px] text-slate-500">Genera sangre reflectiva perimetral a 300 ppp para documentos sin sangrado de fondo</p>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-indigo-700 transition">5. Extender el fondo al sangrado (reflejo)</p>
+              <p class="text-[11px] text-slate-500">Prolonga los bordes del diseño sin reducirlo ni cambiar sus tintas. Revisa el resultado antes de imprimir.</p>
             </div>
           </div>
           <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded border border-indigo-200 shrink-0 ml-2">Taller</span>
@@ -1360,10 +1360,10 @@
 
         <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
           <div class="flex items-center gap-3">
-            <input type="checkbox" id="batchChkMarks" class="rounded accent-emerald-600 w-4 h-4">
+            <input type="checkbox" id="batchChkMarks" checked class="rounded accent-emerald-600 w-4 h-4">
             <div>
-              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">10. Añadir Marcas de Imprenta y Registro (+10 mm)</p>
-              <p class="text-[11px] text-slate-500">Inyecta marcas de corte, cruces de registro y tira CMYK (opcional, para pruebas)</p>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">10. Añadir pautas de corte y registro (+10 mm)</p>
+              <p class="text-[11px] text-slate-500">Sitúa las marcas fuera de la sangre, conservando el tamaño de corte y el fondo extendido.</p>
             </div>
           </div>
           <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-300 shrink-0 ml-2">Opcional</span>
@@ -2501,7 +2501,7 @@
       <div class="flex items-center justify-between gap-4 px-5 py-3 bg-slate-900 text-white shrink-0">
         <div>
           <h3 id="manualModalTitle" class="font-bold">Manual completo de usuario de IntelliPrint</h3>
-          <p class="text-xs text-slate-300">Edición 2026.11 · Todas las herramientas, opciones y actividades de FP</p>
+          <p class="text-xs text-slate-300">Edición 2026.11.1 · Todas las herramientas, opciones y actividades de FP</p>
         </div>
         <button onclick="closeManualModal()" aria-label="Cerrar manual" class="p-2 rounded-lg hover:bg-white/10"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
@@ -5148,6 +5148,14 @@
     function openBatchFixModal() {
       if (!currentJobId) { alert('No hay ningun trabajo activo. Sube y analiza un PDF primero.'); return; }
       const modal = document.getElementById('batchFixModal');
+      if (modal && modal.dataset.jobId !== currentJobId) {
+        const profileId = currentReport?.job_meta?.profile_id || 'OFFSET_300';
+        const profile = cachedTargetProfiles.find(p => p.id === profileId);
+        const isPrint = profile ? profile.color_family === 'CMYK' : profileId !== 'PANTALLA_RGB';
+        document.getElementById('batchChkMirrorBleed').checked = isPrint && (profile?.min_bleed_mm ?? 3) > 0;
+        document.getElementById('batchChkMarks').checked = isPrint;
+        modal.dataset.jobId = currentJobId;
+      }
       if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
       const resultArea = document.getElementById('batchResultArea');
       if (resultArea) resultArea.classList.add('hidden');
@@ -5168,12 +5176,12 @@
       const hairlines   = document.getElementById('batchChkHairlines')?.checked ?? true;
       const fonts       = document.getElementById('batchChkFonts')?.checked ?? true;
       const geometry    = document.getElementById('batchChkGeometry')?.checked ?? true;
-      const mirrorBleed = document.getElementById('batchChkMirrorBleed')?.checked ?? false;
+      const mirrorBleed = document.getElementById('batchChkMirrorBleed')?.checked ?? true;
       const cmyk        = document.getElementById('batchChkCmyk')?.checked ?? true;
       const spots       = document.getElementById('batchChkSpots')?.checked ?? false;
       const icc         = document.getElementById('batchChkIcc')?.checked ?? true;
       const tac         = document.getElementById('batchChkTac')?.checked ?? true;
-      const marks       = document.getElementById('batchChkMarks')?.checked ?? false;
+      const marks       = document.getElementById('batchChkMarks')?.checked ?? true;
 
       const origHtml = btn.innerHTML;
       btn.disabled = true;

@@ -2196,12 +2196,12 @@ def batch_fix_endpoint(
     hairlines: bool = True,
     icc: bool = True,
     geometry: bool = True,
-    mirror_bleed: bool = False,
+    mirror_bleed: bool = True,
     cmyk_images: bool = True,
     spot_colors: bool = False,
     fonts: bool = True,
     tac: bool = True,
-    printer_marks: bool = False
+    printer_marks: bool = True
 ):
     """
     Fase 3: Lote de Acciones en 1 Clic (One-Click Batch Fixer).
@@ -2360,7 +2360,7 @@ def batch_fix_endpoint(
                     ]
 
             # 4b. Sangrado Sintético por Reflejo perimetral de píxeles (Mirror Bleed)
-            if mirror_bleed:
+            if mirror_bleed and profile["min_bleed_mm"] > 0:
                 step_mb_out = JOBS_DIR / f"{safe_id}_bstep_mirrorbleed.pdf"
                 temp_files.append(step_mb_out)
                 mb_res = generate_mirror_bleed(str(current_in), str(step_mb_out), bleed_mm=profile["min_bleed_mm"])
@@ -2489,7 +2489,7 @@ def batch_fix_endpoint(
                     ]
 
             # 7. Marcas de Imprenta (Opcional)
-            if printer_marks:
+            if printer_marks and profile["color_family"] == "CMYK":
                 step7_out = JOBS_DIR / f"{safe_id}_bstep7_marks.pdf"
                 temp_files.append(step7_out)
                 orig_filename = job_meta.get("filename", "documento.pdf")
