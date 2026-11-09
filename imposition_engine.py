@@ -424,8 +424,13 @@ def calculate_imposition_plan(
     return best_option
 
 
-def _draw_registration_cross(page: pymupdf.Page, cx: float, cy: float, radius: float = 6.0):
-    """Dibuja una cruz de registro circular estilo prepress en coordenadas (cx, cy)."""
+def _draw_registration_cross(page: pymupdf.Page, cx: float, cy: float, radius: float = 5.0):
+    """Dibuja una cruz de registro circular estilo prepress en coordenadas (cx, cy) con halo blanco."""
+    shape_halo = page.new_shape()
+    shape_halo.draw_circle(pymupdf.Point(cx, cy), radius + 1.5)
+    shape_halo.finish(color=(1, 1, 1), fill=(1, 1, 1), width=0.8)
+    shape_halo.commit()
+
     shape = page.new_shape()
     shape.draw_circle(pymupdf.Point(cx, cy), radius)
     shape.draw_line(pymupdf.Point(cx - radius - 3.5, cy), pymupdf.Point(cx + radius + 3.5, cy))
@@ -434,55 +439,96 @@ def _draw_registration_cross(page: pymupdf.Page, cx: float, cy: float, radius: f
     shape.commit()
 
 
-def _draw_cmyk_color_strip(
+_CACHED_STRIP_PDF: Optional[pymupdf.Document] = None
+_CACHED_STRIP_CROP = pymupdf.Rect(15.0, 155.0, 1348.5, 188.5)
+
+
+def _get_strip_pdf_doc() -> Optional[pymupdf.Document]:
+    """Carga y convierte a PDF vectorial en memoria la Tira de control 25-50-75.svg."""
+    global _CACHED_STRIP_PDF
+    if _CACHED_STRIP_PDF is not None:
+        return _CACHED_STRIP_PDF
+
+    possible_paths = [
+        Path("assets/Tira de control 25-50-75.svg"),
+        Path(__file__).parent / "assets" / "Tira de control 25-50-75.svg",
+    ]
+    for p in possible_paths:
+        if p.exists():
+            try:
+                svg_doc = pymupdf.open("svg", p.read_bytes())
+                pdf_bytes = svg_doc.convert_to_pdf()
+                svg_doc.close()
+                _CACHED_STRIP_PDF = pymupdf.open("pdf", pdf_bytes)
+                return _CACHED_STRIP_PDF
+            except Exception as e:
+                print(f"Error cargando tira de control SVG: {e}")
+    return None
+
+
+def _draw_custom_color_strip(
     page: pymupdf.Page,
     x_start: float,
+    x_end: float,
     y_top: float,
-    patch_w: float = 6.0,
-    patch_h: float = 6.0,
-    max_x: Optional[float] = None,
-    skip_zones: Optional[List[Tuple[float, float]]] = None
+    target_h_pt: float = 10.0 * PT_PER_MM,
 ):
-    """Dibuja la tira de control FOGRA / ISO 12647-2 (repetida a todo lo ancho si se define max_x)."""
-    try:
-        from control_strip_engine import draw_repeated_fogra_strip, draw_fogra_control_strip
-        if max_x is not None and max_x > x_start:
-            draw_repeated_fogra_strip(
-                page,
-                x_start=x_start,
-                y=y_top - 1.0,
-                max_x=max_x,
-                swatch_w=patch_w,
-                swatch_h=patch_h,
-                show_labels=True,
-                skip_zones=skip_zones
-            )
-        else:
-            draw_fogra_control_strip(page, x_start, y_top - 1.0, swatch_w=patch_w, swatch_h=patch_h, show_labels=True)
-    except Exception:
-        colors = [
-            (0.0, 0.65, 0.90),      # Cyan 100%
-            (0.5, 0.82, 0.95),      # Cyan 50%
-            (0.85, 0.05, 0.45),     # Magenta 100%
-            (0.92, 0.52, 0.72),     # Magenta 50%
-            (0.98, 0.85, 0.05),     # Yellow 100%
-            (0.99, 0.92, 0.52),     # Yellow 50%
-            (0.10, 0.10, 0.10),     # Black 100%
-            (0.55, 0.55, 0.55),     # Black 50%
-        ]
-        cur_x = x_start
-        limit_x = max_x if max_x is not None else (x_start + len(colors) * (patch_w + 1.5))
-        shape = page.new_shape()
-        while cur_x + patch_w <= limit_x:
-            for col in colors:
-                if cur_x + patch_w > limit_x:
-                    break
-                shape.draw_rect(pymupdf.Rect(cur_x, y_top, cur_x + patch_w, y_top + patch_h))
-                shape.finish(fill=col, color=(0.4, 0.4, 0.4), width=0.3)
-                cur_x += patch_w + 1.5
-            if max_x is None:
+    """
+    Embebe la tira de control 25-50-75 (vectorial nativa) a todo lo ancho del pliego/trabajo,
+    repitiéndola tantas veces como sea necesario para cubrir de x_start a x_end,
+    y recortando limpiamente el último módulo si excede x_end.
+    Altura mínima garantizada: 10 mm.
+    """
+    strip_doc = _get_strip_pdf_doc()
+    h_pt = max(target_h_pt, 10.0 * PT_PER_MM)
+
+    if strip_doc is not None:
+        try:
+            orig_crop = _CACHED_STRIP_CROP
+            cw = orig_crop.width
+            ch = orig_crop.height
+            if cw > 0 and ch > 0:
+                scale = h_pt / ch
+                tile_w = cw * scale
+
+                curr_x = x_start
+                while curr_x < x_end - 0.5:
+                    avail_w = x_end - curr_x
+                    if avail_w >= tile_w:
+                        dest_rect = pymupdf.Rect(curr_x, y_top, curr_x + tile_w, y_top + h_pt)
+                        page.show_pdf_page(dest_rect, strip_doc, 0, clip=orig_crop)
+                        curr_x += tile_w
+                    else:
+                        frac = avail_w / tile_w
+                        clip_w = cw * frac
+                        tile_crop = pymupdf.Rect(orig_crop.x0, orig_crop.y0, orig_crop.x0 + clip_w, orig_crop.y1)
+                        dest_rect = pymupdf.Rect(curr_x, y_top, curr_x + avail_w, y_top + h_pt)
+                        page.show_pdf_page(dest_rect, strip_doc, 0, clip=tile_crop)
+                        curr_x += avail_w
+                return
+        except Exception as e:
+            print(f"Error renderizando tira vectorial: {e}")
+
+    # Fallback: tira de control de emergencia CMYK con porcentajes 25-50-75-100%
+    colors = [
+        (0.0, 0.65, 0.90), (0.3, 0.75, 0.93), (0.6, 0.88, 0.96),  # Cyan 100, 50, 25%
+        (0.85, 0.05, 0.45), (0.90, 0.45, 0.70), (0.95, 0.75, 0.85), # Magenta 100, 50, 25%
+        (0.98, 0.85, 0.05), (0.99, 0.92, 0.50), (0.99, 0.96, 0.75), # Yellow 100, 50, 25%
+        (0.10, 0.10, 0.10), (0.45, 0.45, 0.45), (0.75, 0.75, 0.75), # Black 100, 50, 25%
+    ]
+    patch_w = 12.0
+    cur_x = x_start
+    shape = page.new_shape()
+    while cur_x + patch_w <= x_end:
+        for col in colors:
+            if cur_x + patch_w > x_end:
                 break
-        shape.commit()
+            shape.draw_rect(pymupdf.Rect(cur_x, y_top, cur_x + patch_w, y_top + h_pt))
+            shape.finish(fill=col, color=(0.7, 0.7, 0.7), width=0.3)
+            cur_x += patch_w + 1.0
+        if cur_x >= x_end:
+            break
+    shape.commit()
 
 
 def _place_pose(
@@ -957,7 +1003,30 @@ def _decorate_sheet(
     shape_mark.finish(color=(0, 0, 0), width=0.35)
     shape_mark.commit()
 
-    # 2. Cruces de registro circulares
+    # 2. Tira de control 25-50-75 (mínimo 10 mm de altura, repetida a todo lo ancho del trabajo/pliego)
+    if add_color_bar:
+        strip_h_pt = 10.0 * PT_PER_MM
+        # Posición Y en el margen superior: 3.5 mm
+        bar_y = 3.5 * PT_PER_MM
+        top_cut_limit = y_min_grid + bleed_pt - mark_offset - mark_len
+        if top_cut_limit > strip_h_pt + 3.0 * PT_PER_MM:
+            bar_y = max(2.5 * PT_PER_MM, min(4.0 * PT_PER_MM, (top_cut_limit - strip_h_pt) / 2.0))
+        elif top_cut_limit > strip_h_pt + 1.0 * PT_PER_MM:
+            bar_y = max(1.5 * PT_PER_MM, top_cut_limit - strip_h_pt - 1.0 * PT_PER_MM)
+
+        # Cubre todo el ancho del trabajo y pliego útil
+        x_left = min(x_min_grid, 6.0 * PT_PER_MM)
+        x_right = max(x_max_grid, sheet_w_pt - 6.0 * PT_PER_MM)
+
+        _draw_custom_color_strip(
+            sheet,
+            x_start=x_left,
+            x_end=x_right,
+            y_top=bar_y,
+            target_h_pt=strip_h_pt,
+        )
+
+    # 3. Cruces de registro circulares (con halo blanco para no empastarse con la tira)
     if add_reg_crosses:
         cx_mid = sheet_w_pt / 2.0
         cy_mid = sheet_h_pt / 2.0
@@ -967,29 +1036,6 @@ def _decorate_sheet(
         _draw_registration_cross(sheet, cx_mid, sheet_h_pt - reg_margin, r_cross)
         _draw_registration_cross(sheet, reg_margin, cy_mid, r_cross)
         _draw_registration_cross(sheet, sheet_w_pt - reg_margin, cy_mid, r_cross)
-
-    # 3. Tira de control densitométrico FOGRA / ISO 12647-2 (Repetida a todo lo ancho del pliego)
-    if add_color_bar:
-        # Arranca a la izquierda del pliego y se repite de forma modular continua hasta el margen derecho
-        bar_y = 5.0 * PT_PER_MM
-        x_left = 6.0 * PT_PER_MM
-        x_right = sheet_w_pt - 6.0 * PT_PER_MM
-
-        # Protección para la cruz de registro central superior para evitar solapes
-        skip_list = []
-        if add_reg_crosses:
-            cx_mid = sheet_w_pt / 2.0
-            skip_list.append((cx_mid - 9.0, cx_mid + 9.0))
-
-        _draw_cmyk_color_strip(
-            sheet,
-            x_start=x_left,
-            y_top=bar_y,
-            patch_w=6.0,
-            patch_h=6.0,
-            max_x=x_right,
-            skip_zones=skip_list,
-        )
 
     # 4. Información técnica del pliego (Slug)
     if add_slug:
