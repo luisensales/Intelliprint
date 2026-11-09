@@ -8,3 +8,14 @@ def validate_pdf_filename(filename: str | None) -> str:
     if not filename.lower().endswith('.pdf') or not filename[:-4].strip():
         raise ValueError("El archivo subido debe ser un documento PDF.")
     return filename
+
+
+def discard_failed_upload(folder, upload_root):
+    """Delete only a generated job subdirectory, never the upload root itself."""
+    import shutil
+    from pathlib import Path
+    target, root = Path(folder).resolve(), Path(upload_root).resolve()
+    if target == root or not target.is_relative_to(root):
+        raise ValueError("La carpeta del trabajo queda fuera del directorio de subidas.")
+    if target.exists():
+        shutil.rmtree(target)

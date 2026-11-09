@@ -5,6 +5,7 @@ import pymupdf as fitz
 import pikepdf
 from decimal import Decimal
 from pathlib import Path
+from pdf_utils import iter_resources
 from icc_manager import detect_pdf_output_intent, apply_icc_to_pdf
 from spellcheck_engine import PrepressSpellChecker
 
@@ -74,8 +75,7 @@ def extract_pdf_spot_colors(pike_doc) -> list[dict]:
     """
     spots = {}
     try:
-        for p_idx, page in enumerate(pike_doc.pages, 1):
-            res = page.obj.get('/Resources')
+        for p_idx, res in iter_resources(pike_doc):
             if not res:
                 continue
             cs_dict = res.get('/ColorSpace', {})
@@ -398,7 +398,8 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
             lw = state.get('line_width', 1.0)
             ctm = state.get('ctm_scale', 1.0)
             effective_lw = lw * ctm if ctm > 0 else lw
-            if 0.0 <= effective_lw < 0.25:
+            minimum_line_width = overprint_data.get("min_hairline_threshold", 0.25)
+            if 0.0 <= effective_lw < minimum_line_width:
                 overprint_data["hairlines_count"] = overprint_data.get("hairlines_count", 0) + 1
                 if not any(inc["page"] == page_num and inc["type"] == "HAIRLINE_DETECTED" for inc in overprint_data["incidents"]):
                     overprint_data["incidents"].append({
@@ -406,8 +407,8 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
                         "type": "HAIRLINE_DETECTED",
                         "severity": "WARNING",
                         "category": "Trazos y Geometría",
-                        "title": "Filetes demasiado finos (< 0,25 pt)",
-                        "message": f"Se detectan trazos con grosor inferior a 0,25 pt ({effective_lw:.2f} pt) en pág {page_num}. En plancha CTP o imprenta pueden romperse o no imprimirse.",
+                        "title": f"Filetes demasiado finos (< {minimum_line_width:.2f} pt)",
+                        "message": f"Se detectan trazos de {effective_lw:.2f} pt en pág {page_num}; el perfil exige {minimum_line_width:.2f} pt. En plancha CTP o imprenta pueden romperse o no imprimirse.",
                         "can_autofix": True,
                     })
 
@@ -586,15 +587,23 @@ class IntelliPrintEngine:
         if icc_choice == "custom_selection" and selected_icc:
             applied_icc_info = apply_icc_to_pdf(pdf_path, selected_icc)
 
+        # Reject unreadable/encrypted input before opening it in MuPDF. QPDF
+        # closes failed parser inputs, including on Windows.
+        try:
+            with pikepdf.open(pdf_path) as checked:
+                if not len(checked.pages):
+                    raise ValueError("El PDF no contiene paginas.")
+        except Exception as exc:
+            raise ValueError("No se pudo abrir un PDF valido y sin cifrado.") from exc
+
         # Open with PyMuPDF
         try:
             doc = fitz.open(pdf_path)
-        except Exception as e:
-            return {
-                "technical_result": "fail",
-                "error": f"No se pudo abrir el documento PDF: {e}",
-                "findings": []
-            }
+        except Exception as exc:
+            raise ValueError("No se pudo abrir un documento PDF valido.") from exc
+        if doc.needs_pass or not doc.is_pdf or len(doc) == 0:
+            doc.close()
+            raise ValueError("El PDF debe contener paginas y poder abrirse sin contrasena.")
 
         page_count = len(doc)
         total_images = 0
@@ -808,7 +817,7 @@ class IntelliPrintEngine:
                 font_name = f[3]
                 is_embedded = (f[1] not in ("", "n/a", None))
                 fonts_found.append({"name": font_name, "embedded": is_embedded, "page": p_idx + 1})
-                if not is_embedded:
+                if require_fonts_embedded and not is_embedded:
                     findings.append({
                         "page": p_idx + 1,
                         "rule_id": "USED_FONTS_EMBEDDED",
@@ -833,6 +842,7 @@ class IntelliPrintEngine:
             "varnish_knockout": 0,
             "pantone_overprint": 0,
             "pantone_knockout": 0,
+            "min_hairline_threshold": min_hairline_threshold,
             "hairlines_count": 0,
             "incidents": []
         }
@@ -850,6 +860,26 @@ class IntelliPrintEngine:
             pike_doc.close()
         except Exception:
             pass
+
+        if not allow_spot_colors:
+            for spot in spot_colors_detected:
+                findings.append({"page": 1, "rule_id": "SPOT_COLOR_NOT_ALLOWED", "severity": "ERROR",
+                                 "category": "Color", "title": "Tinta plana no admitida por el perfil",
+                                 "message": f"El perfil {profile_id} no permite la tinta {spot['name']}."})
+
+        tac_measurement = {"measured": False, "not_applicable": req_family != "CMYK"}
+        if req_family == "CMYK":
+            try:
+                from tac_limiter import measure_pdf_tac
+                tac_measurement = measure_pdf_tac(pdf_path)
+                if tac_measurement["peak_percent"] > max_tac_limit + 0.5:
+                    findings.append({"page": 1, "rule_id": "MAX_INK_COVERAGE", "severity": "ERROR",
+                                     "category": "Color", "title": "Cobertura total de tinta superior al perfil",
+                                     "message": f"TAC estimado {tac_measurement['peak_percent']:.1f} %, limite {max_tac_limit} %. Verificar en el RIP de produccion."})
+            except Exception:
+                findings.append({"page": 1, "rule_id": "TAC_NOT_MEASURED", "severity": "WARNING",
+                                 "category": "Color", "title": "TAC no medido",
+                                 "message": "No se pudo estimar la cobertura. Requiere verificacion en el RIP."})
 
         # If custom ICC was applied, ensure output_intent_info reflects it
         if applied_icc_info and applied_icc_info.get("applied"):
@@ -930,6 +960,7 @@ class IntelliPrintEngine:
                 "target_dpi": target_dpi,
                 "min_bleed_req_mm": min_bleed_req_mm,
                 "max_tac_limit": max_tac_limit,
+                "tac_measurement": tac_measurement,
                 "min_hairline_threshold": min_hairline_threshold,
                 "pages": page_count,
                 "total_images": total_images,

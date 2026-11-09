@@ -14,7 +14,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import pymupdf
-from upload_security import validate_pdf_filename
+from pdf_utils import copy_pdf
+from upload_security import validate_pdf_filename, discard_failed_upload
 
 from preflight_engine import IntelliPrintEngine
 from icc_manager import get_available_icc_profiles, detect_pdf_output_intent, apply_icc_to_pdf, ICC_DIR
@@ -77,6 +78,7 @@ from didactic_engine import (
     generate_student_worksheet_pdf,
 )
 from profile_manager import (
+    import_custom_profiles,
     get_all_profiles,
     get_profile_by_id,
     create_custom_profile,
@@ -295,14 +297,20 @@ async def get_profiles():
 @app.post("/api/profiles/custom")
 async def create_profile_endpoint(payload: dict):
     """Crea un nuevo perfil personalizado de preflight."""
-    new_p = create_custom_profile(payload)
+    try:
+        new_p = create_custom_profile(payload)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"status": "success", "profile": new_p}
 
 
 @app.put("/api/profiles/custom/{profile_id}")
 async def update_profile_endpoint(profile_id: str, payload: dict):
     """Actualiza un perfil personalizado de preflight."""
-    updated = update_custom_profile(profile_id, payload)
+    try:
+        updated = update_custom_profile(profile_id, payload)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not updated:
         raise HTTPException(status_code=404, detail="Perfil no encontrado o no modificable.")
     return {"status": "success", "profile": updated}
@@ -327,17 +335,11 @@ async def export_profiles_endpoint():
 @app.post("/api/profiles/import")
 async def import_profiles_endpoint(payload: dict):
     """Importa perfiles personalizados desde un JSON."""
-    profiles_to_import = payload.get("custom_profiles", [])
-    current = load_custom_profiles()
-    current_ids = {p["id"] for p in current}
-    imported_count = 0
-    for p in profiles_to_import:
-        if p.get("id") not in current_ids:
-            p["is_custom"] = True
-            current.append(p)
-            imported_count += 1
-    save_custom_profiles_to_disk(current)
-    return {"status": "success", "imported": imported_count, "total_custom": len(current)}
+    try:
+        return import_custom_profiles(payload.get("custom_profiles", []))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
 
 @app.get("/api/icc-catalog")
 async def get_icc_catalog():
@@ -385,7 +387,7 @@ async def inspect_pdf(file: UploadFile = File(...)):
             "output_intent": icc_info
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al inspeccionar PDF: {e}")
+        raise HTTPException(status_code=422, detail="No se pudo abrir un PDF valido y sin cifrado.") from e
     finally:
         if temp_path.exists():
             try:
@@ -428,8 +430,12 @@ async def check_pdf(
             icc_choice=icc_option,
             selected_icc=selected_icc
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error durante el preflight: {e}")
+    except ValueError as exc:
+        discard_failed_upload(job_folder, UPLOAD_DIR)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        discard_failed_upload(job_folder, UPLOAD_DIR)
+        raise HTTPException(status_code=500, detail="No se pudo analizar el PDF.") from exc
 
     # Attach Job Metadata
     report["job_meta"] = {
@@ -684,6 +690,7 @@ def register_cumulative_fix(job_data: dict, output_path: str | Path, fix_name: s
     'last_fixed_pdf_path' y el historial cronológico de correcciones acumulativas.
     """
     job_meta = job_data.setdefault("job_meta", {})
+    job_data.setdefault("triple_result", {})["release"] = {"status": "PENDING_AUTHORIZATION", "label": "Pendiente de autorizar el PDF corregido"}
     job_meta["last_fixed_pdf_path"] = str(output_path)
     job_meta[f"has_{fix_name}"] = True
     history = job_meta.setdefault("applied_fixes_history", [])
@@ -925,6 +932,8 @@ async def convert_spots_to_cmyk_endpoint(job_id: str, target_spots: Optional[str
     tech["label"] = "NO CUMPLE" if errs > 0 else ("CUMPLE CON AVISOS" if warns > 0 else "CUMPLE")
 
     # Regenerar el certificado oficial en PDF
+    refresh_job_analysis(job_data, get_latest_cumulative_pdf(job_meta))
+    spots_remaining = job_data["job_summary"]["spot_colors"]
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
     try:
         generate_preflight_certificate_pdf(job_data, cert_path)
@@ -935,6 +944,7 @@ async def convert_spots_to_cmyk_endpoint(job_id: str, target_spots: Optional[str
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
     return {
+        "report": job_data,
         "status": "success",
         "spots_converted": conv_result.get("spots_converted", []),
         "pages_modified": conv_result.get("pages_modified", 0),
@@ -1074,6 +1084,7 @@ async def apply_overprint_fix(job_id: str, mode: str = "k100"):
         tech["label"] = "CUMPLE"
 
     # Regenerar el PDF de la Ficha Tecnica oficial para que el Dictamen no muestre el error resuelto
+    refresh_job_analysis(job_data, get_latest_cumulative_pdf(job_meta))
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
     try:
         generate_preflight_certificate_pdf(job_data, cert_path)
@@ -1084,6 +1095,7 @@ async def apply_overprint_fix(job_id: str, mode: str = "k100"):
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
     return {
+        "report": job_data,
         "status": "success",
         "mode": mode,
         "pages_modified": result["pages_modified"],
@@ -1113,6 +1125,8 @@ async def fix_hairlines_endpoint(job_id: str, target_width: float = 0.30):
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
+    minimum_width = get_profile_by_id(job_meta.get("profile_id", "OFFSET_300"))["min_hairline_pt"]
+    target_width = max(target_width, minimum_width)
     source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
@@ -1122,6 +1136,7 @@ async def fix_hairlines_endpoint(job_id: str, target_width: float = 0.30):
     result = fix_hairlines(
         pdf_path=source_pdf,
         output_path=output_path,
+        hairline_threshold=minimum_width,
         target_width=target_width
     )
 
@@ -1157,6 +1172,7 @@ async def fix_hairlines_endpoint(job_id: str, target_width: float = 0.30):
         tech["label"] = "CUMPLE"
 
     # Regenerar certificado
+    refresh_job_analysis(job_data, get_latest_cumulative_pdf(job_meta))
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
     try:
         generate_preflight_certificate_pdf(job_data, cert_path)
@@ -1167,6 +1183,7 @@ async def fix_hairlines_endpoint(job_id: str, target_width: float = 0.30):
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
     return {
+        "report": job_data,
         "status": "success",
         "job_id": safe_id,
         "lines_fixed": result.get("lines_fixed", 0),
@@ -1225,7 +1242,7 @@ async def fix_output_intent_endpoint(job_id: str, icc_profile: Optional[str] = N
     output_path = JOBS_DIR / f"{safe_id}_icc_fixed.pdf"
     # Copiar source_pdf a output_path para no pisar el anterior
     import shutil
-    shutil.copyfile(source_pdf, output_path)
+    copy_pdf(source_pdf, output_path)
 
     # Determinar el perfil según el perfil del trabajo si no se especificó
     target_icc = icc_profile or "ISOcoated_v2_eci.icc"
@@ -1238,7 +1255,10 @@ async def fix_output_intent_endpoint(job_id: str, icc_profile: Optional[str] = N
         else:
             target_icc = "ISOcoated_v2_eci.icc" if (ICC_DIR / "ISOcoated_v2_eci.icc").exists() else "ISOcoated_v2_300_bas.icc"
 
-    applied_info = apply_icc_to_pdf(output_path, target_icc)
+    try:
+        applied_info = apply_icc_to_pdf(output_path, target_icc)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not applied_info:
         raise HTTPException(status_code=500, detail="Fallo al incrustar el OutputIntent en el PDF.")
 
@@ -1275,6 +1295,7 @@ async def fix_output_intent_endpoint(job_id: str, icc_profile: Optional[str] = N
         tech["label"] = "CUMPLE"
 
     # Regenerar certificado
+    refresh_job_analysis(job_data, get_latest_cumulative_pdf(job_meta))
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
     try:
         generate_preflight_certificate_pdf(job_data, cert_path)
@@ -1285,6 +1306,7 @@ async def fix_output_intent_endpoint(job_id: str, icc_profile: Optional[str] = N
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
     return {
+        "report": job_data,
         "status": "success",
         "job_id": safe_id,
         "applied_icc": applied_info,
@@ -1376,6 +1398,7 @@ async def fix_bleed_geometry_endpoint(job_id: str, bleed_mm: float = 3.0):
         tech["label"] = "CUMPLE"
 
     # Regenerar certificado técnico PDF
+    refresh_job_analysis(job_data, get_latest_cumulative_pdf(job_meta))
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
     try:
         generate_preflight_certificate_pdf(job_data, cert_path)
@@ -1386,6 +1409,7 @@ async def fix_bleed_geometry_endpoint(job_id: str, bleed_mm: float = 3.0):
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
     return {
+        "report": job_data,
         "status": "success",
         "job_id": safe_id,
         "pages_modified": result.get("pages_modified", 0),
@@ -1450,7 +1474,10 @@ async def outline_fonts_endpoint(job_id: str, pages: Optional[str] = None):
             target_page_list = None
 
     output_path = JOBS_DIR / f"{safe_id}_fonts_outlined.pdf"
-    result = outline_fonts_in_pdf(source_pdf, str(output_path), target_pages=target_page_list)
+    try:
+        result = outline_fonts_in_pdf(source_pdf, str(output_path), target_pages=target_page_list)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     job_meta["has_fonts_outlined"] = True
     job_meta["fonts_outlined_pdf_path"] = str(output_path)
@@ -1486,6 +1513,7 @@ async def outline_fonts_endpoint(job_id: str, pages: Optional[str] = None):
         tech["label"] = "CUMPLE"
 
     # Regenerar certificado técnico PDF
+    refresh_job_analysis(job_data, get_latest_cumulative_pdf(job_meta))
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
     try:
         generate_preflight_certificate_pdf(job_data, cert_path)
@@ -1496,6 +1524,7 @@ async def outline_fonts_endpoint(job_id: str, pages: Optional[str] = None):
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
     return {
+        "report": job_data,
         "status": "success",
         "job_id": safe_id,
         "pages_vectorized": result.get("pages_vectorized", 0),
@@ -1588,6 +1617,7 @@ async def generate_mirror_bleed_endpoint(job_id: str, bleed_mm: float = 3.0):
         tech["label"] = "CUMPLE"
 
     # Regenerar certificado técnico PDF
+    refresh_job_analysis(job_data, get_latest_cumulative_pdf(job_meta))
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
     try:
         generate_preflight_certificate_pdf(job_data, cert_path)
@@ -1598,6 +1628,7 @@ async def generate_mirror_bleed_endpoint(job_id: str, bleed_mm: float = 3.0):
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
     return {
+        "report": job_data,
         "status": "success",
         "job_id": safe_id,
         "pages_processed": result.get("pages_processed", 0),
@@ -1688,6 +1719,7 @@ async def add_printer_marks_endpoint(
     register_cumulative_fix(job_data, output_path, "printer_marks")
 
     # Regenerar certificado técnico PDF
+    refresh_job_analysis(job_data, get_latest_cumulative_pdf(job_meta))
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
     try:
         generate_preflight_certificate_pdf(job_data, cert_path)
@@ -1698,6 +1730,7 @@ async def add_printer_marks_endpoint(
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
     return {
+        "report": job_data,
         "status": "success",
         "job_id": safe_id,
         "pages_processed": result.get("pages_processed", 0),
@@ -1739,7 +1772,7 @@ async def download_printer_marks_pdf(job_id: str):
 @app.post("/api/limit-tac/{job_id}")
 async def limit_tac_endpoint(
     job_id: str,
-    max_tac: float = 300.0
+    max_tac: Optional[float] = None
 ):
     """
     Fase 3: Limita la cobertura total de tinta (TAC / TIC) al 300% (o valor especificado) mediante UCR.
@@ -1753,18 +1786,26 @@ async def limit_tac_endpoint(
         job_data = json.load(f)
 
     job_meta = job_data.get("job_meta", {})
+    if max_tac is None:
+        max_tac = get_profile_by_id(job_meta.get("profile_id", "OFFSET_300"))["max_tac"]
     source_pdf = get_latest_cumulative_pdf(job_meta)
     if not source_pdf or not Path(source_pdf).exists():
         raise HTTPException(status_code=400, detail="PDF de origen no encontrado en el servidor.")
 
     output_path = JOBS_DIR / f"{safe_id}_tac_limited.pdf"
-    result = limit_pdf_tac(source_pdf, str(output_path), max_tac_percent=max_tac)
+    try:
+        result = limit_pdf_tac(source_pdf, str(output_path), max_tac_percent=max_tac)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not result.get("success"):
+        raise HTTPException(status_code=422, detail="No se pudo limitar la tinta de todas las imagenes.")
 
     job_meta["has_tac_limited"] = True
     job_meta["tac_limited_pdf_path"] = str(output_path)
     register_cumulative_fix(job_data, output_path, "tac_limited")
 
     # Regenerar certificado técnico PDF
+    refresh_job_analysis(job_data, get_latest_cumulative_pdf(job_meta))
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
     try:
         generate_preflight_certificate_pdf(job_data, cert_path)
@@ -1775,6 +1816,7 @@ async def limit_tac_endpoint(
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
     return {
+        "report": job_data,
         "status": "success",
         "job_id": safe_id,
         "images_inspected": result.get("images_inspected", 0),
@@ -1908,6 +1950,7 @@ async def apply_varnish_overprint_endpoint(job_id: str, target_spots: Optional[s
     tech["label"] = "NO CUMPLE" if errs > 0 else ("CUMPLE CON AVISOS" if warns > 0 else "CUMPLE")
 
     # Regenerar el certificado oficial en PDF
+    refresh_job_analysis(job_data, get_latest_cumulative_pdf(job_meta))
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
     try:
         generate_preflight_certificate_pdf(job_data, cert_path)
@@ -1918,6 +1961,7 @@ async def apply_varnish_overprint_endpoint(job_id: str, target_spots: Optional[s
         json.dump(job_data, f, ensure_ascii=False, indent=2)
 
     return {
+        "report": job_data,
         "status": "success",
         "pages_modified": result.get("pages_modified", 0),
         "ops_fixed": result.get("ops_fixed", 0),
@@ -2160,6 +2204,7 @@ def batch_fix_endpoint(
             job_data = json.load(f)
 
         job_meta = job_data.get("job_meta", {}) or {}
+        profile = get_profile_by_id(job_meta.get("profile_id", "OFFSET_300"))
         source_pdf = get_latest_cumulative_pdf(job_meta)
         if not source_pdf or not Path(source_pdf).exists():
             raise HTTPException(status_code=400, detail="PDF original no encontrado.")
@@ -2227,7 +2272,7 @@ def batch_fix_endpoint(
             if hairlines:
                 step2_out = JOBS_DIR / f"{safe_id}_bstep2_hairlines.pdf"
                 temp_files.append(step2_out)
-                hl_res = fix_hairlines(str(current_in), str(step2_out), target_width=0.30)
+                hl_res = fix_hairlines(str(current_in), str(step2_out), hairline_threshold=profile["min_hairline_pt"], target_width=max(0.30, profile["min_hairline_pt"]))
                 if hl_res.get("success") and step2_out.exists():
                     current_in = step2_out
                     steps_applied.append({
@@ -2256,7 +2301,7 @@ def batch_fix_endpoint(
                     for f in job_data.get("findings", [])
                 )
 
-                # Si no hay incidencias de tipografías no incrustadas, se omite el re-renderizado pesado a SVG
+                # Omitir el trazado si no hay incidencias de fuentes.
                 if not has_general_font_issue and not font_error_pages:
                     steps_applied.append({
                         "action": "fonts",
@@ -2286,7 +2331,7 @@ def batch_fix_endpoint(
             if geometry:
                 step4_out = JOBS_DIR / f"{safe_id}_bstep4_geometry.pdf"
                 temp_files.append(step4_out)
-                geom_res = fix_pdf_boxes_and_bleed(str(current_in), str(step4_out), target_bleed_mm=3.0)
+                geom_res = fix_pdf_boxes_and_bleed(str(current_in), str(step4_out), target_bleed_mm=profile["min_bleed_mm"])
                 if (geom_res.get("success") or geom_res.get("status") == "success") and step4_out.exists():
                     current_in = step4_out
                     steps_applied.append({
@@ -2305,7 +2350,7 @@ def batch_fix_endpoint(
             if mirror_bleed:
                 step_mb_out = JOBS_DIR / f"{safe_id}_bstep_mirrorbleed.pdf"
                 temp_files.append(step_mb_out)
-                mb_res = generate_mirror_bleed(str(current_in), str(step_mb_out), bleed_mm=3.0)
+                mb_res = generate_mirror_bleed(str(current_in), str(step_mb_out), bleed_mm=profile["min_bleed_mm"])
                 if mb_res.get("success") and step_mb_out.exists():
                     current_in = step_mb_out
                     steps_applied.append({
@@ -2327,7 +2372,7 @@ def batch_fix_endpoint(
                     ]
 
             # 4c. Conversión de imágenes RGB a CMYK (ISO Coated v2 / FOGRA39)
-            if cmyk_images:
+            if cmyk_images and profile["color_family"] == "CMYK":
                 step_cmyk_out = JOBS_DIR / f"{safe_id}_bstep_cmyk.pdf"
                 temp_files.append(step_cmyk_out)
                 dst_icc = ICC_DIR / "ISOcoated_v2_eci.icc"
@@ -2390,6 +2435,8 @@ def batch_fix_endpoint(
                 temp_files.append(step5_out)
                 shutil.copyfile(str(current_in), str(step5_out))
                 target_icc = "ISOcoated_v2_eci.icc" if (ICC_DIR / "ISOcoated_v2_eci.icc").exists() else "ISOcoated_v2_300_bas.icc"
+                if profile["color_family"] == "RGB":
+                    target_icc = "sRGB2014.icc"
                 applied_info = apply_icc_to_pdf(step5_out, target_icc)
                 if applied_info and step5_out.exists():
                     current_in = step5_out
@@ -2410,10 +2457,10 @@ def batch_fix_endpoint(
                     ]
 
             # 6. Limitador de Cobertura Total de Tinta (TAC <= 300%)
-            if tac:
+            if tac and profile["color_family"] == "CMYK":
                 step6_out = JOBS_DIR / f"{safe_id}_bstep6_tac.pdf"
                 temp_files.append(step6_out)
-                tac_res = limit_pdf_tac(str(current_in), str(step6_out), max_tac_percent=300.0)
+                tac_res = limit_pdf_tac(str(current_in), str(step6_out), max_tac_percent=profile["max_tac"])
                 if (tac_res.get("success") or tac_res.get("status") == "success") and step6_out.exists():
                     current_in = step6_out
                     steps_applied.append({
@@ -2433,7 +2480,7 @@ def batch_fix_endpoint(
                 step7_out = JOBS_DIR / f"{safe_id}_bstep7_marks.pdf"
                 temp_files.append(step7_out)
                 orig_filename = job_meta.get("filename", "documento.pdf")
-                pm_res = add_printer_marks_to_pdf(str(current_in), str(step7_out), slug_margin_mm=10.0, bleed_mm=3.0, job_filename=orig_filename)
+                pm_res = add_printer_marks_to_pdf(str(current_in), str(step7_out), slug_margin_mm=10.0, bleed_mm=profile["min_bleed_mm"], job_filename=orig_filename)
                 if pm_res.get("success") and step7_out.exists():
                     current_in = step7_out
                     steps_applied.append({
@@ -2987,6 +3034,9 @@ async def fix_barcodes_endpoint(job_id: str, request: Request):
 
         job_meta["barcode_fixed_pdf_path"] = str(output_pdf)
         register_cumulative_fix(job_data, output_pdf, "barcode_fixed")
+        refresh_job_analysis(job_data, output_pdf)
+        generate_preflight_certificate_pdf(job_data, JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf")
+        result["report"] = job_data
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
 

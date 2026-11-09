@@ -1,139 +1,102 @@
-"""
-font_vectorizer.py - Vectorizador / Trazador de Tipografías a Curvas (Outlines)
-Convierte textos y fuentes no incrustadas en trazados vectoriales puros (<path>),
-garantizando la integridad del documento en cualquier RIP o CTP de imprenta.
-"""
+"""Outline text through a PDF interpreter while retaining print semantics."""
 
+import os
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
-from typing import Dict, Any, List, Optional
-import pymupdf
+
 import pikepdf
+import pymupdf
+
+from pdf_utils import atomic_output, copy_pdf, used_spot_names
 
 
-def outline_fonts_in_pdf(
-    pdf_path: str,
-    output_path: str,
-    target_pages: Optional[List[int]] = None
-) -> Dict[str, Any]:
-    """
-    Traza las tipografías de un documento PDF a curvas vectoriales directas.
+def find_ghostscript():
+    configured = os.environ.get("GHOSTSCRIPT_BIN")
+    if configured:
+        return configured
+    for name in ("gs", "gswin64c", "gswin32c"):
+        found = shutil.which(name)
+        if found:
+            return found
+    portable = Path(__file__).parent / ".venv/tools/ghostscript/bin/gswin64c.exe"
+    if portable.is_file():
+        return str(portable)
+    for folder in (Path("C:/Program Files/gs"), Path("C:/Program Files (x86)/gs")):
+        matches = sorted(folder.glob("*/bin/gswin64c.exe"), reverse=True)
+        if matches:
+            return str(matches[0])
+    raise RuntimeError("El trazado seguro de fuentes requiere Ghostscript.")
 
-    - Convierte los glifos de texto en vectores matemáticos exactos (sin rasterizar a mapa de bits).
-    - Preserva intactas las cajas de página (MediaBox, CropBox, TrimBox, BleedBox).
-    - Si el PDF original contenía OutputIntent ICC formal (PDF/X), lo preserva íntegro en el nuevo catálogo.
-    - Elimina cualquier riesgo de fuentes no incrustadas, sustitución tipográfica o fuentes protegidas.
 
-    :param pdf_path: Ruta al PDF original.
-    :param output_path: Ruta al PDF de salida trazado.
-    :param target_pages: Lista opcional de páginas (1-based) a trazar. Si es None, traza todas las páginas con fuentes.
-    :return: Diccionario con estadísticas del proceso.
-    """
-    if target_pages is not None and len(target_pages) == 0:
-        import shutil
-        shutil.copy2(pdf_path, output_path)
-        return {
-            "success": True,
-            "status": "success",
-            "total_pages": 0,
-            "pages_vectorized": 0
-        }
-
-    doc_orig = pymupdf.open(pdf_path)
-    doc_dest = pymupdf.open()
-
-    total_pages = len(doc_orig)
-    pages_vectorized = 0
-
-    for idx in range(total_pages):
-        p_num = idx + 1
-        p_orig = doc_orig[idx]
-        fonts_on_page = p_orig.get_fonts()
-
-        # Determinar si requiere vectorización
-        should_vectorize = False
-        if target_pages is not None:
-            should_vectorize = (p_num in target_pages)
-        else:
-            # Traza si la página contiene fuentes
-            should_vectorize = (len(fonts_on_page) > 0)
-
-        if should_vectorize and len(fonts_on_page) > 0:
-            # Convertir la página a SVG con texto convertido a curvas (<path>)
-            svg_data = p_orig.get_svg_image(text_as_path=True)
-            svg_doc = pymupdf.open(stream=svg_data.encode("utf-8"), filetype="svg")
-            page_pdf_bytes = svg_doc.convert_to_pdf()
-            svg_doc.close()
-
-            # Insertar la página trazada
-            page_doc = pymupdf.open("pdf", page_pdf_bytes)
-            doc_dest.insert_pdf(page_doc)
-            page_doc.close()
-
-            p_dest = doc_dest[-1]
-            # Preservar exactamente las cajas geométricas de forma segura
-            try:
-                p_dest.set_mediabox(p_orig.mediabox)
-            except Exception:
-                pass
-
-            try:
-                # CropBox debe estar estrictamente dentro de MediaBox
-                safe_crop = p_orig.cropbox & p_orig.mediabox
-                if safe_crop.is_valid and not safe_crop.is_empty:
-                    p_dest.set_cropbox(safe_crop)
-                else:
-                    p_dest.set_cropbox(p_orig.mediabox)
-            except Exception:
-                try:
-                    p_dest.set_cropbox(p_dest.mediabox)
-                except Exception:
-                    pass
-
-            try:
-                p_dest.set_trimbox(p_orig.trimbox)
-            except Exception:
-                pass
-
-            try:
-                p_dest.set_bleedbox(p_orig.bleedbox)
-            except Exception:
-                pass
-
-            pages_vectorized += 1
-        else:
-            # Si no tiene fuentes, copiar la página original directamente
-            doc_dest.insert_pdf(doc_orig, from_page=idx, to_page=idx)
-
-    # Guardar documento trazado intermedio
-    temp_vector_path = str(output_path) + ".tmp.pdf"
-    doc_dest.save(temp_vector_path)
-    doc_dest.close()
-    doc_orig.close()
-
-    # Preservar exactamente las cajas geométricas y OutputIntents con pikepdf
-    try:
-        with pikepdf.open(pdf_path) as src, pikepdf.open(temp_vector_path, allow_overwriting_input=True) as dst:
-            if "/OutputIntents" in src.Root:
-                dst.Root.OutputIntents = pikepdf.Array([dst.copy_foreign(x) for x in src.Root.OutputIntents])
-            for i, dst_page in enumerate(dst.pages):
-                if i < len(src.pages):
-                    src_page = src.pages[i]
-                    for box_name in ["/MediaBox", "/CropBox", "/TrimBox", "/BleedBox", "/ArtBox"]:
-                        if box_name in src_page:
-                            try:
-                                dst_page[box_name] = dst.copy_foreign(src_page[box_name])
-                            except Exception:
-                                pass
-            dst.save(output_path)
-        Path(temp_vector_path).unlink(missing_ok=True)
-    except Exception as e:
-        print(f"[font_vectorizer] Advertencia preservando metadatos pikepdf: {e}")
-        Path(temp_vector_path).replace(output_path)
-
-    return {
-        "success": True,
-        "status": "success",
-        "total_pages": total_pages,
-        "pages_vectorized": pages_vectorized
-    }
-
+def outline_fonts_in_pdf(pdf_path, output_path, target_pages=None):
+    from preflight_engine import extract_pdf_spot_colors
+    with pymupdf.open(pdf_path) as doc:
+        total_pages = len(doc)
+        requested = set(range(1, total_pages + 1) if target_pages is None else target_pages)
+        if any(p < 1 or p > total_pages for p in requested):
+            raise ValueError("Pagina fuera del documento.")
+        selected = [i for i in range(total_pages) if i + 1 in requested and doc[i].get_fonts()]
+    if not selected:
+        copy_pdf(pdf_path, output_path)
+        return {"success": True, "status": "success", "total_pages": total_pages, "pages_vectorized": 0}
+    executable = find_ghostscript()
+    with tempfile.TemporaryDirectory(prefix="intelliprint_fonts_") as folder:
+        subset = Path(folder) / "source.pdf"
+        converted = Path(folder) / "outlined.pdf"
+        with pikepdf.open(pdf_path) as original, pikepdf.new() as part:
+            for index in selected:
+                part.pages.append(original.pages[index])
+                # GS flattens rotation. Remove it in the temporary input and
+                # restore the original page dictionary after outlining.
+                part.pages[-1].Rotate = 0
+            part.save(subset)
+        result = subprocess.run([
+            executable, "-dSAFER", "-dBATCH", "-dNOPAUSE", "-dQUIET",
+            "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.7", "-dNoOutputFonts",
+            "-dAutoRotatePages=/None", "-dPreserveSeparation=true",
+            "-dPreserveDeviceN=true", "-dPreserveOverprintSettings=true",
+            "-sColorConversionStrategy=LeaveColorUnchanged",
+            f"-sOutputFile={converted}", str(subset),
+        ], capture_output=True, timeout=180)
+        if result.returncode or not converted.is_file():
+            raise RuntimeError("No se pudo trazar el PDF conservando sus propiedades de impresion.")
+        with atomic_output(output_path) as temporary:
+            with pikepdf.open(pdf_path) as original, pikepdf.open(converted) as outlined:
+                spots_before = {s["name"] for s in extract_pdf_spot_colors(original)}
+                used_before = used_spot_names(original)
+                for position, index in enumerate(selected):
+                    page = original.pages[index]
+                    boxes = {key: [float(v) for v in page[key]] for key in
+                             ("/MediaBox", "/CropBox", "/TrimBox", "/BleedBox", "/ArtBox") if key in page}
+                    original_spaces = page.obj.get("/Resources", {}).get("/ColorSpace", {})
+                    rotation = int(page.get("/Rotate", 0))
+                    media = boxes.get("/MediaBox", [0, 0, 595.28, 841.89])
+                    replacement = outlined.pages[position]
+                    generated_media = [float(v) for v in replacement.MediaBox]
+                    dx, dy = media[0] - generated_media[0], media[1] - generated_media[1]
+                    if dx or dy:
+                        replacement.contents_add(outlined.make_stream(f"q 1 0 0 1 {dx} {dy} cm\n".encode()), prepend=True)
+                        replacement.contents_add(outlined.make_stream(b"\nQ"))
+                    original.pages[index] = replacement
+                    # Keep unused catalog resources too. They may document
+                    # technical inks; only actual operators determine plate use.
+                    resources = original.pages[index].Resources
+                    if original_spaces and "/ColorSpace" not in resources:
+                        resources.ColorSpace = pikepdf.Dictionary()
+                    for key, value in original_spaces.items():
+                        if key not in resources.ColorSpace:
+                            resources.ColorSpace[key] = value
+                    for key, values in boxes.items():
+                        original.pages[index][key] = pikepdf.Array(values)
+                    original.pages[index].Rotate = rotation
+                spots_after = {s["name"] for s in extract_pdf_spot_colors(original)}
+                if spots_before != spots_after or used_before != used_spot_names(original):
+                    raise ValueError("El trazado no conserva las separaciones de tinta originales.")
+                original.save(temporary)
+            with pymupdf.open(temporary) as verified:
+                if any(verified[i].get_fonts() for i in selected):
+                    raise ValueError("El PDF resultante aun contiene fuentes en las paginas seleccionadas.")
+    return {"success": True, "status": "success", "total_pages": total_pages,
+            "pages_vectorized": len(selected)}

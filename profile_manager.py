@@ -10,6 +10,9 @@ grosor mínimo de líneas y espacios de color.
 from __future__ import annotations
 
 import json
+import math
+import re
+from pdf_utils import atomic_output
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -113,31 +116,70 @@ DEFAULT_BUILTIN_PROFILES = [
 ]
 
 
-def load_custom_profiles() -> List[Dict[str, Any]]:
-    """Carga los perfiles personalizados guardados en custom_profiles.json."""
+def validate_custom_profile(data):
+    if not isinstance(data, dict):
+        raise ValueError("Cada perfil debe ser un objeto.")
+    profile_id = data.get("id")
+    if not isinstance(profile_id, str) or not re.fullmatch(r"CUSTOM_[\w-]{1,100}", profile_id):
+        raise ValueError("Identificador de perfil personalizado invalido.")
+    name = data.get("name")
+    if not isinstance(name, str) or not name.strip() or len(name) > 200:
+        raise ValueError("El perfil necesita un nombre de hasta 200 caracteres.")
+    result = dict(DEFAULT_BUILTIN_PROFILES[0], **data)
+    result.update(name=name.strip(), is_custom=True, is_builtin=False)
+    if not isinstance(result.get("destination"), str):
+        raise ValueError("El destino del perfil debe ser texto.")
+    ranges = {"target_dpi": (1, 9600), "min_bleed_mm": (0, 100), "max_tac": (100, 400),
+              "min_hairline_pt": (0.01, 10), "safety_margin_mm": (0, 100)}
+    for key, (minimum, maximum) in ranges.items():
+        value = result[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not minimum <= value <= maximum:
+            raise ValueError(f"{key} debe estar entre {minimum} y {maximum}.")
+    for key in ("allow_spot_colors", "require_fonts_embedded"):
+        if not isinstance(result[key], bool):
+            raise ValueError(f"{key} debe ser verdadero o falso.")
+    if result["color_family"] not in ("RGB", "CMYK"):
+        raise ValueError("La familia de color debe ser RGB o CMYK.")
+    return result
+
+
+def load_custom_profiles():
     if not CUSTOM_PROFILES_FILE.exists():
         return []
-    try:
-        with open(CUSTOM_PROFILES_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data.get("custom_profiles", [])
-    except Exception as e:
-        print(f"[profile_manager] Error leyendo perfiles personalizados: {e}")
-        return []
+    with open(CUSTOM_PROFILES_FILE, encoding="utf-8") as stream:
+        data = json.load(stream)
+    profiles = data.get("custom_profiles", []) if isinstance(data, dict) else []
+    result, seen = [], set()
+    for profile in profiles if isinstance(profiles, list) else []:
+        try:
+            valid = validate_custom_profile(profile)
+        except ValueError:
+            continue  # Recover legacy files without propagating broken records.
+        if valid["id"] not in seen:
+            result.append(valid)
+            seen.add(valid["id"])
+    return result
 
 
-def save_custom_profiles_to_disk(profiles: List[Dict[str, Any]]):
-    """Persiste los perfiles personalizados en disco."""
-    try:
-        payload = {
-            "version": "1.2.0",
-            "updated_at": datetime.now().isoformat(),
-            "custom_profiles": profiles
-        }
-        with open(CUSTOM_PROFILES_FILE, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"[profile_manager] Error guardando perfiles personalizados: {e}")
+def save_custom_profiles_to_disk(profiles):
+    validated = [validate_custom_profile(p) for p in profiles]
+    payload = {"version": "1.2.0", "updated_at": datetime.now().isoformat(), "custom_profiles": validated}
+    with atomic_output(CUSTOM_PROFILES_FILE) as temporary:
+        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def import_custom_profiles(profiles):
+    if not isinstance(profiles, list):
+        raise ValueError("custom_profiles debe ser una lista.")
+    incoming = [validate_custom_profile(p) for p in profiles]
+    ids = [p["id"] for p in incoming]
+    if len(ids) != len(set(ids)):
+        raise ValueError("Hay identificadores duplicados en la importacion.")
+    current = load_custom_profiles()
+    current_ids = {p["id"] for p in current}
+    additions = [p for p in incoming if p["id"] not in current_ids]
+    save_custom_profiles_to_disk(current + additions)
+    return {"status": "success", "imported": len(additions), "total_custom": len(current) + len(additions)}
 
 
 def get_all_profiles() -> List[Dict[str, Any]]:
@@ -175,20 +217,21 @@ def create_custom_profile(data: Dict[str, Any]) -> Dict[str, Any]:
         "id": profile_id,
         "name": raw_name,
         "destination": data.get("destination", "Perfil personalizado de imprenta").strip(),
-        "target_dpi": int(data.get("target_dpi") or data.get("dpi") or 300),
+        "target_dpi": int(_numeric_value(data, "target_dpi", "dpi", default=300)),
         "min_bleed_mm": float(_numeric_value(data, "min_bleed_mm", "bleed_mm", default=3.0)),
-        "max_tac": int(data.get("max_tac") or data.get("tac_limit") or data.get("tac") or 300),
-        "min_hairline_pt": float(data.get("min_hairline_pt") or data.get("hairline_pt") or 0.25),
+        "max_tac": int(_numeric_value(data, "max_tac", "tac_limit", "tac", default=300)),
+        "min_hairline_pt": float(_numeric_value(data, "min_hairline_pt", "hairline_pt", default=0.25)),
         "safety_margin_mm": float(_numeric_value(data, "safety_margin_mm", "safety_margin", default=3.0)),
         "color_family": data.get("color_family", "CMYK"),
-        "allow_spot_colors": bool(data.get("allow_spot_colors", True)),
-        "require_fonts_embedded": bool(data.get("require_fonts_embedded", True)),
+        "allow_spot_colors": data.get("allow_spot_colors", True),
+        "require_fonts_embedded": data.get("require_fonts_embedded", True),
         "is_custom": True,
         "is_builtin": False,
         "created_at": datetime.now().strftime("%d/%m/%Y %H:%M")
     }
 
     current = load_custom_profiles()
+    new_profile = validate_custom_profile(new_profile)
     current.append(new_profile)
     save_custom_profiles_to_disk(current)
     return new_profile
@@ -209,16 +252,18 @@ def update_custom_profile(profile_id: str, data: Dict[str, Any]) -> Optional[Dic
     p = current[target_idx]
     p["name"] = data.get("name", p["name"]).strip()
     p["destination"] = data.get("destination", p["destination"]).strip()
-    p["target_dpi"] = int(data.get("target_dpi") or data.get("dpi") or p["target_dpi"])
+    p["target_dpi"] = int(_numeric_value(data, "target_dpi", "dpi", default=p["target_dpi"]))
     p["min_bleed_mm"] = float(_numeric_value(data, "min_bleed_mm", "bleed_mm", default=p["min_bleed_mm"]))
-    p["max_tac"] = int(data.get("max_tac") or data.get("tac_limit") or data.get("tac") or p["max_tac"])
-    p["min_hairline_pt"] = float(data.get("min_hairline_pt") or data.get("hairline_pt") or p["min_hairline_pt"])
+    p["max_tac"] = int(_numeric_value(data, "max_tac", "tac_limit", "tac", default=p["max_tac"]))
+    p["min_hairline_pt"] = float(_numeric_value(data, "min_hairline_pt", "hairline_pt", default=p["min_hairline_pt"]))
     p["safety_margin_mm"] = float(_numeric_value(data, "safety_margin_mm", "safety_margin", default=p["safety_margin_mm"]))
     p["color_family"] = data.get("color_family", p["color_family"])
-    p["allow_spot_colors"] = bool(data.get("allow_spot_colors", p["allow_spot_colors"]))
-    p["require_fonts_embedded"] = bool(data.get("require_fonts_embedded", p["require_fonts_embedded"]))
+    p["allow_spot_colors"] = data.get("allow_spot_colors", p["allow_spot_colors"])
+    p["require_fonts_embedded"] = data.get("require_fonts_embedded", p["require_fonts_embedded"])
     p["updated_at"] = datetime.now().strftime("%d/%m/%Y %H:%M")
 
+    p = validate_custom_profile(p)
+    current[target_idx] = p
     save_custom_profiles_to_disk(current)
     return p
 

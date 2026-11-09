@@ -60,6 +60,8 @@ def get_available_icc_profiles():
         # Check if already covered by local file
         ref_fn = (ref.get("filename") or "").lower()
         ref_n = ref["name"].lower()
+        if not ref_fn or not (ICC_DIR / ref["filename"]).is_file():
+            continue
         if ref_fn and ref_fn in seen_keys:
             continue
         if any(ref_n in p["name"].lower() or p["name"].lower() in ref_n for p in profiles):
@@ -185,146 +187,53 @@ def detect_pdf_output_intent(doc_or_pike):
     }
 
 
+CATALOG_FILES = {
+    "CAT_PSO_COATED_V3": "PSOcoated_v3.icc",
+    "CAT_PSO_UNCOATED_V3": "PSOuncoated_v3_FOGRA52.icc",
+    "CAT_SRGB": "sRGB2014.icc",
+}
+
+
+def resolve_icc_profile(profile_id):
+    """Resolve catalog IDs and validate profile bytes without accepting filesystem paths."""
+    from PIL import ImageCms
+    if not isinstance(profile_id, str) or any(c in profile_id for c in '/\\:'):
+        raise ValueError("Selecciona un perfil ICC del catalogo.")
+    name = CATALOG_FILES.get(profile_id, profile_id)
+    base = ICC_DIR.resolve()
+    candidate = (base / name).resolve()
+    if candidate.parent != base or candidate.suffix.lower() not in (".icc", ".icm") or not candidate.is_file():
+        raise ValueError("Perfil ICC no disponible en el catalogo.")
+    data = candidate.read_bytes()
+    if len(data) < 128 or data[36:40] != b"acsp":
+        raise ValueError("El archivo no es un perfil ICC valido.")
+    try:
+        profile = ImageCms.ImageCmsProfile(str(candidate))
+        family = profile.profile.xcolor_space.strip().upper()
+    except Exception as exc:
+        raise ValueError("Perfil ICC invalido.") from exc
+    if family not in ("CMYK", "RGB", "GRAY"):
+        raise ValueError("Espacio de color ICC no admitido.")
+    return candidate, family
+
+
 def apply_icc_to_pdf(pdf_path, selected_icc_id):
-    """
-    Applies and embeds the selected ICC profile as the PDF OutputIntent.
-    Modifies the PDF file at pdf_path.
-    Returns metadata of the applied profile.
-    """
+    from pdf_utils import atomic_output
     if not selected_icc_id:
         return None
-
-    # Standard catalog definitions
-    CATALOG_DATA = {
-        "CAT_PSO_COATED_V3": {
-            "identifier": "FOGRA51",
-            "info": "PSO Coated v3 (FOGRA51)",
-            "condition": "Offset comercial estucado FOGRA51",
-            "family": "CMYK",
-            "n": 4
-        },
-        "CAT_PSO_UNCOATED_V3": {
-            "identifier": "FOGRA52",
-            "info": "PSO Uncoated v3 (FOGRA52)",
-            "condition": "Offset comercial no estucado FOGRA52",
-            "family": "CMYK",
-            "n": 4
-        },
-        "CAT_ECICMYK_V2": {
-            "identifier": "FOGRA59",
-            "info": "eciCMYK v2 (FOGRA59)",
-            "condition": "Espacio de intercambio eciCMYK v2",
-            "family": "CMYK",
-            "n": 4
-        },
-        "CAT_SRGB": {
-            "identifier": "sRGB",
-            "info": "sRGB IEC61966-2.1",
-            "condition": "sRGB IEC61966-2.1",
-            "family": "RGB",
-            "n": 3
-        }
-    }
-
-    icc_bytes = None
-    identifier = selected_icc_id
-    info = selected_icc_id
-    condition = "Condición de caracterización estándar"
-    family = "CMYK"
-    n_components = 4
-
-    # 1. Local profile in icc_profiles/
-    local_file = ICC_DIR / selected_icc_id
-    if local_file.exists() and local_file.is_file() and local_file.stat().st_size > 100:
-        with open(local_file, "rb") as f:
-            icc_bytes = f.read()
-
-        clean_name = selected_icc_id.lower()
-        if "psouncoated" in clean_name or "fogra52" in clean_name:
-            family = "CMYK"
-            n_components = 4
-            identifier = "FOGRA52"
-            info = "PSO Uncoated v3 (FOGRA52)"
-            condition = "Offset comercial papel no estucado FOGRA52"
-        elif "psocoated" in clean_name or "fogra51" in clean_name:
-            family = "CMYK"
-            n_components = 4
-            identifier = "FOGRA51"
-            info = "PSO Coated v3 (FOGRA51)"
-            condition = "Offset comercial papel estucado FOGRA51"
-        elif "isocoated_v2_300" in clean_name:
-            family = "CMYK"
-            n_components = 4
-            identifier = "FOGRA39"
-            info = "ISO Coated v2 300% (basICColor)"
-            condition = "Offset comercial estucado 300% TAC FOGRA39"
-        elif "isocoated" in clean_name or "fogra39" in clean_name:
-            family = "CMYK"
-            n_components = 4
-            identifier = "FOGRA39"
-            info = "ISO Coated v2 ECI (FOGRA39)"
-            condition = "Offset comercial estucado FOGRA39"
-        elif "adobergb" in clean_name:
-            family = "RGB"
-            n_components = 3
-            identifier = "AdobeRGB1998"
-            info = "Adobe RGB (1998)"
-            condition = "Espacio de color extendido Adobe RGB"
-        elif "srgb" in clean_name:
-            family = "RGB"
-            n_components = 3
-            identifier = "sRGB"
-            info = "sRGB IEC61966-2.1"
-            condition = "Visualización estándar en monitor"
-        else:
-            family = "CMYK" if any(k in clean_name for k in ["cmyk", "coated", "offset"]) else "RGB"
-            n_components = 4 if family == "CMYK" else 3
-            identifier = selected_icc_id
-            info = selected_icc_id.replace(".icc", "").replace(".icm", "").replace("_", " ")
-    elif selected_icc_id in CATALOG_DATA:
-        c_info = CATALOG_DATA[selected_icc_id]
-        identifier = c_info["identifier"]
-        info = c_info["info"]
-        condition = c_info["condition"]
-        family = c_info["family"]
-        n_components = c_info["n"]
-        # Fallback local stream if available
-        fallback_cmyk = ICC_DIR / "ISOcoated_v2_300_bas.icc"
-        if family == "CMYK" and fallback_cmyk.exists() and fallback_cmyk.stat().st_size > 100:
-            with open(fallback_cmyk, "rb") as f:
-                icc_bytes = f.read()
-
-    # Apply with pikepdf
-    try:
-        pike_doc = pikepdf.open(pdf_path, allow_overwriting_input=True)
-        
-        intent = pikepdf.Dictionary(
-            Type=pikepdf.Name('/OutputIntent'),
-            S=pikepdf.Name('/GTS_PDFX'),
-            OutputConditionIdentifier=pikepdf.String(identifier),
-            Info=pikepdf.String(info),
-            OutputCondition=pikepdf.String(condition),
-            RegistryName=pikepdf.String('http://www.color.org')
-        )
-
-        if icc_bytes:
-            icc_stream = pike_doc.make_stream(icc_bytes)
-            icc_stream['/N'] = n_components
-            intent.DestOutputProfile = icc_stream
-
-        pike_doc.Root['/OutputIntents'] = pikepdf.Array([intent])
-        pike_doc.save(pdf_path)
-        pike_doc.close()
-
-        return {
-            "applied": True,
-            "has_output_intent": True,
-            "subtype": "GTS_PDFX",
-            "identifier": info,
-            "has_icc_stream": (icc_bytes is not None),
-            "detected_family": family
-        }
-    except Exception as e:
-        print(f"Error aplicando perfil ICC al PDF: {e}")
-        return None
-
+    profile_path, family = resolve_icc_profile(selected_icc_id)
+    name = FRIENDLY_NAMES.get(profile_path.name, (profile_path.stem, family))[0]
+    with atomic_output(pdf_path) as temporary:
+        with pikepdf.open(pdf_path) as pdf:
+            stream = pdf.make_stream(profile_path.read_bytes())
+            stream.N = {"CMYK": 4, "RGB": 3, "GRAY": 1}[family]
+            intent = pdf.make_indirect(pikepdf.Dictionary(
+                Type=pikepdf.Name.OutputIntent, S=pikepdf.Name.GTS_PDFX,
+                OutputConditionIdentifier=pikepdf.String(name), Info=pikepdf.String(name),
+                RegistryName=pikepdf.String("http://www.color.org"), DestOutputProfile=stream,
+            ))
+            pdf.Root.OutputIntents = pikepdf.Array([intent])
+            pdf.save(temporary)
+    return {"applied": True, "has_output_intent": True, "subtype": "GTS_PDFX",
+            "identifier": name, "profile_name": name, "has_icc_stream": True,
+            "detected_family": family}

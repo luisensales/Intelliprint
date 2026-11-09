@@ -26,6 +26,7 @@ Gestión de los 3 estados de PDF de entrada:
 from __future__ import annotations
 
 import io
+from pdf_utils import atomic_output, preserve_output_intents
 import math
 from datetime import datetime
 from pathlib import Path
@@ -885,10 +886,13 @@ def generate_imposed_pdf(
                     base_url=base_url,
                 )
 
-    out_doc.save(str(output_path), deflate=True)
     out_pages = len(out_doc)
-    out_doc.close()
-    src_doc.close()
+    with atomic_output(output_path) as temporary:
+        out_doc.save(str(temporary), deflate=True)
+        out_doc.close()
+        src_doc.close()
+        preserve_output_intents(pdf_path, temporary)
+
 
     result = dict(plan)
     result["status"] = "success"

@@ -10,6 +10,7 @@ Utiliza:
 from __future__ import annotations
 
 import io
+from pdf_utils import atomic_output, copy_pdf
 import tempfile
 import traceback
 from pathlib import Path
@@ -148,7 +149,7 @@ def convert_rgb_images_to_cmyk(
 
     if not rgb_xrefs:
         import shutil
-        shutil.copy2(str(pdf_path), str(output_path))
+        copy_pdf(pdf_path, output_path)
         result["success"] = not result["errors"]
         return result
 
@@ -202,8 +203,9 @@ def convert_rgb_images_to_cmyk(
             result["images_skipped"] += 1
 
     try:
-        pike_doc.save(str(output_path))
-        pike_doc.close()
+        with atomic_output(output_path) as temporary:
+            pike_doc.save(str(temporary))
+            pike_doc.close()
         result["success"] = not result["errors"]
     except Exception as e:
         result["errors"].append(f"Error guardando PDF convertido: {e}")

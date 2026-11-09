@@ -19,6 +19,8 @@ Módulos incluidos:
 from __future__ import annotations
 
 import io
+import hashlib
+from pdf_utils import atomic_output, copy_pdf
 import json
 import logging
 import os
@@ -31,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
-from upload_security import validate_pdf_filename
+from upload_security import validate_pdf_filename, discard_failed_upload
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,10 @@ def apply_full_batch_fix(
     from mirror_bleed_generator import generate_mirror_bleed
     import pymupdf
 
+    from profile_manager import get_profile_by_id
+    profile = get_profile_by_id(profile_id)
+    print_color = profile["color_family"] == "CMYK"
+
     current_in = source_pdf
     steps_applied: List[Dict[str, Any]] = []
     temp_files: List[Path] = []
@@ -121,43 +127,44 @@ def apply_full_batch_fix(
         # 2. Líneas Finas (Hairlines)
         hl_out = JOBS_DIR / f"{safe_id}_hf_hl.pdf"
         temp_files.append(hl_out)
-        hl_res = fix_hairlines(str(current_in), str(hl_out), hairline_threshold=0.25, target_width=0.3)
+        hl_res = fix_hairlines(str(current_in), str(hl_out), hairline_threshold=profile["min_hairline_pt"], target_width=max(0.3, profile["min_hairline_pt"]))
         if hl_res.get("success") and hl_res.get("lines_fixed", 0) > 0 and hl_out.exists():
             current_in = hl_out
             steps_applied.append({"action": "hairlines", "details": hl_res})
 
         # 3. Imágenes RGB a CMYK
-        cmyk_out = JOBS_DIR / f"{safe_id}_hf_cmyk.pdf"
-        temp_files.append(cmyk_out)
-        dst_icc = ICC_DIR / "ISOcoated_v2_eci.icc"
-        if not dst_icc.exists():
-            dst_icc = ICC_DIR / "ISOcoated_v2_300_bas.icc"
-        cmyk_res = convert_rgb_images_to_cmyk(
-            pdf_path=str(current_in),
-            dst_icc_path=str(dst_icc),
-            output_path=str(cmyk_out)
-        )
-        if cmyk_res.get("success") and cmyk_res.get("images_converted", 0) > 0 and cmyk_out.exists():
-            current_in = cmyk_out
-            steps_applied.append({"action": "cmyk_images", "details": cmyk_res})
+        if print_color:
+            cmyk_out = JOBS_DIR / f"{safe_id}_hf_cmyk.pdf"
+            temp_files.append(cmyk_out)
+            dst_icc = ICC_DIR / "ISOcoated_v2_eci.icc"
+            if not dst_icc.exists():
+                dst_icc = ICC_DIR / "ISOcoated_v2_300_bas.icc"
+            cmyk_res = convert_rgb_images_to_cmyk(
+                pdf_path=str(current_in),
+                dst_icc_path=str(dst_icc),
+                output_path=str(cmyk_out)
+            )
+            if cmyk_res.get("success") and cmyk_res.get("images_converted", 0) > 0 and cmyk_out.exists():
+                current_in = cmyk_out
+                steps_applied.append({"action": "cmyk_images", "details": cmyk_res})
 
-        # 4. Limitación de TAC al 300%
-        tac_out = JOBS_DIR / f"{safe_id}_hf_tac.pdf"
-        temp_files.append(tac_out)
-        tac_res = limit_pdf_tac(str(current_in), str(tac_out), max_tac_percent=300.0)
-        if tac_res.get("success") and tac_res.get("images_converted", 0) > 0 and tac_out.exists():
-            current_in = tac_out
-            steps_applied.append({"action": "tac", "details": tac_res})
+            # 4. Limitación de TAC al 300%
+            tac_out = JOBS_DIR / f"{safe_id}_hf_tac.pdf"
+            temp_files.append(tac_out)
+            tac_res = limit_pdf_tac(str(current_in), str(tac_out), max_tac_percent=profile["max_tac"])
+            if tac_res.get("success") and tac_res.get("images_clamped", 0) > 0 and tac_out.exists():
+                current_in = tac_out
+                steps_applied.append({"action": "tac", "details": tac_res})
 
-        # 5. OutputIntent ICC
-        icc_out = JOBS_DIR / f"{safe_id}_hf_icc.pdf"
-        temp_files.append(icc_out)
-        shutil.copyfile(str(current_in), str(icc_out))
-        target_icc = "ISOcoated_v2_eci.icc" if (ICC_DIR / "ISOcoated_v2_eci.icc").exists() else "ISOcoated_v2_300_bas.icc"
-        applied_icc = apply_icc_to_pdf(icc_out, target_icc)
-        if applied_icc and icc_out.exists():
-            current_in = icc_out
-            steps_applied.append({"action": "icc", "details": applied_icc})
+            # 5. OutputIntent ICC
+            icc_out = JOBS_DIR / f"{safe_id}_hf_icc.pdf"
+            temp_files.append(icc_out)
+            shutil.copyfile(str(current_in), str(icc_out))
+            target_icc = "ISOcoated_v2_eci.icc" if (ICC_DIR / "ISOcoated_v2_eci.icc").exists() else "ISOcoated_v2_300_bas.icc"
+            applied_icc = apply_icc_to_pdf(icc_out, target_icc)
+            if applied_icc and icc_out.exists():
+                current_in = icc_out
+                steps_applied.append({"action": "icc", "details": applied_icc})
 
         # 6. Códigos de Barras y QR a 100% K
         bc_out = JOBS_DIR / f"{safe_id}_hf_bc.pdf"
@@ -180,16 +187,16 @@ def apply_full_batch_fix(
             pass
         doc.close()
 
-        if not has_bleed:
+        if not has_bleed and profile["min_bleed_mm"] > 0:
             mb_out = JOBS_DIR / f"{safe_id}_hf_mb.pdf"
             temp_files.append(mb_out)
-            mb_res = generate_mirror_bleed(str(current_in), str(mb_out), bleed_mm=3.0)
+            mb_res = generate_mirror_bleed(str(current_in), str(mb_out), bleed_mm=profile["min_bleed_mm"])
             if mb_res.get("status") == "success" and mb_out.exists():
                 current_in = mb_out
                 steps_applied.append({"action": "mirror_bleed", "details": mb_res})
 
         # Copiar al archivo final
-        shutil.copyfile(str(current_in), str(output_pdf))
+        copy_pdf(current_in, output_pdf)
 
         return {
             "status": "success",
@@ -361,29 +368,34 @@ class HotFolderService:
                     errors = [f for f in findings if f.get("severity") in ("ERROR", "CRITICAL")]
                     warnings = [f for f in findings if f.get("severity") == "WARNING"]
 
-            # Guardar JSON del trabajo
-            job_json = JOBS_DIR / f"{job_id}.json"
-            with open(job_json, "w", encoding="utf-8") as f:
-                json.dump(report, f, ensure_ascii=False, indent=2)
-
             # 4. Decisión Aprobado vs Rechazado
             is_approved = (len(errors) == 0)
 
             target_out_dir = APPROVED_DIR if is_approved else REJECTED_DIR
             dest_pdf_name = f"{stem}_CORREGIDO.pdf" if (self.auto_fix and is_approved) else filename
+            dest_pdf_name = f"{job_id}_{dest_pdf_name}"
             dest_pdf = target_out_dir / dest_pdf_name
 
             shutil.copyfile(str(final_pdf_path), str(dest_pdf))
+            report["job_meta"]["pdf_path"] = str(dest_pdf)
+            if "last_fixed_pdf_path" in report["job_meta"]:
+                report["job_meta"]["last_fixed_pdf_path"] = str(dest_pdf)
+            report["job_meta"]["sha256"] = hashlib.sha256(dest_pdf.read_bytes()).hexdigest()
+            report["job_meta"]["file_size_mb"] = round(dest_pdf.stat().st_size / 1024**2, 2)
+            job_json = JOBS_DIR / f"{job_id}.json"
+            with atomic_output(job_json) as temporary:
+                temporary.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+
 
             # 5. Generar Informes
             if self.generate_reports:
-                cert_pdf = target_out_dir / f"{stem}_Certificado_Preflight.pdf"
+                cert_pdf = target_out_dir / f"{job_id}_{stem}_Certificado_Preflight.pdf"
                 try:
                     generate_preflight_certificate_pdf(report, cert_pdf)
                 except Exception as ce:
                     logger.warning(f"Error generando certificado en hot-folder: {ce}")
 
-                edu_pdf = target_out_dir / f"{stem}_Informe_Cliente.pdf"
+                edu_pdf = target_out_dir / f"{job_id}_{stem}_Informe_Cliente.pdf"
                 try:
                     generate_client_educational_report_pdf(report, edu_pdf)
                 except Exception as ee:
@@ -490,6 +502,7 @@ def process_batch_upload(
                 "icc_option": icc_option,
                 "selected_icc": selected_icc,
                 "pdf_path": str(file_path),
+                "sha256": hashlib.sha256(fbytes).hexdigest(),
             }
 
             job_json = JOBS_DIR / f"{job_id}.json"
@@ -509,11 +522,12 @@ def process_batch_upload(
                 "total_findings": len(findings),
                 "errors_count": len(errors),
                 "warnings_count": len(warnings),
-                "pages_count": report.get("job_summary", {}).get("total_pages", 1),
+                "pages_count": report.get("job_summary", {}).get("pages", 1),
                 "summary": report.get("triple_result", {}).get("technical", {}).get("description", "Analizado"),
                 "pdf_path": str(file_path),
             }
         except Exception as e:
+            discard_failed_upload(job_folder, UPLOAD_DIR)
             return {
                 "job_id": job_id,
                 "filename": fname,
@@ -535,44 +549,41 @@ def process_batch_upload(
     return results
 
 
-def batch_fix_jobs(job_ids: List[str]) -> List[Dict[str, Any]]:
-    """Aplica la auto-corrección acumulativa completa sobre una lista de trabajos."""
+def batch_fix_jobs(job_ids):
+    from preflight_engine import IntelliPrintEngine
+    from report_generator import generate_preflight_certificate_pdf
     results = []
+    engine = IntelliPrintEngine()
     for jid in job_ids:
         safe_id = Path(jid).name
         job_json = JOBS_DIR / f"{safe_id}.json"
-        if not job_json.exists():
-            continue
-
-        with open(job_json, "r", encoding="utf-8") as f:
-            job_data = json.load(f)
-
-        job_meta = job_data.get("job_meta", {})
-        target_pdf = job_meta.get("last_fixed_pdf_path") or job_meta.get("pdf_path")
-        if not target_pdf or not Path(target_pdf).exists():
-            continue
-
-        out_pdf = JOBS_DIR / f"{safe_id}_batch_fixed.pdf"
-        fix_res = apply_full_batch_fix(target_pdf, out_pdf, job_id=safe_id)
-
-        if fix_res.get("status") == "success":
-            job_meta["batch_fixed_pdf_path"] = str(out_pdf)
-            job_meta["last_fixed_pdf_path"] = str(out_pdf)
-            with open(job_json, "w", encoding="utf-8") as f:
-                json.dump(job_data, f, ensure_ascii=False, indent=2)
-
-            results.append({
-                "job_id": safe_id,
-                "filename": job_meta.get("filename"),
-                "status": "success",
-                "steps_applied": fix_res.get("steps_count", 0),
-            })
-        else:
-            results.append({
-                "job_id": safe_id,
-                "filename": job_meta.get("filename"),
-                "status": "error",
-            })
+        try:
+            job_data = json.loads(job_json.read_text(encoding="utf-8"))
+            meta = job_data["job_meta"]
+            source = meta.get("last_fixed_pdf_path") or meta.get("pdf_path")
+            if not source or not Path(source).is_file():
+                raise ValueError("PDF no encontrado.")
+            output = JOBS_DIR / f"{safe_id}_batch_fixed.pdf"
+            fix = apply_full_batch_fix(source, output, profile_id=meta.get("profile_id", "OFFSET_300"), job_id=safe_id)
+            if fix.get("status") != "success":
+                raise ValueError("No se pudo completar la correccion.")
+            verified = engine.run_preflight(str(output), profile_id=meta.get("profile_id", "OFFSET_300"))
+            job_data["job_summary"] = verified["job_summary"]
+            job_data["findings"] = verified["findings"]
+            job_data["triple_result"]["technical"] = verified["triple_result"]["technical"]
+            job_data["triple_result"]["release"] = verified["triple_result"]["release"]
+            meta.update(last_fixed_pdf_path=str(output), batch_fixed_pdf_path=str(output))
+            with atomic_output(JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf") as temporary:
+                generate_preflight_certificate_pdf(job_data, temporary)
+            with atomic_output(job_json) as temporary:
+                temporary.write_text(json.dumps(job_data, ensure_ascii=False, indent=2), encoding="utf-8")
+            technical = verified["triple_result"]["technical"]
+            results.append({"job_id": safe_id, "filename": meta.get("filename"), "status": "success",
+                            "technical_status": technical["status"], "errors_count": technical["errors_count"],
+                            "warnings_count": technical["warnings_count"], "steps_applied": fix.get("steps_count", 0),
+                            "summary": technical["label"]})
+        except Exception as exc:
+            results.append({"job_id": safe_id, "status": "error", "errors_count": 1, "message": str(exc)})
     return results
 
 

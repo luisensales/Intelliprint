@@ -1,0 +1,297 @@
+ACTUALIZACION TRAS LAS CORRECCIONES - 9 DE NOVIEMBRE DE 2026
+
+Los 14 problemas documentados mas abajo han sido tratados en el codigo.
+Validacion: 28 pruebas Python y 9 pruebas JavaScript superadas. Ademas se ha
+comprobado la subida y la correccion por lote de los 20 retos didacticos incluidos,
+sin errores HTTP. Los defectos que siguen existiendo en el contenido del PDF se
+mantienen en el dictamen, en lugar de presentarlos como resueltos.
+
+El trazado de fuentes usa Ghostscript. El Dockerfile lo instala para Render.
+En Windows se puede instalar Ghostscript o indicar el ejecutable mediante la
+variable GHOSTSCRIPT_BIN. El entorno local de esta sesion incluye una copia
+portable en .venv/tools/ghostscript, que no se sube al repositorio.
+
+El TAC se muestra como estimacion medida (imagenes CMYK nativas y composicion
+hasta 72 dpi, con tamano de render limitado). No se presenta como una validacion
+certificada del RIP. Sin medicion, la ficha indica No medido.
+
+Para repetir las pruebas:
+  python -m pip install -r requirements-dev.txt
+  python -m unittest discover -s tests -v
+  node --test tests/frontend.test.cjs
+Ghostscript debe estar disponible para las pruebas de trazado.
+
+El texto siguiente conserva el diagnostico de la version b84d802 anterior a las
+correcciones, como evidencia de los casos que se han reproducido.
+
+--------------------------------------------------------------------------
+
+REVISIÓN PROFUNDA DE INTELLIPRINT — 9 DE NOVIEMBRE DE 2026
+
+Código revisado: b84d802ef113cfe1d098344ec59941b8373d154c, rama main.
+
+Resultado: 14 problemas confirmados, agrupados por causa o flujo de trabajo.
+Las pruebas se han ejecutado en local con archivos ficticios y carpetas temporales.
+No se han realizado estas pruebas contra la web de producción.
+El único archivo añadido por esta revisión es este informe; no se ha cambiado el código de la app.
+
+MÉTODO Y ALCANCE
+
+Se han inspeccionado las rutas FastAPI, el preflight, la gestión ICC, el limitador
+TAC, el trazado de fuentes, los códigos de barras, el sangrado, las marcas,
+la imposición, la cola masiva, el hotfolder y la ficha de trazabilidad.
+
+Las comprobaciones incluyen peticiones a la API con TestClient, análisis de los
+streams y recursos PDF con pikepdf, lectura de muestras de imagen con PyMuPDF,
+comparación del informe guardado con un nuevo preflight y ejecución de funciones
+de interfaz con Node. Se han vuelto a ejecutar las 9 pruebas Python y las 5 de
+JavaScript existentes: las 14 pasan. Los casos descritos aquí no estaban cubiertos.
+
+Entorno: Windows, Python 3.14 y las dependencias de requirements.txt instaladas
+en .venv. Render usa Python 3.11 según Dockerfile. Los errores de lógica se han
+reproducido localmente; no se han medido la concurrencia ni la memoria en Render.
+
+1. CRÍTICA — LECTURA DE ARCHIVOS LOCALES A TRAVÉS DE LA SELECCIÓN ICC
+
+Referencias: icc_manager.py:237, icc_manager.py:239, icc_manager.py:313;
+preflight_engine.py:586.
+
+selected_icc se utiliza directamente al construir ICC_DIR / selected_icc_id.
+Se aceptan rutas absolutas y rutas que salen de icc_profiles. Si el archivo
+existe y ocupa más de 100 bytes, se lee y se incorpora como DestOutputProfile.
+No se valida que el contenido sea un perfil ICC.
+
+Reproducción: se creó un archivo ficticio demo_private.txt en una carpeta temporal,
+con más de 100 bytes. Se subió un PDF con icc_option=custom_selection y la ruta
+absoluta del archivo como selected_icc. La API devolvió 200. Al descargar el PDF,
+el stream DestOutputProfile contenía exactamente los bytes del archivo ficticio.
+
+Impacto: quien pueda llamar a la API puede obtener archivos legibles por el
+proceso del servidor, sin estar limitado al catálogo de perfiles.
+
+Corrección: resolver exclusivamente IDs autorizados del catálogo, comprobar que
+la ruta final permanece dentro de ICC_DIR y validar realmente el ICC antes de leerlo.
+
+2. ALTA — LA CORRECCIÓN DE CÓDIGOS DE BARRAS BORRA EL QR
+
+Referencias: barcode_engine.py:522, barcode_engine.py:535, barcode_engine.py:545.
+
+La reserva blanca se dibuja y se confirma sobre el código original antes de
+renderizar la región de la que se extraerán sus barras. La captura posterior ya
+contiene la reserva blanca. Se genera una imagen vacía y se informa de éxito.
+
+Reproducción: PDF con un QR legible, detectado como un código con problemas de
+color. fix_barcodes_in_pdf devolvió status=success y codes_fixed=1. El PDF de
+salida no contenía ningún QR detectable. El mínimo de todas las muestras grises
+de su página era 255: la página había quedado completamente blanca.
+
+Corrección: capturar el código antes de dibujar la reserva, aplicar la corrección
+sobre esa captura y volver a decodificar el resultado, comprobando el mismo payload.
+
+3. ALTA — EL LIMITADOR TAC PUEDE CREAR 400 % DE TINTA EN UNA ZONA BLANCA
+
+Referencias: tac_limiter.py:59, tac_limiter.py:101, tac_limiter.py:106.
+
+Pixmap entrega muestras con Decode aplicado. El motor escribe esas muestras
+en un nuevo stream Flate, pero conserva el Decode anterior de la imagen.
+Cuando el Decode invierte los canales, se aplica de nuevo sobre las muestras
+ya decodificadas y se invierten los colores del resultado.
+
+Reproducción: imagen CMYK de dos píxeles, uno de 400 % de tinta y otro blanco,
+con Decode=[1 0 1 0 1 0 1 0]. Antes: muestras [255,255,255,255] y [0,0,0,0].
+Después de limitar a 300 %: [85,85,85,0] y [255,255,255,255].
+El píxel blanco pasó a tener 400 % de tinta mientras el motor informó success=True.
+
+Corrección: normalizar o eliminar Decode al escribir muestras nativas y verificar
+la cobertura del resultado. Deben comprobarse también las máscaras y el espacio real.
+
+4. ALTA — TRAZAR FUENTES ELIMINA TINTAS PLANAS Y SOBREIMPRESIONES
+
+Referencia: font_vectorizer.py:62.
+
+La función convierte la página completa a SVG y vuelve a convertirla a PDF.
+No se limita a sustituir los glifos de texto. Se pierden los recursos de impresión
+que SVG no conserva en ese recorrido.
+
+Reproducción: página con rellenos CMYK, texto negro, un estado de sobreimpresión
+y una separación llamada Barniz. Antes tenía operadores k, gs, cs y scn y la
+separación Barniz. Después tenía tres operaciones rg, ninguna separación y
+ninguna operación gs. La función devolvió success=True.
+
+Impacto: una acción presentada como corrección de fuentes puede cambiar las
+planchas y eliminar una capa de barniz o acabado.
+
+Corrección: usar un proceso de contorneado que conserve la semántica PDF de
+color y sobreimpresión y verificar separaciones y estados antes y después.
+
+5. ALTA — VARIAS OPERACIONES PIERDEN EL OUTPUTINTENT ICC
+
+Referencias: font_vectorizer.py:117; mirror_bleed_generator.py:233;
+printer_marks_generator.py:152; imposition_engine.py:888.
+
+Los tres primeros motores llaman a copy_foreign sobre elementos de OutputIntents
+que pueden ser objetos directos. En ese caso pikepdf lanza una excepción y el
+fallback entrega el PDF sin el perfil. La imposición guarda un documento nuevo
+sin trasladar el OutputIntent documental.
+
+Reproducción: PDF con ICC añadido por apply_icc_to_pdf. Se ejecutaron por separado
+trazado de fuentes, sangre espejo, marcas e imposición. Las cuatro operaciones
+devolvieron éxito y sus cuatro salidas carecían de OutputIntent. En las tres
+primeras apareció: "pikepdf.copy_foreign called with direct object handle".
+
+Corrección: copiar el grafo ICC correctamente, tratar objetos directos e
+indirectos y considerar la pérdida del perfil un error de validación de salida.
+
+6. ALTA — HTML EJECUTABLE EN LA FICHA DEL MAQUINISTA
+
+Referencia: traceability_engine.py:279-280.
+
+El nombre del archivo se inserta sin escape en un atributo HTML y en el contenido
+de la ficha /verify/{job_id}. La protección añadida al gestor de perfiles no cubre
+esta plantilla independiente del servidor.
+
+Reproducción: subir un archivo con nombre <img src=x onerror=alert(1)>.pdf y abrir
+la ficha. La respuesta 200 incluía literalmente el elemento img con su manejador
+onerror, en vez de mostrar el nombre como texto.
+
+Corrección: escapar todos los campos externos de la plantilla o utilizar un
+motor de plantillas con autoescape. La prueba comprobó el HTML emitido; no se
+ejecutó el payload en un navegador ni se usó la web pública.
+
+7. ALTA — LA CORRECCIÓN MASIVA INFORMA DE ÉXITO CON RESULTADOS FALLIDOS
+
+Referencias: hotfolder_engine.py:538-568; static/index.html:6110-6115.
+
+batch_fix_jobs guarda nuevas rutas, pero no vuelve a analizar el resultado ni
+actualiza findings y triple_result. La interfaz, al recibir status=success del
+envoltorio, marca todos los trabajos como FIXED y pone sus errores a cero,
+sin examinar el resultado individual de cada trabajo.
+
+Reproducción de servidor: el informe guardado conservó solo USED_FONTS_EMBEDDED;
+un preflight del PDF resultante encontró además SOURCE_COLOR_DIAGNOSTIC y
+DOCUMENT_OUTPUT_ICC. Reproducción de interfaz: se suministró una respuesta con
+results=[{job_id:demo,status:error}]. La fila terminó como FIXED, errors_count=0.
+
+Corrección: devolver y mostrar el dictamen verificado de cada trabajo y conservar
+los errores y los estados fallidos. Este flujo es distinto de /api/batch-fix/{id},
+que sí se actualizó en el cambio anterior.
+
+8. ALTA — LA CADENA HOTFOLDER DESCARTA LA LIMITACIÓN TAC REALIZADA
+
+Referencia: hotfolder_engine.py:148.
+
+La cadena consulta tac_res['images_converted'], pero limit_pdf_tac devuelve
+images_clamped. Por ello nunca adopta el archivo con la tinta limitada.
+
+Reproducción: imagen DeviceCMYK de 400 % sin Decode invertido. El limitador
+aislado corrigió una imagen y produjo 300 %. La cadena apply_full_batch_fix
+produjo 400 %, y su lista de pasos no contenía tac.
+
+Corrección: utilizar el contrato real del limitador y comprobar el archivo
+final completo, no solo el indicador de éxito de cada función.
+
+9. ALTA — VARIOS CRITERIOS DEL PERFIL NO SE APLICAN
+
+Referencias: preflight_engine.py:576-579, preflight_engine.py:401,
+preflight_engine.py:811.
+
+max_tac y min_hairline_pt se leen y se muestran en el resumen, pero el límite
+TAC no se evalúa y el umbral de filetes se mantiene fijo en 0.25 pt.
+require_fonts_embedded se lee, pero no condiciona la comprobación de fuentes.
+allow_spot_colors tampoco se utiliza después de leerlo.
+
+Reproducción: perfil con TAC máximo 240 %, filete mínimo 0.5 pt y fuentes
+incrustadas no obligatorias; PDF con relleno de 400 %, línea de 0.3 pt y una
+Helvetica sin incrustar. El único hallazgo fue USED_FONTS_EMBEDDED. No hubo
+hallazgos TAC ni de filete. El resumen sí anunciaba 240 % y 0.5 pt.
+
+Corrección: conectar cada ajuste a su regla y distinguir explícitamente las
+reglas que aún no se pueden evaluar, evitando presentarlas como superadas.
+
+10. MEDIA — LOS TRABAJOS HOTFOLDER GUARDAN RUTAS QUE LUEGO SE BORRAN
+
+Referencias: hotfolder_engine.py:337, hotfolder_engine.py:358,
+hotfolder_engine.py:364, hotfolder_engine.py:394-396.
+
+El JSON conserva pdf_path y last_fixed_pdf_path apuntando a processing. Después
+se copia el archivo a la carpeta de salida y se borran los archivos de processing,
+sin actualizar las rutas persistidas.
+
+Reproducción: tras process_file_sync, el PDF existía en la carpeta de rechazados,
+la ruta guardada no existía y /api/download-pdf/{job_id} devolvía 404.
+
+Corrección: persistir las rutas definitivas después del movimiento y antes de
+considerar terminado el trabajo.
+
+11. MEDIA — REPETIR CONVERSIÓN CMYK O LIMITACIÓN TAC PRODUCE ERROR 500
+
+Referencias: app.py:782; app.py:1760; color_converter.py:149-151;
+tac_limiter.py:136.
+
+La siguiente corrección utiliza el PDF acumulado, pero conserva el mismo nombre
+de salida de esa acción. Al repetir una operación que ya no necesita cambios,
+el origen y el destino pueden coincidir y se intenta copiar el archivo sobre sí mismo.
+
+Reproducción: dos peticiones sucesivas a convert-to-cmyk sobre el mismo trabajo:
+200 y 500. Dos peticiones a limit-tac: 200 y 500. En Windows la primera secuencia
+mostró un error de acceso a archivo; la segunda devolvió Internal Server Error.
+
+Corrección: utilizar archivos temporales únicos y sustitución atómica o detectar
+de forma explícita que el resultado sin cambios ya es el archivo de trabajo.
+
+12. MEDIA — UN ARCHIVO INVÁLIDO .PDF RECIBE HTTP 200 Y UN INFORME INCOMPLETO
+
+Referencias: preflight_engine.py:590-597; app.py:425-451;
+static/index.html:3221.
+
+El motor devuelve un diccionario de error que la ruta guarda y devuelve como
+éxito HTTP. No contiene triple_result ni job_summary, que la interfaz da por presentes.
+
+Reproducción: subir bad.pdf con los bytes "not a pdf" devolvió HTTP 200,
+technical_result=fail y findings=[], y generó un trabajo persistido.
+
+Corrección: convertir el error de lectura en una respuesta 400/422 y limpiar
+los archivos fallidos. La interfaz debe tratar también errores de estructura.
+
+13. MEDIA — LA FICHA DE TRAZABILIDAD CONTRADICE EL DICTAMEN Y FABRICA EL TAC
+
+Referencias: traceability_engine.py:90, traceability_engine.py:119-127.
+
+is_ready_for_press solo acepta LISTO, APROBADO u OK. El motor produce PASS,
+PASS_WITH_WARNINGS o FAIL y la autorización se guarda aparte. Un trabajo PASS
+con release=AUTHORIZED sigue apareciendo como no listo para imprimir.
+
+Además, cuando no hay un hallazgo MAX_INK_COVERAGE, se muestra un TAC de 300 %
+y estado OK sin haberlo medido. Si hay ese hallazgo, se asigna 320 % fijo.
+
+Reproducción: datos canónicos PASS + AUTHORIZED produjeron
+is_ready_for_press=False, max_tac_percent=300.0 y tac_status=OK sin medición TAC.
+
+Corrección: unificar los estados con los del motor y usar la autorización real;
+mostrar "no medido" cuando no exista evidencia de cobertura.
+
+14. MEDIA — UNA IMPORTACIÓN MALFORMADA ROMPE LAS SIGUIENTES IMPORTACIONES
+
+Referencia: app.py:330-339.
+
+Se aceptan registros sin id ni esquema validado. Después, current_ids se
+construye accediendo obligatoriamente a p['id'] en los registros persistidos.
+
+Reproducción: importar {custom_profiles:[{name:'Sin identificador'}]} devolvió
+200. La siguiente importación, incluso de una lista vacía, devolvió 500.
+
+Corrección: validar todos los registros antes de guardar, rechazar el lote de
+forma atómica y detectar duplicados y datos previos inválidos.
+
+ORDEN PROPUESTO DE CORRECCIÓN
+
+Primero: lectura de archivos mediante ICC y HTML de la ficha.
+Después: QR, TAC, trazado de fuentes y conservación ICC, por su capacidad de
+alterar o destruir contenido de producción mientras devuelven éxito.
+Después: dictámenes masivos y criterios de perfiles, con pruebas del PDF final.
+Finalmente: persistencia hotfolder, repetición de acciones, entradas inválidas,
+estados de trazabilidad e importación de perfiles.
+
+Cada corrección debe incluir el caso reproducido y una comprobación que no
+considere suficiente el indicador success: hay que verificar el documento,
+el payload QR, las separaciones, la cobertura y el informe resultantes.

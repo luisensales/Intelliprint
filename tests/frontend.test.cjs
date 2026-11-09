@@ -80,7 +80,7 @@ test('zero margins remain zero when loading and saving the form', async () => {
   assert.equal(payload.safety_margin_mm, 0);
 });
 
-for (const name of ['applyCmykImageConversion', 'convertImagesToCmyk']) {
+for (const name of ['applyCmykImageConversion', 'convertImagesToCmyk', 'applyTacLimiter', 'applyFontOutlineFix']) {
   test(`${name} displays the verified report even when errors remain`, async () => {
     const document = fakeDocument();
     const report = { findings: [{ title: 'RGB pendiente' }], triple_result: { technical: { status: 'FAIL' } } };
@@ -98,3 +98,37 @@ for (const name of ['applyCmykImageConversion', 'convertImagesToCmyk']) {
     assert.equal(context.currentReport.findings.length, 1);
   });
 }
+
+test('mass correction preserves individual failed and rejected outcomes', async () => {
+  const context = {
+    batchQueueItems: [
+      { job_id: 'failed', status: 'REJECTED', errors_count: 3 },
+      { job_id: 'rejected', status: 'REJECTED', errors_count: 2 },
+      { job_id: 'passed', status: 'REJECTED', errors_count: 1 },
+    ],
+    fetch: async () => ({ ok: true, json: async () => ({ status: 'success', results: [
+      { job_id: 'failed', status: 'error', errors_count: 1, message: 'Conversion failed' },
+      { job_id: 'rejected', status: 'success', technical_status: 'FAIL', errors_count: 2, warnings_count: 1, summary: 'NO CUMPLE' },
+      { job_id: 'passed', status: 'success', technical_status: 'PASS', errors_count: 0, warnings_count: 0, summary: 'CUMPLE' },
+    ] }) }),
+    renderBatchQueueTable() {}, alert() {}, console,
+  };
+  loadFunctions(context, ['executeBatchFixAll']);
+  await context.executeBatchFixAll({ innerHTML: 'Corregir' });
+  assert.equal(context.batchQueueItems[0].status, 'ERROR');
+  assert.equal(context.batchQueueItems[1].status, 'REJECTED');
+  assert.equal(context.batchQueueItems[1].errors_count, 2);
+  assert.equal(context.batchQueueItems[2].status, 'FIXED');
+});
+
+test('omitted mass correction results remain errors', async () => {
+  const context = {
+    batchQueueItems: [{ job_id: 'missing', errors_count: 3 }],
+    fetch: async () => ({ ok: true, json: async () => ({ status: 'success', results: [] }) }),
+    renderBatchQueueTable() {}, alert() {}, console,
+  };
+  loadFunctions(context, ['executeBatchFixAll']);
+  await context.executeBatchFixAll({ innerHTML: 'Corregir' });
+  assert.equal(context.batchQueueItems[0].status, 'ERROR');
+  assert.equal(context.batchQueueItems[0].errors_count, 3);
+});

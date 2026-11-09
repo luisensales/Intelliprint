@@ -11,6 +11,7 @@ WORKDIR /app
 # Instalar dependencias del sistema mínimas
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    ghostscript \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements e instalar

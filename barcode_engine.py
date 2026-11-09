@@ -18,6 +18,8 @@ Funcionalidades:
 
 from __future__ import annotations
 
+from pdf_utils import atomic_output, copy_pdf
+
 import io
 import math
 import re
@@ -478,6 +480,7 @@ def fix_barcodes_in_pdf(
     findings = inspection.get("findings", [])
 
     if not findings:
+        copy_pdf(pdf_path, output_path)
         return {
             "status": "success",
             "codes_fixed": 0,
@@ -494,7 +497,7 @@ def fix_barcodes_in_pdf(
     if not to_fix:
         # Copiar sin cambios
         import shutil
-        shutil.copyfile(str(pdf_path), str(output_path))
+        copy_pdf(pdf_path, output_path)
         return {
             "status": "success",
             "codes_fixed": 0,
@@ -519,7 +522,12 @@ def fix_barcodes_in_pdf(
         for item in page_findings:
             rect_pt = pymupdf.Rect(item["rect_pt"])
 
-            # 1. Reserva blanca (Quiet Zone)
+            # Capture the untouched code before painting its quiet zone.
+            capture = page.get_pixmap(clip=rect_pt, matrix=pymupdf.Matrix(300 / 72, 300 / 72),
+                                      colorspace=pymupdf.csGRAY if force_pure_k else pymupdf.csRGB)
+            captured_samples = bytes(capture.samples)
+            captured_width, captured_height = capture.width, capture.height
+
             if add_quiet_zone:
                 pad_pt = quiet_zone_margin_mm * PT_PER_MM
                 q_rect = pymupdf.Rect(
@@ -536,17 +544,9 @@ def fix_barcodes_in_pdf(
 
             # 2. Renderizado de alta resolución de la silueta de barras a 100% K puro
             if force_pure_k:
-                # Muestreo a 300 DPI de la zona original
-                dpi_fix = 300
-                zoom = dpi_fix / 72.0
-                mat = pymupdf.Matrix(zoom, zoom)
-
-                # Renderizar en escala de grises de alta resolución
-                pix = page.get_pixmap(clip=rect_pt, matrix=mat, colorspace=pymupdf.csGRAY)
-                w, h = pix.width, pix.height
-
+                w, h = captured_width, captured_height
                 if w > 0 and h > 0:
-                    raw_gray = np.frombuffer(pix.samples, dtype=np.uint8).reshape((h, w))
+                    raw_gray = np.frombuffer(captured_samples, dtype=np.uint8).reshape((h, w))
                     # Umbral Otsu para separar nítidamente barras oscuras de fondo claro
                     _, thresh_bars = cv2.threshold(raw_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
@@ -565,8 +565,24 @@ def fix_barcodes_in_pdf(
                     page.insert_image(rect_pt, stream=img_bytes)
                     codes_fixed_count += 1
 
-    doc.save(str(output_path), deflate=True)
-    doc.close()
+            elif add_quiet_zone:
+                original = Image.frombytes("RGB", (captured_width, captured_height), captured_samples)
+                buffer = io.BytesIO()
+                original.save(buffer, format="PNG")
+                page.insert_image(rect_pt, stream=buffer.getvalue())
+                codes_fixed_count += 1
+
+    try:
+        with atomic_output(output_path) as temporary:
+            doc.save(str(temporary), deflate=True)
+            doc.close()
+            verified = inspect_barcodes_in_pdf(temporary)
+            payloads = {(f["type"], f.get("payload")) for f in verified["findings"]}
+            if any((f["type"], f.get("payload")) not in payloads for f in to_fix):
+                raise ValueError("El codigo corregido no conserva su lectura original.")
+    finally:
+        if not doc.is_closed:
+            doc.close()
 
     return {
         "status": "success",

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import pymupdf
 import numpy as np
+from pdf_utils import preserve_output_intents
 import pikepdf
 
 
@@ -226,16 +227,10 @@ def generate_mirror_bleed(
     dst_doc.close()
     src_doc.close()
 
-    # Preservar OutputIntents con pikepdf si existían en el original
     try:
-        with pikepdf.open(pdf_path) as src, pikepdf.open(temp_mirror_path) as dst:
-            if "/OutputIntents" in src.Root:
-                dst.Root.OutputIntents = pikepdf.Array([dst.copy_foreign(x) for x in src.Root.OutputIntents])
-            dst.save(output_path)
+        preserve_output_intents(pdf_path, temp_mirror_path, output_path)
+    finally:
         Path(temp_mirror_path).unlink(missing_ok=True)
-    except Exception as e:
-        print(f"[mirror_bleed] Advertencia preservando metadatos: {e}")
-        Path(temp_mirror_path).replace(output_path)
 
     return {
         "status": "success",

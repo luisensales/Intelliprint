@@ -17,6 +17,7 @@ Permite:
 from __future__ import annotations
 
 import io
+from html import escape
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -87,7 +88,7 @@ def get_press_operator_data(job_data: Dict[str, Any]) -> Dict[str, Any]:
     # 1. Estado técnico general
     tech = triple.get("technical", {})
     status = tech.get("status", "ANALIZADO")
-    is_ready = status in ("LISTO", "APROBADO", "OK")
+    is_ready = status in ("PASS", "PASS_WITH_WARNINGS") and triple.get("release", {}).get("status") == "AUTHORIZED"
 
     # 2. Perfil ICC y OutputIntent
     icc_info = job_summary.get("icc_detected", {})
@@ -117,14 +118,9 @@ def get_press_operator_data(job_data: Dict[str, Any]) -> Dict[str, Any]:
                 spots_list.append(title)
 
     # 4. Cobertura máxima de tinta (TAC)
-    tac_finding = next((f for f in findings if f.get("rule_id") == "MAX_INK_COVERAGE"), None)
-    if tac_finding:
-        # Extraer porcentaje si está disponible
-        tac_val = 320.0
-        tac_status = "WARNING"
-    else:
-        tac_val = 300.0
-        tac_status = "OK"
+    measurement = job_summary.get("tac_measurement", {})
+    tac_val = measurement.get("peak_percent") if measurement.get("measured") else None
+    tac_status = "NOT_MEASURED" if tac_val is None else ("WARNING" if tac_val > job_summary.get("max_tac_limit", 300) + 0.5 else "OK")
 
     # 5. Sangrado y Cajas de Página
     bleed_mm = job_summary.get("bleed_detected_mm", 3.0)
@@ -185,6 +181,16 @@ def get_press_operator_data(job_data: Dict[str, Any]) -> Dict[str, Any]:
 
 def render_press_operator_html(d: Dict[str, Any]) -> str:
     """Genera la plantilla HTML responsive para la Ficha de Producción en Vivo del Maquinista."""
+    def safe(value):
+        if isinstance(value, str):
+            return escape(value, quote=True)
+        if isinstance(value, list):
+            return [safe(item) for item in value]
+        if isinstance(value, dict):
+            return {key: safe(item) for key, item in value.items()}
+        return value
+    d = safe(d)
+    tac_display = "No medido" if d.get("max_tac_percent") is None else f"{d['max_tac_percent']:.1f}% (estimado)"
     is_ready = d.get("is_ready_for_press", False)
     status_bg = "bg-emerald-600" if is_ready else "bg-rose-600"
     status_title = "LISTO PARA IMPRESIÓN · TIRADA AUTORIZADA" if is_ready else "REQUIERE AJUSTES PREVIOS · NO IMPRIMIR"
@@ -316,7 +322,7 @@ def render_press_operator_html(d: Dict[str, Any]) -> str:
         <div class="flex items-start justify-between gap-2 p-2 bg-slate-50 rounded-lg">
           <div>
             <span class="text-[10px] text-slate-400 block uppercase">Cobertura Máx. Tinta (TAC):</span>
-            <strong class="text-slate-800">{d.get('max_tac_percent'):.0f}%</strong>
+            <strong class="text-slate-800">{tac_display}</strong>
             <span class="text-[10px] text-slate-400 block">(Límite seguro: 300% para evitar repintado)</span>
           </div>
           <span class="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded">TAC OK</span>

@@ -3340,11 +3340,11 @@
             <div class="mt-0.5">${iconHtml}</div>
             <div class="flex-1">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="font-bold">${f.title}</span>
+                <span class="font-bold">${escapeHtml(f.title)}</span>
                 ${badgeHtml}
                 <span class="text-[10px] px-1.5 py-0.2 rounded bg-white/80 border border-slate-300 font-mono text-slate-700">Pág ${f.page}</span>
               </div>
-              <p class="mt-0.5 text-slate-700">${f.message}</p>
+              <p class="mt-0.5 text-slate-700">${escapeHtml(f.message)}</p>
               ${actionHtml}
             </div>
           `;
@@ -3797,6 +3797,12 @@
         const res = await fetch(`/api/apply-overprint/${currentJobId}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
+          if (data.report) {
+            currentReport = data.report;
+            renderResults(currentReport);
+            return;
+          }
+
           // Éxito: actualizar todos los botones
           allButtons.forEach(b => {
             b.disabled = false;
@@ -3991,6 +3997,12 @@
         const res = await fetch(`/api/fix-hairlines/${currentJobId}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
+          if (data.report) {
+            currentReport = data.report;
+            renderResults(currentReport);
+            return;
+          }
+
           // Cambiar la tarjeta de la incidencia a estado resuelto
           if (card) {
             card.className = 'p-3 rounded-lg border text-xs flex items-center gap-3 bg-emerald-50 border-emerald-300 text-emerald-900 transition-all shadow-xs';
@@ -4073,6 +4085,12 @@
         const res = await fetch(`/api/fix-output-intent/${currentJobId}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
+          if (data.report) {
+            currentReport = data.report;
+            renderResults(currentReport);
+            return;
+          }
+
           // Cambiar la tarjeta de la incidencia a estado resuelto
           if (card) {
             const iccName = (data.applied_icc && data.applied_icc.identifier) || 'ISO Coated v2 ECI (FOGRA39)';
@@ -4166,6 +4184,12 @@
         const res = await fetch(`/api/fix-bleed-geometry/${currentJobId}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
+          if (data.report) {
+            currentReport = data.report;
+            renderResults(currentReport);
+            return;
+          }
+
           // Cambiar la tarjeta de la incidencia a estado resuelto
           if (card) {
             card.className = 'p-3 rounded-lg border text-xs flex items-center gap-3 bg-emerald-50 border-emerald-300 text-emerald-900 transition-all shadow-xs';
@@ -4254,6 +4278,12 @@
         const res = await fetch(`/api/generate-mirror-bleed/${currentJobId}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
+          if (data.report) {
+            currentReport = data.report;
+            renderResults(currentReport);
+            return;
+          }
+
           // Cambiar la tarjeta de la incidencia a estado resuelto
           if (card) {
             card.className = 'p-3 rounded-lg border text-xs flex items-center gap-3 bg-emerald-50 border-emerald-300 text-emerald-900 transition-all shadow-xs';
@@ -4341,6 +4371,12 @@
         const res = await fetch(`/api/add-printer-marks/${currentJobId}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
+          if (data.report) {
+            currentReport = data.report;
+            renderResults(currentReport);
+            return;
+          }
+
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400 mr-1"></i> Marcas Listas';
           btn.classList.remove('bg-slate-800', 'hover:bg-slate-700', 'bg-white', 'hover:bg-slate-100', 'text-slate-700', 'border-slate-200');
@@ -4381,14 +4417,21 @@
         alert('No hay ningún trabajo activo.');
         return;
       }
+      const maxTac = currentReport?.job_summary?.max_tac_limit ?? 300;
       const origHtml = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Limitando TAC a 300%...';
 
       try {
-        const res = await fetch(`/api/limit-tac/${currentJobId}?max_tac=300`, { method: 'POST' });
+        const res = await fetch(`/api/limit-tac/${currentJobId}?max_tac=${maxTac}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
+          if (data.report) {
+            currentReport = data.report;
+            renderResults(currentReport);
+            return;
+          }
+
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-circle-check text-cyan-400 mr-1"></i> TAC ≤ 300% OK';
           btn.classList.remove('bg-slate-800', 'hover:bg-slate-700', 'bg-white', 'hover:bg-slate-100', 'text-slate-700', 'border-slate-200');
@@ -4439,6 +4482,12 @@
         const res = await fetch(`/api/outline-fonts/${currentJobId}${queryParams}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
+          if (data.report) {
+            currentReport = data.report;
+            renderResults(currentReport);
+            return;
+          }
+
           // Cambiar la tarjeta de la incidencia a estado resuelto
           if (card) {
             card.className = 'p-3 rounded-lg border text-xs flex items-center gap-3 bg-emerald-50 border-emerald-300 text-emerald-900 transition-all shadow-xs';
@@ -4550,6 +4599,12 @@
         const res = await fetch(`/api/apply-varnish-overprint/${currentJobId}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
+          if (data.report) {
+            currentReport = data.report;
+            renderResults(currentReport);
+            return;
+          }
+
           allButtons.forEach(b => {
             b.disabled = false;
             b.className = b.className.replace(/bg-red-\d+/, 'bg-emerald-600').replace(/hover:bg-red-\d+/, 'hover:bg-emerald-700');
@@ -4819,6 +4874,12 @@
         const data = await res.json();
 
         if (res.ok && data.status === 'success') {
+          if (data.report) {
+            currentReport = data.report;
+            renderResults(currentReport);
+            return;
+          }
+
           const nConverted = data.spots_converted.length;
           const detailsStr = data.spots_converted.map(s => `<strong>${s.name}</strong> (${s.cmyk_str})`).join('<br>');
 
@@ -6108,13 +6169,24 @@
         const data = await resp.json();
 
         if (resp.ok && data.status === 'success') {
+          const outcomes = new Map((data.results || []).map(result => [result.job_id, result]));
           batchQueueItems.forEach(item => {
-            item.status = 'FIXED';
-            item.errors_count = 0;
-            item.summary = 'Auto-corregido con éxito (100% K, sangrado, hairlines)';
+            const result = outcomes.get(item.job_id);
+            if (!result || result.status !== 'success') {
+              item.status = 'ERROR';
+              item.errors_count = result?.errors_count ?? Math.max(1, item.errors_count || 0);
+              item.summary = result?.message || 'No se pudo corregir este trabajo.';
+              return;
+            }
+            item.errors_count = result.errors_count;
+            item.warnings_count = result.warnings_count;
+            item.status = result.technical_status === 'PASS' ? 'FIXED' :
+              (result.technical_status === 'PASS_WITH_WARNINGS' ? 'APPROVED' : 'REJECTED');
+            item.summary = result.summary;
           });
           renderBatchQueueTable();
-          alert('Lote corregido con éxito. Puedes descargar el ZIP con todos los archivos.');
+          const pending = batchQueueItems.filter(item => item.errors_count > 0 || item.warnings_count > 0).length;
+          alert(`Lote procesado. ${pending} trabajo(s) requieren revision.`);
         } else {
           alert('Error corrigiendo el lote: ' + (data.detail || 'Fallo desconocido'));
         }
