@@ -41,22 +41,36 @@ def _build_transform(src_icc: Path, dst_icc: Path) -> ImageCms.ImageCmsTransform
 
 def _image_to_cmyk_bytes(raw_bytes: bytes, transform: ImageCms.ImageCmsTransform) -> tuple[bytes, int, int]:
     """Aplica el transform ICC y devuelve la imagen CMYK como JPEG bytes y sus dimensiones (w, h)."""
-    img = Image.open(io.BytesIO(raw_bytes))
-    w, h = img.size
+    with Image.open(io.BytesIO(raw_bytes)) as img:
+        w, h = img.size
 
-    # Asegurar modo RGB antes de transformar
-    if img.mode == "RGBA":
-        bg = Image.new("RGB", img.size, (255, 255, 255))
-        bg.paste(img, mask=img.split()[3])
-        img = bg
-    elif img.mode != "RGB":
-        img = img.convert("RGB")
+        # Asegurar modo RGB antes de transformar
+        if img.mode == "RGBA":
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            alpha = img.getchannel("A") if "A" in img.getbands() else None
+            if alpha:
+                bg.paste(img, mask=alpha)
+                del alpha
+            else:
+                bg.paste(img)
+            img_rgb = bg
+        elif img.mode != "RGB":
+            img_rgb = img.convert("RGB")
+        else:
+            img_rgb = img
 
-    img_cmyk = ImageCms.applyTransform(img, transform)  # → modo CMYK
+        img_cmyk = ImageCms.applyTransform(img_rgb, transform)  # → modo CMYK
 
-    buf = io.BytesIO()
-    img_cmyk.save(buf, format="JPEG", quality=95, subsampling=0)
-    return buf.getvalue(), w, h
+        buf = io.BytesIO()
+        img_cmyk.save(buf, format="JPEG", quality=92, subsampling=0)
+        cmyk_bytes = buf.getvalue()
+
+        if img_rgb is not img:
+            img_rgb.close()
+        img_cmyk.close()
+        del img_cmyk
+
+    return cmyk_bytes, w, h
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +164,7 @@ def convert_rgb_images_to_cmyk(
             tmp_doc = pymupdf.open(str(pdf_path))
             img_info = tmp_doc.extract_image(xref)
             tmp_doc.close()
+            del tmp_doc
 
             raw_bytes = img_info.get("image")
             if not raw_bytes:
@@ -157,9 +172,11 @@ def convert_rgb_images_to_cmyk(
                 continue
 
             cmyk_bytes, w, h = _image_to_cmyk_bytes(raw_bytes, transform)
+            del raw_bytes, img_info
 
             obj = pike_doc.get_object(xref, 0)
             obj.write(cmyk_bytes, filter=pikepdf.Name("/DCTDecode"))
+            del cmyk_bytes
             obj["/Width"] = w
             obj["/Height"] = h
             obj["/ColorSpace"] = pikepdf.Name("/DeviceCMYK")
@@ -175,6 +192,8 @@ def convert_rgb_images_to_cmyk(
                     pass
 
             result["images_converted"] += 1
+            import gc
+            gc.collect()
 
         except Exception as e:
             err_msg = f"xref {xref}: {e}"

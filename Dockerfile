@@ -1,9 +1,10 @@
 # IntelliPrint Web - Contenedor de Producción
 FROM python:3.11-slim
 
-# Evitar prompts y buffering
+# Evitar prompts y buffering y forzar liberación de RAM al kernel
 ENV PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    MALLOC_TRIM_THRESHOLD_=65536
 
 WORKDIR /app
 

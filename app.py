@@ -2454,6 +2454,8 @@ def batch_fix_endpoint(
                         tmp.unlink(missing_ok=True)
                     except Exception:
                         pass
+            import gc
+            gc.collect()
 
         # Registrar en job_meta de manera acumulativa
         job_meta = job_data.setdefault("job_meta", {}) or {}

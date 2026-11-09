@@ -5,6 +5,8 @@ mediante algoritmos de sustracción de color terciario (UCR) proporcionales, evi
 repintado (set-off), suciedad en rodillos y problemas de secado en máquina offset.
 """
 
+import gc
+import shutil
 import zlib
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -21,108 +23,119 @@ def limit_pdf_tac(
     """
     Analiza y limita la cobertura de tinta (TAC / TIC) en todas las imágenes CMYK del PDF:
     - Extrae las muestras nativas DeviceCMYK de cada imagen ráster mediante Pixmap.
-    - Calcula la suma total de tinta por píxel: C% + M% + Y% + K%.
+    - Calcula la suma total de tinta por píxel: C% + M% + Y% + K% usando enteros uint16 (mínimo consumo de RAM).
     - Si un píxel supera max_tac_percent, reduce C, M, Y de forma proporcional (UCR),
       preservando la integridad del canal K (negro) y el equilibrio cromático.
-    - Guarda los streams modificados de forma exacta y sin pérdidas (/FlateDecode).
-    - Preserva intactos todos los vectores, tipografías y diccionarios /OutputIntents.
-
-    :param pdf_path: Ruta al archivo PDF de entrada.
-    :param output_path: Ruta de salida para el PDF con TAC limitado.
-    :param max_tac_percent: Cobertura máxima de tinta admisible (por defecto 300.0%).
-    :return: Diccionario con estadísticas del análisis y reducción.
+    - Optimizado para instancias de memoria reducida (512 MB): libera memoria de forma agresiva.
     """
-    limit = max_tac_percent / 100.0
+    limit_val = int(round(max_tac_percent * 255.0 / 100.0))
     images_inspected = 0
     images_clamped = 0
     peak_tac_found = 0.0
 
     doc_mu = pymupdf.open(pdf_path)
-    pike_doc = pikepdf.open(pdf_path, allow_overwriting_input=True)
-
+    pike_doc = None
     seen_xrefs = set()
 
-    for page in doc_mu:
-        for img in page.get_images():
-            xref = img[0]
-            if xref in seen_xrefs:
-                continue
-            seen_xrefs.add(xref)
-
-            try:
-                pix = pymupdf.Pixmap(doc_mu, xref)
-            except Exception:
-                continue
-
-            # Inspeccionar únicamente imágenes de 4 componentes (CMYK)
-            if pix.n != 4:
-                continue
-
-            images_inspected += 1
-            w, h = pix.width, pix.height
-            if w <= 0 or h <= 0:
-                continue
-
-            try:
-                samples = np.frombuffer(pix.samples, dtype=np.uint8).reshape((h, w, 4))
-            except Exception:
-                continue
-
-            samples_f = samples.astype(np.float32) / 255.0
-            c = samples_f[:, :, 0]
-            m = samples_f[:, :, 1]
-            y = samples_f[:, :, 2]
-            k = samples_f[:, :, 3]
-
-            tot = c + m + y + k
-            curr_peak = float(np.max(tot)) * 100.0
-            if curr_peak > peak_tac_found:
-                peak_tac_found = curr_peak
-
-            mask = tot > limit
-            if np.any(mask):
-                excess = tot - limit
-                cmy_sum = c + m + y
-                cmy_sum_safe = np.where(cmy_sum > 0, cmy_sum, 1.0)
-
-                # Reducir C, M, Y proporcionalmente al peso de cada uno
-                c[mask] -= excess[mask] * (c[mask] / cmy_sum_safe[mask])
-                m[mask] -= excess[mask] * (m[mask] / cmy_sum_safe[mask])
-                y[mask] -= excess[mask] * (y[mask] / cmy_sum_safe[mask])
-
-                samples_f[:, :, 0] = np.clip(c, 0.0, 1.0)
-                samples_f[:, :, 1] = np.clip(m, 0.0, 1.0)
-                samples_f[:, :, 2] = np.clip(y, 0.0, 1.0)
-                samples_f[:, :, 3] = np.clip(k, 0.0, 1.0)
-
-                new_bytes = (samples_f * 255.0).astype(np.uint8).tobytes()
-                compressed = zlib.compress(new_bytes)
-
-                # Sustituir stream en pikepdf
-                try:
-                    obj = pike_doc.get_object(xref, 0)
-                    obj.write(compressed, filter=pikepdf.Name("/FlateDecode"))
-                    obj["/ColorSpace"] = pikepdf.Name("/DeviceCMYK")
-                    obj["/BitsPerComponent"] = 8
-                    obj["/Width"] = w
-                    obj["/Height"] = h
-                    # Limpiar parámetros incompatibles con Flate
-                    for key in ["/DecodeParms", "/Intent", "/Alternates"]:
-                        if key in obj:
-                            try:
-                                del obj[key]
-                            except Exception:
-                                pass
-                    images_clamped += 1
-                except Exception as e:
-                    print(f"[tac_limiter] Error escribiendo xref {xref}: {e}")
-
-    doc_mu.close()
-
     try:
-        pike_doc.save(output_path)
+        for page in doc_mu:
+            for img in page.get_images():
+                xref = img[0]
+                if xref in seen_xrefs:
+                    continue
+                seen_xrefs.add(xref)
+
+                pix = None
+                try:
+                    pix = pymupdf.Pixmap(doc_mu, xref)
+                    if pix.n != 4:
+                        continue
+
+                    images_inspected += 1
+                    w, h = pix.width, pix.height
+                    if w <= 0 or h <= 0:
+                        continue
+
+                    samples = np.frombuffer(pix.samples, dtype=np.uint8).reshape((h, w, 4))
+                    tot = (
+                        samples[:, :, 0].astype(np.uint16)
+                        + samples[:, :, 1]
+                        + samples[:, :, 2]
+                        + samples[:, :, 3]
+                    )
+
+                    curr_peak = float(np.max(tot)) * 100.0 / 255.0
+                    if curr_peak > peak_tac_found:
+                        peak_tac_found = curr_peak
+
+                    mask = tot > limit_val
+                    if np.any(mask):
+                        # Abrir pikepdf solo cuando realmente se requiere modificar un stream
+                        if pike_doc is None:
+                            pike_doc = pikepdf.open(pdf_path, allow_overwriting_input=True)
+
+                        c = samples[:, :, 0][mask].astype(np.float32)
+                        m = samples[:, :, 1][mask].astype(np.float32)
+                        y = samples[:, :, 2][mask].astype(np.float32)
+                        k = samples[:, :, 3][mask].astype(np.float32)
+
+                        excess = (c + m + y + k) - limit_val
+                        cmy_sum = c + m + y
+                        cmy_sum_safe = np.where(cmy_sum > 0, cmy_sum, 1.0)
+
+                        c -= excess * (c / cmy_sum_safe)
+                        m -= excess * (m / cmy_sum_safe)
+                        y -= excess * (y / cmy_sum_safe)
+
+                        new_samples = samples.copy()
+                        new_samples[:, :, 0][mask] = np.clip(np.round(c), 0, 255).astype(np.uint8)
+                        new_samples[:, :, 1][mask] = np.clip(np.round(m), 0, 255).astype(np.uint8)
+                        new_samples[:, :, 2][mask] = np.clip(np.round(y), 0, 255).astype(np.uint8)
+
+                        compressed = zlib.compress(new_samples.tobytes())
+
+                        del c, m, y, k, excess, cmy_sum, cmy_sum_safe, new_samples
+
+                        try:
+                            obj = pike_doc.get_object(xref, 0)
+                            obj.write(compressed, filter=pikepdf.Name("/FlateDecode"))
+                            obj["/ColorSpace"] = pikepdf.Name("/DeviceCMYK")
+                            obj["/BitsPerComponent"] = 8
+                            obj["/Width"] = w
+                            obj["/Height"] = h
+                            for key in ["/DecodeParms", "/Intent", "/Alternates"]:
+                                if key in obj:
+                                    try:
+                                        del obj[key]
+                                    except Exception:
+                                        pass
+                            images_clamped += 1
+                        except Exception as e:
+                            print(f"[tac_limiter] Error escribiendo xref {xref}: {e}")
+                        finally:
+                            del compressed
+
+                    del mask, tot, samples
+                except Exception as e:
+                    print(f"[tac_limiter] Error inspeccionando imagen xref {xref}: {e}")
+                finally:
+                    if pix is not None:
+                        del pix
+                    gc.collect()
+
     finally:
-        pike_doc.close()
+        doc_mu.close()
+
+    if pike_doc is not None and images_clamped > 0:
+        try:
+            pike_doc.save(output_path)
+        finally:
+            pike_doc.close()
+    else:
+        # Si no hubo imágenes que sobrepasaran el TAC, copia directa instantánea sin consumir RAM
+        shutil.copy2(pdf_path, output_path)
+
+    gc.collect()
 
     return {
         "success": True,
