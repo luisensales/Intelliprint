@@ -1,0 +1,100 @@
+// Run with: node --test tests/frontend.test.cjs
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+const vm = require('node:vm');
+
+const html = fs.readFileSync(path.join(__dirname, '../static/index.html'), 'utf8');
+
+function loadFunctions(context, names) {
+  vm.createContext(context);
+  for (const name of names) {
+    const start = html.search(new RegExp(`^    (?:async )?function ${name}\\(`, 'm'));
+    assert.notEqual(start, -1, `Missing function ${name}`);
+    const end = html.indexOf('\n    }', start) + '\n    }'.length;
+    vm.runInContext(html.slice(start, end), context);
+  }
+}
+
+function fakeDocument() {
+  const elements = new Map();
+  return {
+    getElementById(id) {
+      if (!elements.has(id)) elements.set(id, {
+        value: '', checked: false, innerHTML: '',
+        classList: { add() {}, remove() {}, toggle() {} },
+        querySelectorAll() { return []; },
+      });
+      return elements.get(id);
+    },
+  };
+}
+
+test('all inline JavaScript parses', () => {
+  for (const script of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    if (!/\bsrc\s*=/.test(script[1])) new vm.Script(script[2]);
+  }
+});
+
+test('imported profile markup is inert and selection uses the literal ID', () => {
+  const document = fakeDocument();
+  const attack = `<img src=x onerror="alert('xss')">`;
+  const id = `CUSTOM_');alert(1);//" onmouseover="alert(2)`;
+  let clicked;
+  let handler;
+  const context = { document, currentSelectedProfileId: null, selectProfileInManager: value => { clicked = value; } };
+  loadFunctions(context, ['escapeHtml', 'renderProfileManagerList']);
+  const container = document.getElementById('pmProfilesList');
+  container.querySelectorAll = () => [{ dataset: { profileId: id }, addEventListener: (name, fn) => { handler = fn; } }];
+  context.renderProfileManagerList([{ id, name: attack, destination: attack, target_dpi: attack, min_bleed_mm: attack, max_tac: attack, is_custom: true }]);
+  assert.ok(!container.innerHTML.includes('<img'));
+  assert.ok(!container.innerHTML.includes('onclick='));
+  assert.ok(!container.innerHTML.includes('" onmouseover="'));
+  assert.ok(container.innerHTML.includes('&lt;img'));
+  handler();
+  assert.equal(clicked, id);
+});
+
+test('zero margins remain zero when loading and saving the form', async () => {
+  const document = fakeDocument();
+  let payload;
+  const context = {
+    document, currentSelectedProfileId: null,
+    fetch: async (url, options) => {
+      payload = JSON.parse(options.body);
+      return { ok: true, json: async () => ({ profile: { id: 'CUSTOM_test' } }) };
+    },
+    refreshProfileManagerList: async () => {}, loadTargetProfiles: async () => {},
+    alert() {},
+  };
+  loadFunctions(context, ['loadProfileIntoForm', 'saveCustomProfileFromForm']);
+  context.loadProfileIntoForm({ id: 'CUSTOM_test', name: 'Pantalla', min_bleed_mm: 0, safety_margin_mm: 0, is_custom: true });
+  assert.equal(document.getElementById('pmBleedInput').value, 0);
+  assert.equal(document.getElementById('pmSafetyInput').value, 0);
+  // Browser input values are strings.
+  document.getElementById('pmBleedInput').value = '0';
+  document.getElementById('pmSafetyInput').value = '0';
+  await context.saveCustomProfileFromForm();
+  assert.equal(payload.min_bleed_mm, 0);
+  assert.equal(payload.safety_margin_mm, 0);
+});
+
+for (const name of ['applyCmykImageConversion', 'convertImagesToCmyk']) {
+  test(`${name} displays the verified report even when errors remain`, async () => {
+    const document = fakeDocument();
+    const report = { findings: [{ title: 'RGB pendiente' }], triple_result: { technical: { status: 'FAIL' } } };
+    let rendered;
+    const context = {
+      document, FormData, currentJobId: 'test', currentReport: null,
+      fetch: async () => ({ ok: true, json: async () => ({ status: 'success', report, images_converted: 0, errors: [] }) }),
+      renderResults: data => { rendered = data; }, updateSeparationPreview() {},
+      alert: message => assert.fail(message), console,
+    };
+    loadFunctions(context, [name]);
+    await context[name]({ innerHTML: 'Convertir', closest: () => null });
+    assert.equal(rendered, report);
+    assert.equal(context.currentReport.triple_result.technical.status, 'FAIL');
+    assert.equal(context.currentReport.findings.length, 1);
+  });
+}

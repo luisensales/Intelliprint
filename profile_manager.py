@@ -156,6 +156,15 @@ def get_profile_by_id(profile_id: str) -> Dict[str, Any]:
     return DEFAULT_BUILTIN_PROFILES[0]
 
 
+def _numeric_value(data: Dict[str, Any], *keys: str, default):
+    """Keep explicit zero values; only skip missing or empty fields."""
+    for key in keys:
+        value = data.get(key)
+        if value is not None and value != "":
+            return value
+    return default
+
+
 def create_custom_profile(data: Dict[str, Any]) -> Dict[str, Any]:
     """Crea un nuevo perfil personalizado con validación de rangos."""
     raw_name = data.get("name", "Nuevo Perfil Personalizado").strip()
@@ -167,10 +176,10 @@ def create_custom_profile(data: Dict[str, Any]) -> Dict[str, Any]:
         "name": raw_name,
         "destination": data.get("destination", "Perfil personalizado de imprenta").strip(),
         "target_dpi": int(data.get("target_dpi") or data.get("dpi") or 300),
-        "min_bleed_mm": float(data.get("min_bleed_mm") or data.get("bleed_mm") or 3.0),
+        "min_bleed_mm": float(_numeric_value(data, "min_bleed_mm", "bleed_mm", default=3.0)),
         "max_tac": int(data.get("max_tac") or data.get("tac_limit") or data.get("tac") or 300),
         "min_hairline_pt": float(data.get("min_hairline_pt") or data.get("hairline_pt") or 0.25),
-        "safety_margin_mm": float(data.get("safety_margin_mm") or data.get("safety_margin") or 3.0),
+        "safety_margin_mm": float(_numeric_value(data, "safety_margin_mm", "safety_margin", default=3.0)),
         "color_family": data.get("color_family", "CMYK"),
         "allow_spot_colors": bool(data.get("allow_spot_colors", True)),
         "require_fonts_embedded": bool(data.get("require_fonts_embedded", True)),
@@ -201,10 +210,10 @@ def update_custom_profile(profile_id: str, data: Dict[str, Any]) -> Optional[Dic
     p["name"] = data.get("name", p["name"]).strip()
     p["destination"] = data.get("destination", p["destination"]).strip()
     p["target_dpi"] = int(data.get("target_dpi") or data.get("dpi") or p["target_dpi"])
-    p["min_bleed_mm"] = float(data.get("min_bleed_mm") or data.get("bleed_mm") or p["min_bleed_mm"])
+    p["min_bleed_mm"] = float(_numeric_value(data, "min_bleed_mm", "bleed_mm", default=p["min_bleed_mm"]))
     p["max_tac"] = int(data.get("max_tac") or data.get("tac_limit") or data.get("tac") or p["max_tac"])
     p["min_hairline_pt"] = float(data.get("min_hairline_pt") or data.get("hairline_pt") or p["min_hairline_pt"])
-    p["safety_margin_mm"] = float(data.get("safety_margin_mm") or data.get("safety_margin") or p["safety_margin_mm"])
+    p["safety_margin_mm"] = float(_numeric_value(data, "safety_margin_mm", "safety_margin", default=p["safety_margin_mm"]))
     p["color_family"] = data.get("color_family", p["color_family"])
     p["allow_spot_colors"] = bool(data.get("allow_spot_colors", p["allow_spot_colors"]))
     p["require_fonts_embedded"] = bool(data.get("require_fonts_embedded", p["require_fonts_embedded"]))

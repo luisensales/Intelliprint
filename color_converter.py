@@ -149,7 +149,7 @@ def convert_rgb_images_to_cmyk(
     if not rgb_xrefs:
         import shutil
         shutil.copy2(str(pdf_path), str(output_path))
-        result["success"] = True
+        result["success"] = not result["errors"]
         return result
 
     # Abrir con pikepdf para reemplazar los streams
@@ -204,7 +204,7 @@ def convert_rgb_images_to_cmyk(
     try:
         pike_doc.save(str(output_path))
         pike_doc.close()
-        result["success"] = True
+        result["success"] = not result["errors"]
     except Exception as e:
         result["errors"].append(f"Error guardando PDF convertido: {e}")
         try:

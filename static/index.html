@@ -2776,7 +2776,7 @@
               </div>
               <div>
                 <label class="block font-bold text-slate-700 mb-1">Zona Seguridad (mm):</label>
-                <input type="number" id="pmSafetyInput" value="3.0" min="1.0" max="15.0" step="0.5" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                <input type="number" id="pmSafetyInput" value="3.0" min="0" max="15.0" step="0.5" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
               </div>
               <div>
                 <label class="block font-bold text-slate-700 mb-1">Espacio de Color:</label>
@@ -2870,6 +2870,12 @@
     let selectedFile = null;
     let currentJobId = null;
     let currentReport = null;
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[char]));
+    }
 
     // Elements
     const dropZone = document.getElementById('dropZone');
@@ -4506,7 +4512,6 @@
         alert('No hay ningún trabajo activo.');
         return;
       }
-      const card = btn.closest('#findingsList > div');
       const origHtml = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Convirtiendo a CMYK...';
@@ -4515,61 +4520,8 @@
         const res = await fetch(`/api/convert-to-cmyk/${currentJobId}`, { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
-          // Cambiar todas las tarjetas de imágenes RGB o la tarjeta actual a resuelto
-          const allRgbCards = document.querySelectorAll('#findingsList > div[data-rule-id="SOURCE_COLOR_DIAGNOSTIC"]');
-          const targetCards = allRgbCards.length > 0 ? allRgbCards : (card ? [card] : []);
-
-          targetCards.forEach(c => {
-            c.className = 'p-3 rounded-lg border text-xs flex items-center gap-3 bg-emerald-50 border-emerald-300 text-emerald-900 transition-all shadow-xs';
-            c.innerHTML = `
-              <div><i class="fa-solid fa-circle-check text-emerald-600 text-base"></i></div>
-              <div class="flex-1">
-                <span class="font-bold">Imágenes convertidas a CMYK con éxito</span>
-                <p class="text-[11px] text-emerald-700">Transformación ICC aplicada (${data.target_icc || 'ISO Coated v2 / FOGRA39'}). ${data.images_converted || 1} imagen(es) listas para imprenta.</p>
-              </div>
-              <a href="${data.download_url}" target="_blank" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-semibold transition flex items-center gap-1 shadow-xs">
-                <i class="fa-solid fa-download"></i> PDF CMYK
-              </a>
-            `;
-          });
-
-          // Actualizar contador de incidencias
-          const countEl = document.getElementById('findingsCount');
-          if (data.findings && countEl) {
-            countEl.textContent = data.findings.length;
-          }
-
-          // Actualizar botón de cabecera si procede
-          const pdfBtn = document.getElementById('downloadPdfBtn');
-          const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
-          if (pdfBtn && data.download_url) {
-            pdfBtn.href = data.download_url;
-            pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-            pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
-          }
-          if (pdfBtnLabel) {
-            pdfBtnLabel.textContent = 'Descargar PDF (CMYK OK)';
-          }
-
-          // Actualizar dictamen técnico general si viene en la respuesta
-          if (data.triple_result && data.triple_result.technical) {
-            const tech = data.triple_result.technical;
-            const techBadge = document.getElementById('badgeTechnical');
-            const descTech = document.getElementById('descTechnical');
-            if (techBadge) {
-              techBadge.textContent = tech.label;
-              if (tech.status === 'PASS') {
-                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-emerald-100 text-emerald-800 border border-emerald-200';
-              } else if (tech.status === 'PASS_WITH_WARNINGS') {
-                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-amber-100 text-amber-800 border border-amber-200';
-              } else {
-                techBadge.className = 'text-xs font-bold px-3 py-1 rounded-full inline-block bg-red-100 text-red-800 border border-red-200';
-              }
-            }
-            if (descTech) {
-              descTech.textContent = `${tech.errors_count} errores críticos, ${tech.warnings_count} advertencias.`;
-            }
-          }
+          currentReport = data.report;
+          renderResults(currentReport);
         } else {
           alert('Error al convertir imágenes a CMYK: ' + (data.detail || 'Error desconocido'));
           btn.disabled = false;
@@ -4770,75 +4722,10 @@
           pdfBtnLabel.textContent = 'Descargar PDF CMYK';
         }
 
-        // ── 1. Actualizar inmediatamente todas las filas de la tabla de imágenes en esta misma vista
-        const rows = document.querySelectorAll('#imagesTableBody tr');
-        rows.forEach(tr => {
-          const cells = tr.querySelectorAll('td');
-          if (cells.length >= 7) {
-            const badgeCell = cells[2];
-            const statusCell = cells[6];
-            if (badgeCell && badgeCell.innerHTML.includes('RGB')) {
-              badgeCell.innerHTML = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">CMYK <i class="fa-solid fa-circle-check text-emerald-600 ml-0.5"></i></span>';
-              if (statusCell) {
-                if (statusCell.innerHTML.includes('mayor resolución') || statusCell.innerHTML.includes('Resolución')) {
-                  statusCell.innerHTML = '<span class="text-amber-700 font-medium"><i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>CMYK OK · <span class="text-amber-600 font-semibold">Resolución baja</span></span>';
-                } else {
-                  statusCell.innerHTML = '<span class="text-emerald-600 font-medium"><i class="fa-solid fa-circle-check mr-1"></i>Convertida a CMYK (Óptima)</span>';
-                }
-              }
-            }
-          }
-        });
-
-        // ── 2. Actualizar el resumen de métricas de imágenes
-        const summaryEl = document.getElementById('metricImagesSummary');
-        if (summaryEl) {
-          const totalImgs = document.querySelectorAll('#imagesTableBody tr').length;
-          summaryEl.innerHTML = `<strong>${totalImgs}</strong> imágenes analizadas · <span class="text-emerald-600 font-bold"><i class="fa-solid fa-circle-check mr-1"></i>Todas en CMYK (convertidas)</span>`;
-        }
-
-        // ── 3. Actualizar el botón de la cabecera "Convertir a CMYK"
-        const btnShowCmyk = document.getElementById('btnShowCmykPanel');
-        if (btnShowCmyk) {
-          btnShowCmyk.innerHTML = '<i class="fa-solid fa-circle-check"></i> Imágenes en CMYK';
-          btnShowCmyk.className = 'flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-full';
-        }
-
-        // ── 4. Actualizar lista de Incidencias Técnicas (findingsList) eliminando las incidencias de RGB resueltas
-        document.querySelectorAll('#findingsList > div').forEach(div => {
-          const text = div.textContent || '';
-          if (text.includes('RGB') || text.includes('Espacio de color')) {
-            div.remove();
-          }
-        });
-        const remainingCount = document.querySelectorAll('#findingsList > div').length;
-        const countEl = document.getElementById('findingsCount');
-        if (countEl) countEl.textContent = remainingCount;
-        if (remainingCount === 0) {
-          const findingsListEl = document.getElementById('findingsList');
-          if (findingsListEl) {
-            findingsListEl.innerHTML = '<div class="p-4 bg-emerald-50 text-emerald-800 rounded-lg text-xs font-medium">✅ El documento supera todos los requisitos obligatorios y avisos del perfil. Todas las incidencias han sido resueltas.</div>';
-          }
-        }
-
-        // ── 5. Actualizar badge técnico si ya no restan incidencias
-        if (remainingCount === 0) {
-          const techBadge = document.getElementById('badgeTechnical');
-          if (techBadge) {
-            techBadge.textContent = 'APTO';
-            techBadge.className = 'text-sm font-bold px-3 py-1 rounded-full inline-block bg-emerald-100 text-emerald-800 border border-emerald-300';
-          }
-        }
-
-        // ── 6. Actualizar modelo de datos en memoria
-        if (typeof currentReport !== 'undefined' && currentReport && currentReport.job_summary) {
-          currentReport.job_summary.non_cmyk_images = 0;
-        }
-
-        // ── 7. Refrescar el visor de separaciones para usar el nuevo PDF CMYK
-        if (typeof updateSeparationPreview === 'function') {
-          updateSeparationPreview();
-        }
+        // Refresh findings and image metrics from the verified server report.
+        currentReport = data.report;
+        renderResults(currentReport);
+        updateSeparationPreview();
 
       } catch (err) {
         statusEl.innerHTML = `
@@ -6163,7 +6050,7 @@
             <td class="py-2.5 px-3 font-semibold text-slate-800">
               <div class="flex items-center gap-2">
                 <i class="fa-solid fa-file-pdf text-rose-500"></i>
-                <span class="truncate max-w-xs" title="${item.filename}">${item.filename}</span>
+                <span class="truncate max-w-xs" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</span>
               </div>
             </td>
             <td class="py-2.5 px-3 text-center">${item.pages_count || 1} pág</td>
@@ -6359,7 +6246,7 @@
               return `
                 <tr class="hover:bg-slate-50 transition">
                   <td class="py-2 px-3 text-slate-400 font-mono text-[11px]">${ev.timestamp}</td>
-                  <td class="py-2 px-3 font-semibold text-slate-800">${ev.filename}</td>
+                  <td class="py-2 px-3 font-semibold text-slate-800">${escapeHtml(ev.filename)}</td>
                   <td class="py-2 px-3 text-center">
                     <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">${ev.status}</span>
                   </td>
@@ -7222,20 +7109,23 @@
           : '<span class="text-[9px] font-bold px-1.5 py-0.2 bg-blue-50 text-blue-700 rounded border border-blue-200">Estándar</span>';
 
         return `
-          <div onclick="selectProfileInManager('${p.id}')" class="p-3 rounded-lg border ${activeBorder} cursor-pointer transition flex flex-col justify-between">
+          <div data-profile-id="${escapeHtml(p.id)}" class="p-3 rounded-lg border ${activeBorder} cursor-pointer transition flex flex-col justify-between">
             <div class="flex items-start justify-between gap-1">
-              <span class="text-xs font-bold text-slate-800 leading-snug">${p.name}</span>
+              <span class="text-xs font-bold text-slate-800 leading-snug">${escapeHtml(p.name)}</span>
               ${badge}
             </div>
-            <p class="text-[10px] text-slate-500 mt-1 line-clamp-1">${p.destination || ''}</p>
+            <p class="text-[10px] text-slate-500 mt-1 line-clamp-1">${escapeHtml(p.destination || '')}</p>
             <div class="flex flex-wrap gap-1 mt-2 text-[9px] text-slate-600 font-mono">
-              <span class="bg-slate-100 px-1.5 py-0.5 rounded">DPI:${p.target_dpi}</span>
-              <span class="bg-slate-100 px-1.5 py-0.5 rounded">Sangre:${p.min_bleed_mm}mm</span>
-              <span class="bg-slate-100 px-1.5 py-0.5 rounded">TAC:≤${p.max_tac}%</span>
+              <span class="bg-slate-100 px-1.5 py-0.5 rounded">DPI:${escapeHtml(p.target_dpi)}</span>
+              <span class="bg-slate-100 px-1.5 py-0.5 rounded">Sangre:${escapeHtml(p.min_bleed_mm)}mm</span>
+              <span class="bg-slate-100 px-1.5 py-0.5 rounded">TAC:≤${escapeHtml(p.max_tac)}%</span>
             </div>
           </div>
         `;
       }).join('');
+      container.querySelectorAll('[data-profile-id]').forEach(card => {
+        card.addEventListener('click', () => selectProfileInManager(card.dataset.profileId));
+      });
     }
 
     function selectProfileInManager(profileId) {
@@ -7253,10 +7143,10 @@
       document.getElementById('pmNameInput').value = p.name || '';
       document.getElementById('pmDestinationInput').value = p.destination || '';
       document.getElementById('pmDpiInput').value = p.target_dpi || 300;
-      document.getElementById('pmBleedInput').value = p.min_bleed_mm || 3.0;
+      document.getElementById('pmBleedInput').value = p.min_bleed_mm ?? 3.0;
       document.getElementById('pmTacInput').value = p.max_tac || 300;
       document.getElementById('pmHairlineInput').value = p.min_hairline_pt || 0.25;
-      document.getElementById('pmSafetyInput').value = p.safety_margin_mm || 3.0;
+      document.getElementById('pmSafetyInput').value = p.safety_margin_mm ?? 3.0;
       document.getElementById('pmColorFamilySelect').value = p.color_family || 'CMYK';
       document.getElementById('pmAllowSpotsCheck').checked = (p.allow_spot_colors !== false);
       document.getElementById('pmRequireFontsCheck').checked = (p.require_fonts_embedded !== false);
@@ -7317,10 +7207,10 @@
         name: document.getElementById('pmNameInput').value.trim(),
         destination: document.getElementById('pmDestinationInput').value.trim(),
         target_dpi: parseInt(document.getElementById('pmDpiInput').value) || 300,
-        min_bleed_mm: parseFloat(document.getElementById('pmBleedInput').value) || 3.0,
+        min_bleed_mm: parseFloat(document.getElementById('pmBleedInput').value || '3.0'),
         max_tac: parseInt(document.getElementById('pmTacInput').value) || 300,
         min_hairline_pt: parseFloat(document.getElementById('pmHairlineInput').value) || 0.25,
-        safety_margin_mm: parseFloat(document.getElementById('pmSafetyInput').value) || 3.0,
+        safety_margin_mm: parseFloat(document.getElementById('pmSafetyInput').value || '3.0'),
         color_family: document.getElementById('pmColorFamilySelect').value,
         allow_spot_colors: document.getElementById('pmAllowSpotsCheck').checked,
         require_fonts_embedded: document.getElementById('pmRequireFontsCheck').checked,

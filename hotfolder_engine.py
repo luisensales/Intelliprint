@@ -31,6 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+from upload_security import validate_pdf_filename
 
 logger = logging.getLogger(__name__)
 
@@ -458,6 +459,7 @@ def process_batch_upload(
     """
     from preflight_engine import IntelliPrintEngine
 
+    files = [(validate_pdf_filename(name), content) for name, content in files]
     results: List[Dict[str, Any]] = []
 
     def _process_one(item: Tuple[str, bytes]) -> Dict[str, Any]:
@@ -465,7 +467,7 @@ def process_batch_upload(
         job_id = str(uuid.uuid4())[:8]
         job_folder = UPLOAD_DIR / job_id
         job_folder.mkdir(parents=True, exist_ok=True)
-        file_path = job_folder / fname
+        file_path = job_folder / "source.pdf"
 
         with open(file_path, "wb") as f:
             f.write(fbytes)

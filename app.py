@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import pymupdf
+from upload_security import validate_pdf_filename
 
 from preflight_engine import IntelliPrintEngine
 from icc_manager import get_available_icc_profiles, detect_pdf_output_intent, apply_icc_to_pdf, ICC_DIR
@@ -350,11 +351,13 @@ async def inspect_pdf(file: UploadFile = File(...)):
     Lightweight instant inspection of uploaded PDF:
     Returns page count, file size, dimensions, and embedded OutputIntent / ICC profile.
     """
-    if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="El archivo subido debe ser un documento PDF.")
+    try:
+        validate_pdf_filename(file.filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     temp_id = uuid.uuid4().hex[:8]
-    temp_path = UPLOAD_DIR / f"inspect_{temp_id}_{file.filename}"
+    temp_path = UPLOAD_DIR / f"inspect_{temp_id}.pdf"
     try:
         content = await file.read()
         temp_path.write_bytes(content)
@@ -397,14 +400,16 @@ async def check_pdf(
     icc_option: str = Form("preserve"),
     selected_icc: Optional[str] = Form(None)
 ):
-    if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="El archivo subido debe ser un documento PDF.")
+    try:
+        validate_pdf_filename(file.filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     job_id = str(uuid.uuid4())[:8]
     job_folder = UPLOAD_DIR / job_id
     job_folder.mkdir(parents=True, exist_ok=True)
     
-    file_path = job_folder / file.filename
+    file_path = job_folder / "source.pdf"
     sha256_hash = hashlib.sha256()
 
     with open(file_path, "wb") as buffer:
@@ -689,6 +694,21 @@ def register_cumulative_fix(job_data: dict, output_path: str | Path, fix_name: s
     })
 
 
+def refresh_job_analysis(job_data: dict, pdf_path: str | Path) -> None:
+    """El dictamen se obtiene del PDF resultante, nunca borrando avisos a mano."""
+    report = engine.run_preflight(
+        pdf_path=str(pdf_path),
+        profile_id=job_data.get("job_meta", {}).get("profile_id", "OFFSET_300"),
+        icc_choice="preserve",
+    )
+    technical = report.get("triple_result", {}).get("technical")
+    if report.get("error") or not technical:
+        raise HTTPException(status_code=500, detail="No se pudo verificar el PDF corregido.")
+    job_data["job_summary"] = report["job_summary"]
+    job_data["findings"] = report["findings"]
+    job_data.setdefault("triple_result", {})["technical"] = technical
+
+
 @app.get("/api/download-pdf/{job_id}")
 async def download_pdf_file(job_id: str):
     job_json_path = get_job_json_path(job_id)
@@ -777,7 +797,7 @@ async def convert_images_to_cmyk(
             except Exception:
                 pass
 
-    if not conv_result.get("success"):
+    if not conv_result.get("success") or conv_result.get("errors"):
         errors = conv_result.get("errors", [])
         raise HTTPException(status_code=500, detail=f"La conversión falló: {'; '.join(errors)}")
 
@@ -786,29 +806,7 @@ async def convert_images_to_cmyk(
     job_meta["cmyk_converted_pdf_path"] = str(output_path)
     register_cumulative_fix(job_data, output_path, "cmyk_converted")
 
-    # Filtrar incidencias resueltas de RGB
-    job_data["findings"] = [
-        f for f in job_data.get("findings", [])
-        if f.get("rule_id") != "SOURCE_COLOR_DIAGNOSTIC"
-        and "rgb" not in f.get("title", "").lower()
-        and "rgb" not in f.get("message", "").lower()
-    ]
-
-    # Recalcular dictamen técnico
-    errs = sum(1 for f in job_data["findings"] if f.get("severity") == "ERROR")
-    warns = sum(1 for f in job_data["findings"] if f.get("severity") == "WARNING")
-    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
-    tech["errors_count"] = errs
-    tech["warnings_count"] = warns
-    if errs > 0:
-        tech["status"] = "FAIL"
-        tech["label"] = "NO CUMPLE"
-    elif warns > 0:
-        tech["status"] = "PASS_WITH_WARNINGS"
-        tech["label"] = "CUMPLE CON AVISOS"
-    else:
-        tech["status"] = "PASS"
-        tech["label"] = "CUMPLE"
+    refresh_job_analysis(job_data, output_path)
 
     # Regenerar el certificado PDF técnico
     cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
@@ -829,6 +827,7 @@ async def convert_images_to_cmyk(
         "download_url": f"/api/download-cmyk/{safe_id}",
         "findings": job_data["findings"],
         "triple_result": job_data["triple_result"],
+        "report": job_data,
         "target_icc": Path(dst_icc_path).name if dst_icc_path else "ISO Coated v2"
     }
 
@@ -2463,34 +2462,15 @@ def batch_fix_endpoint(
         job_meta["batch_steps_applied"] = steps_applied
         register_cumulative_fix(job_data, final_batch_path, "batch_fixed")
 
-        # Recalcular dictamen técnico
-        all_findings = job_data.get("findings", []) or []
-        errs = sum(1 for f in all_findings if f.get("severity") == "ERROR")
-        warns = sum(1 for f in all_findings if f.get("severity") == "WARNING")
-        
-        triple_res = job_data.setdefault("triple_result", {})
-        if not isinstance(triple_res, dict):
-            triple_res = {}
-            job_data["triple_result"] = triple_res
-        tech = triple_res.setdefault("technical", {})
-        if not isinstance(tech, dict):
-            tech = {}
-            triple_res["technical"] = tech
-
-        tech["errors_count"] = errs
-        tech["warnings_count"] = warns
-        if errs == 0 and warns == 0:
-            tech["status"] = "PASS"
-            tech["verdict"] = "CORRECTO"
-            tech["description"] = "Archivo completamente normalizado y listo para producción."
-        elif errs == 0:
-            tech["status"] = "WARNING"
-            tech["verdict"] = "CON OBSERVACIONES"
-            tech["description"] = f"Errores críticos resueltos en lote. Restan {warns} advertencias menores no críticas."
-        else:
-            tech["status"] = "ERROR"
-            tech["verdict"] = "RECHAZADO"
-            tech["description"] = f"Se corrigieron incidencias en lote, pero restan {errs} errores críticos pendientes."
+        # Verify every rule against the final cumulative PDF.
+        refresh_job_analysis(job_data, final_batch_path)
+        all_findings = job_data["findings"]
+        tech = job_data["triple_result"]["technical"]
+        errs = tech["errors_count"]
+        warns = tech["warnings_count"]
+        tech["verdict"] = "RECHAZADO" if errs else ("CON OBSERVACIONES" if warns else "CORRECTO")
+        cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
+        generate_preflight_certificate_pdf(job_data, cert_path)
 
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
@@ -3065,6 +3045,13 @@ async def batch_upload_endpoint(
     """Sube y analiza múltiples archivos PDF en paralelo."""
     if not files:
         raise HTTPException(status_code=400, detail="No se enviaron archivos.")
+
+    # Validate the complete batch before reading or writing any file.
+    try:
+        for f in files:
+            validate_pdf_filename(f.filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     file_tuples = []
     for f in files:
