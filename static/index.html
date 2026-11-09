@@ -5402,15 +5402,16 @@
           printer_marks: marks
         });
         const resp = await fetch(`/api/batch-fix/${currentJobId}?${params.toString()}`, { method: 'POST' });
+        const rawText = await resp.text();
         let data = {};
         try {
-          data = await resp.json();
+          data = JSON.parse(rawText);
         } catch (jsonErr) {
           data = {
             success: false,
             detail: resp.status === 504 || resp.status === 502
-              ? 'El servidor tardó demasiado en responder (Timeout). Las correcciones han sido optimizadas; por favor, vuelve a intentarlo.'
-              : `Error del servidor (${resp.status}): ${resp.statusText || 'Respuesta no válida'}`
+              ? 'El servidor tardó demasiado en responder (Timeout). Vuelve a intentarlo.'
+              : (rawText && rawText.length < 300 ? rawText : `Error del servidor (${resp.status}): ${resp.statusText || 'Error interno'}`)
           };
         }
 

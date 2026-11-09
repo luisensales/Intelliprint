@@ -2151,353 +2151,394 @@ def batch_fix_endpoint(
     Fase 3: Lote de Acciones en 1 Clic (One-Click Batch Fixer).
     Ejecuta secuencial y acumulativamente las correcciones estándar seleccionadas.
     """
-    safe_id = Path(job_id).name
-    job_json_path = get_job_json_path(safe_id)
-    if not job_json_path.exists():
-        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
-
-    with open(job_json_path, "r", encoding="utf-8") as f:
-        job_data = json.load(f)
-
-    job_meta = job_data.get("job_meta", {})
-    source_pdf = get_latest_cumulative_pdf(job_meta)
-    if not source_pdf or not Path(source_pdf).exists():
-        raise HTTPException(status_code=400, detail="PDF original no encontrado.")
-
-    final_batch_path = JOBS_DIR / f"{safe_id}_batch_fixed.pdf"
-    current_in = Path(source_pdf)
-    steps_applied = []
-    temp_files = []
-
     try:
-        # 1. Trapping & Overprint Killer
-        if trapping:
-            step1_out = JOBS_DIR / f"{safe_id}_bstep1_trapping.pdf"
-            temp_files.append(step1_out)
-            w_out = JOBS_DIR / f"{safe_id}_bw_tmp.pdf"
-            temp_files.append(w_out)
-            w_res = fix_white_overprint(str(current_in), str(w_out))
-            cur_trap_src = str(w_out) if (w_res.get("success") and w_res.get("objects_fixed", 0) > 0) else str(current_in)
+        safe_id = Path(job_id).name
+        job_json_path = get_job_json_path(safe_id)
+        if not job_json_path.exists():
+            raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
-            rb_out = JOBS_DIR / f"{safe_id}_brb_tmp.pdf"
-            temp_files.append(rb_out)
-            rb_res = fix_rich_black_small_text(cur_trap_src, str(rb_out))
-            cur_trap_src2 = str(rb_out) if (rb_res.get("success") and rb_res.get("texts_fixed", 0) > 0) else cur_trap_src
+        with open(job_json_path, "r", encoding="utf-8") as f:
+            job_data = json.load(f)
 
-            # Sobreimpresión de capas técnicas y barnices en calado
-            varnish_out = JOBS_DIR / f"{safe_id}_bvarnish_tmp.pdf"
-            temp_files.append(varnish_out)
-            varnish_res = apply_overprint_to_technical_inks(cur_trap_src2, str(varnish_out))
-            cur_trap_src3 = str(varnish_out) if (varnish_res.get("success") and varnish_res.get("ops_fixed", 0) > 0) else cur_trap_src2
+        job_meta = job_data.get("job_meta", {}) or {}
+        source_pdf = get_latest_cumulative_pdf(job_meta)
+        if not source_pdf or not Path(source_pdf).exists():
+            raise HTTPException(status_code=400, detail="PDF original no encontrado.")
 
-            trap_res = apply_overprint_to_dark_text(cur_trap_src3, str(step1_out), dark_k_threshold=0.99)
-            if trap_res.get("success") and step1_out.exists():
-                current_in = step1_out
-                steps_applied.append({
-                    "action": "trapping",
-                    "title": "Auto-Trapping y Sobreimpresión 100% K / Barnices",
-                    "details": {
-                        "text_overprint": trap_res,
-                        "varnish_fixed": varnish_res.get("ops_fixed", 0) if varnish_res.get("success") else 0
-                    }
-                })
-                job_data["findings"] = [
-                    f for f in job_data.get("findings", [])
-                    if f.get("rule_id") not in ("WHITE_OVERPRINT", "RICH_BLACK_SMALL_TEXT", "BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "VARNISH_KNOCKOUT")
-                    and "blanco" not in f.get("title", "").lower()
-                    and "barniz" not in f.get("title", "").lower()
-                    and not ("calado" in f.get("title", "").lower() or "knockout" in f.get("title", "").lower())
-                ]
-                stats = job_data.get("job_summary", {}).get("overprint_stats", {})
-                stats["white_overprint"] = 0
-                stats["rich_black_small_text"] = 0
-                stats["black_100_overprint"] = stats.get("black_100_overprint", 0) + stats.get("black_100_knockout", 0)
-                stats["black_100_knockout"] = 0
-                stats["varnish_overprint"] = stats.get("varnish_overprint", 0) + stats.get("varnish_knockout", 0)
-                stats["varnish_knockout"] = 0
+        final_batch_path = JOBS_DIR / f"{safe_id}_batch_fixed.pdf"
+        current_in = Path(source_pdf)
+        steps_applied = []
+        temp_files = []
 
-        # 2. Corrector de Hairlines (< 0.25 pt)
-        if hairlines:
-            step2_out = JOBS_DIR / f"{safe_id}_bstep2_hairlines.pdf"
-            temp_files.append(step2_out)
-            hl_res = fix_hairlines(str(current_in), str(step2_out), target_width=0.30)
-            if hl_res.get("success") and step2_out.exists():
-                current_in = step2_out
-                steps_applied.append({
-                    "action": "hairlines",
-                    "title": "Engrosado de Filetes Finos (Hairlines)",
-                    "details": hl_res
-                })
-                job_data["findings"] = [
-                    f for f in job_data.get("findings", [])
-                    if f.get("rule_id") not in ("HAIRLINE_WIDTH", "HAIRLINE_STROKE")
-                    and "hairline" not in f.get("title", "").lower()
-                    and "línea fina" not in f.get("title", "").lower()
-                ]
+        try:
+            # 1. Trapping & Overprint Killer
+            if trapping:
+                step1_out = JOBS_DIR / f"{safe_id}_bstep1_trapping.pdf"
+                temp_files.append(step1_out)
+                w_out = JOBS_DIR / f"{safe_id}_bw_tmp.pdf"
+                temp_files.append(w_out)
+                w_res = fix_white_overprint(str(current_in), str(w_out))
+                cur_trap_src = str(w_out) if (w_res.get("success") and w_res.get("objects_fixed", 0) > 0) else str(current_in)
 
-        # 3. Trazado de tipografías a curvas
-        if fonts:
-            font_error_pages = [
-                f.get("page") for f in job_data.get("findings", [])
-                if (f.get("rule_id") == "USED_FONTS_EMBEDDED"
-                    or "no incrustada" in f.get("title", "").lower()
-                    or "incrustada" in f.get("title", "").lower())
-                and f.get("page") is not None
-            ]
-            has_general_font_issue = any(
-                f.get("rule_id") == "USED_FONTS_EMBEDDED" or "no incrustada" in f.get("title", "").lower()
-                for f in job_data.get("findings", [])
-            )
+                rb_out = JOBS_DIR / f"{safe_id}_brb_tmp.pdf"
+                temp_files.append(rb_out)
+                rb_res = fix_rich_black_small_text(cur_trap_src, str(rb_out))
+                cur_trap_src2 = str(rb_out) if (rb_res.get("success") and rb_res.get("texts_fixed", 0) > 0) else cur_trap_src
 
-            # Si no hay incidencias de tipografías no incrustadas, se omite el re-renderizado pesado a SVG
-            if not has_general_font_issue and not font_error_pages:
-                steps_applied.append({
-                    "action": "fonts",
-                    "title": "Tipografías Vectoriales (Fuentes 100% incrustadas y conformes)",
-                    "details": {"status": "success", "pages_vectorized": 0}
-                })
-            else:
-                step3_out = JOBS_DIR / f"{safe_id}_bstep3_fonts.pdf"
-                temp_files.append(step3_out)
-                target_pages = list(set(font_error_pages)) if font_error_pages else None
-                font_res = outline_fonts_in_pdf(str(current_in), str(step3_out), target_pages=target_pages)
-                if (font_res.get("success") or font_res.get("status") == "success") and step3_out.exists():
-                    current_in = step3_out
+                # Sobreimpresión de capas técnicas y barnices en calado
+                varnish_out = JOBS_DIR / f"{safe_id}_bvarnish_tmp.pdf"
+                temp_files.append(varnish_out)
+                varnish_res = apply_overprint_to_technical_inks(cur_trap_src2, str(varnish_out))
+                cur_trap_src3 = str(varnish_out) if (varnish_res.get("success") and varnish_res.get("ops_fixed", 0) > 0) else cur_trap_src2
+
+                trap_res = apply_overprint_to_dark_text(cur_trap_src3, str(step1_out), dark_k_threshold=0.99)
+                if trap_res.get("success") and step1_out.exists():
+                    current_in = step1_out
                     steps_applied.append({
-                        "action": "fonts",
-                        "title": f"Tipografías Trazadas a Curvas ({font_res.get('pages_vectorized', 0)} págs)",
-                        "details": font_res
+                        "action": "trapping",
+                        "title": "Auto-Trapping y Sobreimpresión 100% K / Barnices",
+                        "details": {
+                            "text_overprint": trap_res,
+                            "varnish_fixed": varnish_res.get("ops_fixed", 0) if varnish_res.get("success") else 0
+                        }
                     })
                     job_data["findings"] = [
                         f for f in job_data.get("findings", [])
-                        if f.get("rule_id") != "USED_FONTS_EMBEDDED"
-                        and "incrustada" not in f.get("title", "").lower()
-                        and "fuente" not in f.get("title", "").lower()
+                        if f.get("rule_id") not in ("WHITE_OVERPRINT", "RICH_BLACK_SMALL_TEXT", "BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "VARNISH_KNOCKOUT")
+                        and "blanco" not in (f.get("title") or "").lower()
+                        and "barniz" not in (f.get("title") or "").lower()
+                        and not ("calado" in (f.get("title") or "").lower() or "knockout" in (f.get("title") or "").lower())
+                    ]
+                    job_summary = job_data.setdefault("job_summary", {}) or {}
+                    if not isinstance(job_summary, dict):
+                        job_summary = {}
+                        job_data["job_summary"] = job_summary
+                    stats = job_summary.setdefault("overprint_stats", {}) or {}
+                    if not isinstance(stats, dict):
+                        stats = {}
+                        job_summary["overprint_stats"] = stats
+                    stats["white_overprint"] = 0
+                    stats["rich_black_small_text"] = 0
+                    stats["black_100_overprint"] = stats.get("black_100_overprint", 0) + stats.get("black_100_knockout", 0)
+                    stats["black_100_knockout"] = 0
+                    stats["varnish_overprint"] = stats.get("varnish_overprint", 0) + stats.get("varnish_knockout", 0)
+                    stats["varnish_knockout"] = 0
+
+            # 2. Corrector de Hairlines (< 0.25 pt)
+            if hairlines:
+                step2_out = JOBS_DIR / f"{safe_id}_bstep2_hairlines.pdf"
+                temp_files.append(step2_out)
+                hl_res = fix_hairlines(str(current_in), str(step2_out), target_width=0.30)
+                if hl_res.get("success") and step2_out.exists():
+                    current_in = step2_out
+                    steps_applied.append({
+                        "action": "hairlines",
+                        "title": "Engrosado de Filetes Finos (Hairlines)",
+                        "details": hl_res
+                    })
+                    job_data["findings"] = [
+                        f for f in job_data.get("findings", [])
+                        if f.get("rule_id") not in ("HAIRLINE_WIDTH", "HAIRLINE_STROKE")
+                        and "hairline" not in (f.get("title") or "").lower()
+                        and "línea fina" not in (f.get("title") or "").lower()
                     ]
 
-        # 4. Normalización de Cajas de Página y Sangrado 3 mm
-        if geometry:
-            step4_out = JOBS_DIR / f"{safe_id}_bstep4_geometry.pdf"
-            temp_files.append(step4_out)
-            geom_res = fix_pdf_boxes_and_bleed(str(current_in), str(step4_out), target_bleed_mm=3.0)
-            if (geom_res.get("success") or geom_res.get("status") == "success") and step4_out.exists():
-                current_in = step4_out
-                steps_applied.append({
-                    "action": "geometry",
-                    "title": "Cajas ISO y Sangrado 3 mm",
-                    "details": geom_res
-                })
-                job_data["findings"] = [
-                    f for f in job_data.get("findings", [])
-                    if f.get("rule_id") != "BLEED_GEOMETRY_3MM"
-                    and "sangrado" not in f.get("title", "").lower()
-                    and "bleed" not in f.get("title", "").lower()
+            # 3. Trazado de tipografías a curvas
+            if fonts:
+                font_error_pages = [
+                    f.get("page") for f in job_data.get("findings", [])
+                    if (f.get("rule_id") == "USED_FONTS_EMBEDDED"
+                        or "no incrustada" in (f.get("title") or "").lower()
+                        or "incrustada" in (f.get("title") or "").lower())
+                    and f.get("page") is not None
                 ]
+                has_general_font_issue = any(
+                    f.get("rule_id") == "USED_FONTS_EMBEDDED" or "no incrustada" in (f.get("title") or "").lower()
+                    for f in job_data.get("findings", [])
+                )
 
-        # 4b. Sangrado Sintético por Reflejo perimetral de píxeles (Mirror Bleed)
-        if mirror_bleed:
-            step_mb_out = JOBS_DIR / f"{safe_id}_bstep_mirrorbleed.pdf"
-            temp_files.append(step_mb_out)
-            mb_res = generate_mirror_bleed(str(current_in), str(step_mb_out), bleed_mm=3.0)
-            if mb_res.get("success") and step_mb_out.exists():
-                current_in = step_mb_out
-                steps_applied.append({
-                    "action": "mirror_bleed",
-                    "title": "Sangrado Sintético por Reflejo 3 mm (Mirror Bleed)",
-                    "details": mb_res
-                })
-                job_summary = job_data.setdefault("job_summary", {})
-                job_summary["bleed_status"] = "PASS"
-                job_summary["bleed_detected_mm"] = 3.0
-                job_data["findings"] = [
-                    f for f in job_data.get("findings", [])
-                    if f.get("rule_id") != "BLEED_GEOMETRY_3MM"
-                    and "sangrado" not in f.get("title", "").lower()
-                    and "bleed" not in f.get("title", "").lower()
-                ]
+                # Si no hay incidencias de tipografías no incrustadas, se omite el re-renderizado pesado a SVG
+                if not has_general_font_issue and not font_error_pages:
+                    steps_applied.append({
+                        "action": "fonts",
+                        "title": "Tipografías Vectoriales (Fuentes 100% incrustadas y conformes)",
+                        "details": {"status": "success", "pages_vectorized": 0}
+                    })
+                else:
+                    step3_out = JOBS_DIR / f"{safe_id}_bstep3_fonts.pdf"
+                    temp_files.append(step3_out)
+                    target_pages = list(set(font_error_pages)) if font_error_pages else None
+                    font_res = outline_fonts_in_pdf(str(current_in), str(step3_out), target_pages=target_pages)
+                    if (font_res.get("success") or font_res.get("status") == "success") and step3_out.exists():
+                        current_in = step3_out
+                        steps_applied.append({
+                            "action": "fonts",
+                            "title": f"Tipografías Trazadas a Curvas ({font_res.get('pages_vectorized', 0)} págs)",
+                            "details": font_res
+                        })
+                        job_data["findings"] = [
+                            f for f in job_data.get("findings", [])
+                            if f.get("rule_id") != "USED_FONTS_EMBEDDED"
+                            and "incrustada" not in (f.get("title") or "").lower()
+                            and "fuente" not in (f.get("title") or "").lower()
+                        ]
 
-        # 4c. Conversión de imágenes RGB a CMYK (ISO Coated v2 / FOGRA39)
-        if cmyk_images:
-            step_cmyk_out = JOBS_DIR / f"{safe_id}_bstep_cmyk.pdf"
-            temp_files.append(step_cmyk_out)
-            dst_icc = ICC_DIR / "ISOcoated_v2_eci.icc"
-            if not dst_icc.exists():
-                dst_icc = ICC_DIR / "ISOcoated_v2_300_bas.icc"
+            # 4. Normalización de Cajas de Página y Sangrado 3 mm
+            if geometry:
+                step4_out = JOBS_DIR / f"{safe_id}_bstep4_geometry.pdf"
+                temp_files.append(step4_out)
+                geom_res = fix_pdf_boxes_and_bleed(str(current_in), str(step4_out), target_bleed_mm=3.0)
+                if (geom_res.get("success") or geom_res.get("status") == "success") and step4_out.exists():
+                    current_in = step4_out
+                    steps_applied.append({
+                        "action": "geometry",
+                        "title": "Cajas ISO y Sangrado 3 mm",
+                        "details": geom_res
+                    })
+                    job_data["findings"] = [
+                        f for f in job_data.get("findings", [])
+                        if f.get("rule_id") != "BLEED_GEOMETRY_3MM"
+                        and "sangrado" not in (f.get("title") or "").lower()
+                        and "bleed" not in (f.get("title") or "").lower()
+                    ]
 
-            cmyk_res = convert_rgb_images_to_cmyk(
-                pdf_path=str(current_in),
-                dst_icc_path=str(dst_icc),
-                output_path=str(step_cmyk_out)
-            )
-            if cmyk_res.get("success") and step_cmyk_out.exists():
-                current_in = step_cmyk_out
-                n_conv = cmyk_res.get("images_converted", 0)
-                title_txt = f"Conversión a CMYK ({n_conv} imágenes RGB convertidas)" if n_conv > 0 else "Espacio de Color CMYK (0 imágenes RGB)"
-                steps_applied.append({
-                    "action": "cmyk_images",
-                    "title": title_txt,
-                    "details": cmyk_res
-                })
-                if n_conv > 0:
-                    job_meta["has_cmyk_converted"] = True
-                job_data["findings"] = [
-                    f for f in job_data.get("findings", [])
-                    if f.get("rule_id") != "SOURCE_COLOR_DIAGNOSTIC"
-                    and "rgb" not in f.get("title", "").lower()
-                    and "rgb" not in f.get("message", "").lower()
-                ]
+            # 4b. Sangrado Sintético por Reflejo perimetral de píxeles (Mirror Bleed)
+            if mirror_bleed:
+                step_mb_out = JOBS_DIR / f"{safe_id}_bstep_mirrorbleed.pdf"
+                temp_files.append(step_mb_out)
+                mb_res = generate_mirror_bleed(str(current_in), str(step_mb_out), bleed_mm=3.0)
+                if mb_res.get("success") and step_mb_out.exists():
+                    current_in = step_mb_out
+                    steps_applied.append({
+                        "action": "mirror_bleed",
+                        "title": "Sangrado Sintético por Reflejo 3 mm (Mirror Bleed)",
+                        "details": mb_res
+                    })
+                    job_summary = job_data.setdefault("job_summary", {}) or {}
+                    if not isinstance(job_summary, dict):
+                        job_summary = {}
+                        job_data["job_summary"] = job_summary
+                    job_summary["bleed_status"] = "PASS"
+                    job_summary["bleed_detected_mm"] = 3.0
+                    job_data["findings"] = [
+                        f for f in job_data.get("findings", [])
+                        if f.get("rule_id") != "BLEED_GEOMETRY_3MM"
+                        and "sangrado" not in (f.get("title") or "").lower()
+                        and "bleed" not in (f.get("title") or "").lower()
+                    ]
 
-        # 4d. Descomposición de Tintas Planas / Pantone a CMYK
-        if spot_colors:
-            step_spots_out = JOBS_DIR / f"{safe_id}_bstep_spots.pdf"
-            temp_files.append(step_spots_out)
-            spots_res = convert_spot_colors_to_cmyk(
-                pdf_path=str(current_in),
-                output_path=str(step_spots_out),
-                target_spots=None,
-                convert_technical=False
-            )
-            if spots_res.get("success") and step_spots_out.exists():
-                current_in = step_spots_out
-                n_spots = len(spots_res.get("spots_converted", []))
-                title_txt = f"Conversión de Tintas Planas a CMYK ({n_spots} tintas convertidas)" if n_spots > 0 else "Tintas Planas a CMYK (0 tintas comerciales)"
-                steps_applied.append({
-                    "action": "spot_colors",
-                    "title": title_txt,
-                    "details": spots_res
-                })
-                if n_spots > 0:
-                    job_meta["has_spot_converted"] = True
-                job_data["findings"] = [
-                    f for f in job_data.get("findings", [])
-                    if f.get("rule_id") != "SPOT_COLOR_FOUND"
-                    and not (("pantone" in f.get("title", "").lower() or "tinta plana" in f.get("title", "").lower()) and "barniz" not in f.get("title", "").lower() and "troquel" not in f.get("title", "").lower())
-                ]
+            # 4c. Conversión de imágenes RGB a CMYK (ISO Coated v2 / FOGRA39)
+            if cmyk_images:
+                step_cmyk_out = JOBS_DIR / f"{safe_id}_bstep_cmyk.pdf"
+                temp_files.append(step_cmyk_out)
+                dst_icc = ICC_DIR / "ISOcoated_v2_eci.icc"
+                if not dst_icc.exists():
+                    dst_icc = ICC_DIR / "ISOcoated_v2_300_bas.icc"
 
-        # 5. OutputIntent ICC
-        if icc:
-            step5_out = JOBS_DIR / f"{safe_id}_bstep5_icc.pdf"
-            temp_files.append(step5_out)
-            shutil.copyfile(str(current_in), str(step5_out))
-            target_icc = "ISOcoated_v2_eci.icc" if (ICC_DIR / "ISOcoated_v2_eci.icc").exists() else "ISOcoated_v2_300_bas.icc"
-            applied_info = apply_icc_to_pdf(step5_out, target_icc)
-            if applied_info and step5_out.exists():
-                current_in = step5_out
-                steps_applied.append({
-                    "action": "icc",
-                    "title": "OutputIntent ICC ISO Coated v2 (FOGRA39)",
-                    "details": applied_info
-                })
-                job_summary = job_data.setdefault("job_summary", {})
-                job_summary["icc_detected"] = applied_info
-                job_data["findings"] = [
-                    f for f in job_data.get("findings", [])
-                    if f.get("rule_id") != "DOCUMENT_OUTPUT_ICC"
-                    and "outputintent" not in f.get("title", "").lower()
-                ]
+                cmyk_res = convert_rgb_images_to_cmyk(
+                    pdf_path=str(current_in),
+                    dst_icc_path=str(dst_icc),
+                    output_path=str(step_cmyk_out)
+                )
+                if cmyk_res.get("success") and step_cmyk_out.exists():
+                    current_in = step_cmyk_out
+                    n_conv = cmyk_res.get("images_converted", 0)
+                    title_txt = f"Conversión a CMYK ({n_conv} imágenes RGB convertidas)" if n_conv > 0 else "Espacio de Color CMYK (0 imágenes RGB)"
+                    steps_applied.append({
+                        "action": "cmyk_images",
+                        "title": title_txt,
+                        "details": cmyk_res
+                    })
+                    if n_conv > 0:
+                        job_meta["has_cmyk_converted"] = True
+                    job_data["findings"] = [
+                        f for f in job_data.get("findings", [])
+                        if f.get("rule_id") != "SOURCE_COLOR_DIAGNOSTIC"
+                        and "rgb" not in (f.get("title") or "").lower()
+                        and "rgb" not in (f.get("message") or "").lower()
+                    ]
 
-        # 6. Limitador de Cobertura Total de Tinta (TAC <= 300%)
-        if tac:
-            step6_out = JOBS_DIR / f"{safe_id}_bstep6_tac.pdf"
-            temp_files.append(step6_out)
-            tac_res = limit_pdf_tac(str(current_in), str(step6_out), max_tac_percent=300.0)
-            if (tac_res.get("success") or tac_res.get("status") == "success") and step6_out.exists():
-                current_in = step6_out
-                steps_applied.append({
-                    "action": "tac",
-                    "title": "Limitación de Cobertura de Tinta (TAC 300%)",
-                    "details": tac_res
-                })
-                job_data["findings"] = [
-                    f for f in job_data.get("findings", [])
-                    if f.get("rule_id") != "MAX_INK_COVERAGE"
-                    and "cobertura" not in f.get("title", "").lower()
-                    and "tac" not in f.get("title", "").lower()
-                ]
+            # 4d. Descomposición de Tintas Planas / Pantone a CMYK
+            if spot_colors:
+                step_spots_out = JOBS_DIR / f"{safe_id}_bstep_spots.pdf"
+                temp_files.append(step_spots_out)
+                spots_res = convert_spot_colors_to_cmyk(
+                    pdf_path=str(current_in),
+                    output_path=str(step_spots_out),
+                    target_spots=None,
+                    convert_technical=False
+                )
+                if spots_res.get("success") and step_spots_out.exists():
+                    current_in = step_spots_out
+                    n_spots = len(spots_res.get("spots_converted", []))
+                    title_txt = f"Conversión de Tintas Planas a CMYK ({n_spots} tintas convertidas)" if n_spots > 0 else "Tintas Planas a CMYK (0 tintas comerciales)"
+                    steps_applied.append({
+                        "action": "spot_colors",
+                        "title": title_txt,
+                        "details": spots_res
+                    })
+                    if n_spots > 0:
+                        job_meta["has_spot_converted"] = True
+                    job_data["findings"] = [
+                        f for f in job_data.get("findings", [])
+                        if f.get("rule_id") != "SPOT_COLOR_FOUND"
+                        and not (("pantone" in (f.get("title") or "").lower() or "tinta plana" in (f.get("title") or "").lower()) and "barniz" not in (f.get("title") or "").lower() and "troquel" not in (f.get("title") or "").lower())
+                    ]
 
-        # 7. Marcas de Imprenta (Opcional)
-        if printer_marks:
-            step7_out = JOBS_DIR / f"{safe_id}_bstep7_marks.pdf"
-            temp_files.append(step7_out)
-            orig_filename = job_meta.get("filename", "documento.pdf")
-            pm_res = add_printer_marks_to_pdf(str(current_in), str(step7_out), slug_margin_mm=10.0, bleed_mm=3.0, job_filename=orig_filename)
-            if pm_res.get("success") and step7_out.exists():
-                current_in = step7_out
-                steps_applied.append({
-                    "action": "printer_marks",
-                    "title": "Marcas de Imprenta y Registro (+10 mm)",
-                    "details": pm_res
-                })
+            # 5. OutputIntent ICC
+            if icc:
+                step5_out = JOBS_DIR / f"{safe_id}_bstep5_icc.pdf"
+                temp_files.append(step5_out)
+                shutil.copyfile(str(current_in), str(step5_out))
+                target_icc = "ISOcoated_v2_eci.icc" if (ICC_DIR / "ISOcoated_v2_eci.icc").exists() else "ISOcoated_v2_300_bas.icc"
+                applied_info = apply_icc_to_pdf(step5_out, target_icc)
+                if applied_info and step5_out.exists():
+                    current_in = step5_out
+                    steps_applied.append({
+                        "action": "icc",
+                        "title": "OutputIntent ICC ISO Coated v2 (FOGRA39)",
+                        "details": applied_info
+                    })
+                    job_summary = job_data.setdefault("job_summary", {}) or {}
+                    if not isinstance(job_summary, dict):
+                        job_summary = {}
+                        job_data["job_summary"] = job_summary
+                    job_summary["icc_detected"] = applied_info
+                    job_data["findings"] = [
+                        f for f in job_data.get("findings", [])
+                        if f.get("rule_id") != "DOCUMENT_OUTPUT_ICC"
+                        and "outputintent" not in (f.get("title") or "").lower()
+                    ]
 
-        # Copiar el resultado final acumulativo a final_batch_path
-        shutil.copyfile(str(current_in), str(final_batch_path))
+            # 6. Limitador de Cobertura Total de Tinta (TAC <= 300%)
+            if tac:
+                step6_out = JOBS_DIR / f"{safe_id}_bstep6_tac.pdf"
+                temp_files.append(step6_out)
+                tac_res = limit_pdf_tac(str(current_in), str(step6_out), max_tac_percent=300.0)
+                if (tac_res.get("success") or tac_res.get("status") == "success") and step6_out.exists():
+                    current_in = step6_out
+                    steps_applied.append({
+                        "action": "tac",
+                        "title": "Limitación de Cobertura de Tinta (TAC 300%)",
+                        "details": tac_res
+                    })
+                    job_data["findings"] = [
+                        f for f in job_data.get("findings", [])
+                        if f.get("rule_id") != "MAX_INK_COVERAGE"
+                        and "cobertura" not in (f.get("title") or "").lower()
+                        and "tac" not in (f.get("title") or "").lower()
+                    ]
 
-    finally:
-        for tmp in temp_files:
-            if tmp.exists() and tmp != final_batch_path:
-                try:
-                    tmp.unlink(missing_ok=True)
-                except Exception:
-                    pass
+            # 7. Marcas de Imprenta (Opcional)
+            if printer_marks:
+                step7_out = JOBS_DIR / f"{safe_id}_bstep7_marks.pdf"
+                temp_files.append(step7_out)
+                orig_filename = job_meta.get("filename", "documento.pdf")
+                pm_res = add_printer_marks_to_pdf(str(current_in), str(step7_out), slug_margin_mm=10.0, bleed_mm=3.0, job_filename=orig_filename)
+                if pm_res.get("success") and step7_out.exists():
+                    current_in = step7_out
+                    steps_applied.append({
+                        "action": "printer_marks",
+                        "title": "Marcas de Imprenta y Registro (+10 mm)",
+                        "details": pm_res
+                    })
 
-    # Registrar en job_meta de manera acumulativa
-    job_data["job_meta"]["batch_fixed_pdf_path"] = str(final_batch_path)
-    job_data["job_meta"]["batch_steps_applied"] = steps_applied
-    register_cumulative_fix(job_data, final_batch_path, "batch_fixed")
+            # Copiar el resultado final acumulativo a final_batch_path
+            if str(current_in) != str(final_batch_path):
+                shutil.copyfile(str(current_in), str(final_batch_path))
 
-    # Recalcular dictamen técnico
-    all_findings = job_data.get("findings", [])
-    errs = sum(1 for f in all_findings if f.get("severity") == "ERROR")
-    warns = sum(1 for f in all_findings if f.get("severity") == "WARNING")
-    tech = job_data.setdefault("triple_result", {}).setdefault("technical", {})
-    tech["errors_count"] = errs
-    tech["warnings_count"] = warns
-    if errs == 0 and warns == 0:
-        tech["status"] = "PASS"
-        tech["verdict"] = "CORRECTO"
-        tech["description"] = "Archivo completamente normalizado y listo para producción."
-    elif errs == 0:
-        tech["status"] = "WARNING"
-        tech["verdict"] = "CON OBSERVACIONES"
-        tech["description"] = f"Errores críticos resueltos en lote. Restan {warns} advertencias menores no críticas."
-    else:
-        tech["status"] = "ERROR"
-        tech["verdict"] = "RECHAZADO"
-        tech["description"] = f"Se corrigieron incidencias en lote, pero restan {errs} errores críticos pendientes."
+        finally:
+            for tmp in temp_files:
+                if tmp.exists() and tmp != final_batch_path:
+                    try:
+                        tmp.unlink(missing_ok=True)
+                    except Exception:
+                        pass
 
-    with open(job_json_path, "w", encoding="utf-8") as f:
-        json.dump(job_data, f, ensure_ascii=False, indent=2)
+        # Registrar en job_meta de manera acumulativa
+        job_meta = job_data.setdefault("job_meta", {}) or {}
+        job_meta["batch_fixed_pdf_path"] = str(final_batch_path)
+        job_meta["batch_steps_applied"] = steps_applied
+        register_cumulative_fix(job_data, final_batch_path, "batch_fixed")
 
-    pending_errors = [
-        {
-            "page": f.get("page"),
-            "category": f.get("category", "General"),
-            "title": f.get("title", "Error crítico"),
-            "message": f.get("message", "")
+        # Recalcular dictamen técnico
+        all_findings = job_data.get("findings", []) or []
+        errs = sum(1 for f in all_findings if f.get("severity") == "ERROR")
+        warns = sum(1 for f in all_findings if f.get("severity") == "WARNING")
+        
+        triple_res = job_data.setdefault("triple_result", {})
+        if not isinstance(triple_res, dict):
+            triple_res = {}
+            job_data["triple_result"] = triple_res
+        tech = triple_res.setdefault("technical", {})
+        if not isinstance(tech, dict):
+            tech = {}
+            triple_res["technical"] = tech
+
+        tech["errors_count"] = errs
+        tech["warnings_count"] = warns
+        if errs == 0 and warns == 0:
+            tech["status"] = "PASS"
+            tech["verdict"] = "CORRECTO"
+            tech["description"] = "Archivo completamente normalizado y listo para producción."
+        elif errs == 0:
+            tech["status"] = "WARNING"
+            tech["verdict"] = "CON OBSERVACIONES"
+            tech["description"] = f"Errores críticos resueltos en lote. Restan {warns} advertencias menores no críticas."
+        else:
+            tech["status"] = "ERROR"
+            tech["verdict"] = "RECHAZADO"
+            tech["description"] = f"Se corrigieron incidencias en lote, pero restan {errs} errores críticos pendientes."
+
+        with open(job_json_path, "w", encoding="utf-8") as f:
+            json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+        pending_errors = [
+            {
+                "page": f.get("page"),
+                "category": f.get("category", "General"),
+                "title": f.get("title") or "Error crítico",
+                "message": f.get("message") or ""
+            }
+            for f in all_findings if f.get("severity") == "ERROR"
+        ]
+        pending_warnings = [
+            {
+                "page": f.get("page"),
+                "category": f.get("category", "Aviso"),
+                "title": f.get("title") or "Advertencia",
+                "message": f.get("message") or ""
+            }
+            for f in all_findings if f.get("severity") == "WARNING"
+        ]
+
+        return {
+            "success": True,
+            "message": f"Se aplicaron {len(steps_applied)} acciones de corrección en lote con éxito.",
+            "steps_applied": steps_applied,
+            "errors_count": errs,
+            "warnings_count": warns,
+            "pending_errors": pending_errors,
+            "pending_warnings": pending_warnings,
+            "verdict": tech["verdict"],
+            "download_url": f"/api/download-batch/{job_id}"
         }
-        for f in all_findings if f.get("severity") == "ERROR"
-    ]
-    pending_warnings = [
-        {
-            "page": f.get("page"),
-            "category": f.get("category", "Aviso"),
-            "title": f.get("title", "Advertencia"),
-            "message": f.get("message", "")
-        }
-        for f in all_findings if f.get("severity") == "WARNING"
-    ]
 
-    return {
-        "success": True,
-        "message": f"Se aplicaron {len(steps_applied)} acciones de corrección en lote con éxito.",
-        "steps_applied": steps_applied,
-        "errors_count": errs,
-        "warnings_count": warns,
-        "pending_errors": pending_errors,
-        "pending_warnings": pending_warnings,
-        "verdict": tech["verdict"],
-        "download_url": f"/api/download-batch/{job_id}"
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        err_msg = f"{type(e).__name__}: {str(e)}"
+        print(f"[batch_fix_endpoint] ERROR: {err_msg}")
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "detail": f"Error al procesar el lote ({err_msg}). Revisa los logs o prueba con correcciones individuales.",
+                "traceback": traceback.format_exc()
+            }
+        )
 
 
 @app.get("/api/download-batch/{job_id}")
