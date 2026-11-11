@@ -329,6 +329,11 @@ def build_production_package(
         if guide_path.exists():
             zf.writestr("02_Documentacion_Tecnica/Guia_Cliente_Correcciones.pdf", guide_path.read_bytes())
 
+        # Hoja de Ruta / Job Ticket si existe
+        ticket_path = jobs_root / f"{safe_id}_job_ticket.pdf"
+        if ticket_path.exists():
+            zf.writestr("02_Documentacion_Tecnica/Hoja_de_Ruta_JobTicket.pdf", ticket_path.read_bytes())
+
         # Informe de auditoría JSON
         zf.writestr(
             "02_Documentacion_Tecnica/Informe_Auditoria.json",

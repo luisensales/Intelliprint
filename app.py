@@ -116,6 +116,12 @@ from job_manager import (
     get_job_data_for_recovery,
     build_production_package,
 )
+from production_order import (
+    get_production_catalogs,
+    propose_production_recipe,
+    validate_pdf_against_order,
+    generate_job_ticket_pdf,
+)
 
 from security_limits import (
     RequestLimitsMiddleware, ResourceLimitError, MAX_FILE_BYTES, MAX_BATCH_BYTES,
@@ -801,6 +807,160 @@ def download_production_package_endpoint(job_id: str):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error generando el paquete de producción: {exc}") from exc
+
+
+# =============================================================================
+# ORDEN DE PRODUCCIÓN, RECETAS Y HOJA DE RUTA DE TALLER (JOB TICKET)
+# =============================================================================
+
+@app.get("/api/production-orders/catalogs")
+def get_production_catalogs_endpoint():
+    """Devuelve los catálogos de productos, máquinas, papeles y acabados."""
+    return get_production_catalogs()
+
+
+@app.post("/api/production-orders/calculate")
+def calculate_production_recipe_endpoint(body: dict = Body(default={})):
+    """Calcula la receta propuesta de preflight, imposición y consumo de pliegos."""
+    product_id = body.get("product_id", "catalogo_grapado")
+    machine_id = body.get("machine_id", "digital_sra3")
+    paper_id = body.get("paper_id", "estucado_mate")
+    quantity = body.get("quantity", 500)
+    finishings = body.get("finishings", [])
+    page_count = body.get("page_count")
+    trim_w = body.get("trim_width_mm")
+    trim_h = body.get("trim_height_mm")
+
+    try:
+        recipe = propose_production_recipe(
+            product_id=product_id,
+            machine_id=machine_id,
+            paper_id=paper_id,
+            quantity=quantity,
+            finishings=finishings,
+            page_count=page_count,
+            trim_width_mm=trim_w,
+            trim_height_mm=trim_h,
+        )
+        return recipe
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/production-orders/apply/{job_id}")
+def apply_production_order_endpoint(job_id: str, request: Request, body: dict = Body(default={})):
+    """
+    Aplica la orden de producción seleccionada al trabajo:
+    - Asigna perfil recomendado
+    - Ejecuta y genera el pliego de imposición correspondiente
+    - Valida conformidad contra el PDF
+    - Genera la Hoja de Ruta de Taller (Job Ticket PDF)
+    """
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    meta = job_data.get("job_meta") or {}
+    pdf_pages = (job_data.get("paginas") or {}).get("total_paginas") or meta.get("page_count") or 1
+
+    product_id = body.get("product_id", "catalogo_grapado")
+    machine_id = body.get("machine_id", "digital_sra3")
+    paper_id = body.get("paper_id", "estucado_mate")
+    quantity = body.get("quantity", 500)
+    finishings = body.get("finishings", [])
+
+    recipe = propose_production_recipe(
+        product_id=product_id,
+        machine_id=machine_id,
+        paper_id=paper_id,
+        quantity=quantity,
+        finishings=finishings,
+        page_count=pdf_pages,
+    )
+
+    # Validar coherencia del PDF contra la orden
+    findings = validate_pdf_against_order(job_data, recipe)
+
+    # Generar Hoja de Ruta (Job Ticket PDF)
+    ticket_path = JOBS_DIR / f"{safe_id}_job_ticket.pdf"
+    try:
+        generate_job_ticket_pdf(recipe, job_data, ticket_path)
+    except Exception as exc:
+        print(f"[production_order] Aviso generación Job Ticket: {exc}")
+
+    # Guardar la orden en el trabajo
+    job_data["production_order"] = recipe
+    job_data["production_order_findings"] = findings
+    job_data["job_ticket_generated"] = ticket_path.exists()
+
+    # Si hay PDF objetivo, generar automáticamente el pliego de imposición según la receta
+    target_pdf = get_latest_cumulative_pdf(meta) or meta.get("file_path")
+    if target_pdf and Path(target_pdf).exists():
+        imp = recipe["imposition"]
+        output_imposed_pdf = job_output_path(f"{safe_id}_pliego_imposicion_{imp['sheet_size'].lower()}.pdf")
+        try:
+            imp_result = generate_imposed_pdf(
+                pdf_path=target_pdf,
+                output_path=output_imposed_pdf,
+                sheet_size=imp["sheet_size"],
+                orientation=imp["orientation"],
+                mode=imp["mode"],
+                gap_mm=imp.get("gutter_x_mm", 4.0),
+                bleed_mm=imp.get("bleed_mm", 3.0),
+                sheet_margin_mm=imp.get("sheet_margin_mm", 10.0),
+                add_marks=True,
+                add_reg_crosses=True,
+                add_color_bar=True,
+                add_slug=True,
+                job_id=safe_id,
+                base_url=str(request.base_url),
+                gap_x_mm=imp.get("gutter_x_mm"),
+                gap_y_mm=imp.get("gutter_y_mm"),
+            )
+            meta["imposed_pdf_path"] = str(output_imposed_pdf)
+            meta["imposition_source_sha256"] = meta.get("current_sha256") or meta.get("sha256")
+            meta["last_imposition_plan"] = imp_result
+        except Exception as exc:
+            print(f"[production_order] Aviso generación imposición: {exc}")
+
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "ok",
+        "order": recipe,
+        "compliance_findings": findings,
+        "job_ticket_url": f"/api/production-orders/job-ticket/{safe_id}",
+    }
+
+
+@app.get("/api/production-orders/job-ticket/{job_id}")
+def download_job_ticket_endpoint(job_id: str):
+    """Descarga la Hoja de Ruta de Taller (Job Ticket A4 PDF) para seguimiento en imprenta."""
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    ticket_path = JOBS_DIR / f"{safe_id}_job_ticket.pdf"
+    if not ticket_path.exists():
+        # Generar sobre la marcha si no existe
+        with open(job_json_path, "r", encoding="utf-8") as f:
+            job_data = json.load(f)
+        order = job_data.get("production_order")
+        if not order:
+            order = propose_production_recipe("catalogo_grapado", "digital_sra3", "estucado_mate")
+        generate_job_ticket_pdf(order, job_data, ticket_path)
+
+    return FileResponse(
+        path=str(ticket_path),
+        media_type="application/pdf",
+        filename=f"Hoja_de_Ruta_IntelliPrint_{safe_id[:8]}.pdf",
+    )
 
 
 
