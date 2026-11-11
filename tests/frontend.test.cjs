@@ -25,8 +25,16 @@ function fakeDocument() {
         value: '', checked: false, innerHTML: '', dataset: {},
         classList: { add() {}, remove() {}, toggle() {} },
         querySelectorAll() { return []; },
+        appendChild() {},
       });
       return elements.get(id);
+    },
+    createElement(tag) {
+      return {
+        className: '', innerHTML: '', dataset: {},
+        classList: { add() {}, remove() {}, toggle() {} },
+        appendChild() {}, addEventListener() {}, setAttribute() {},
+      };
     },
   };
 }
@@ -530,4 +538,28 @@ test('groupFindings consolidates 30 bleed errors across 30 pages into 1 group an
   assert.equal(grouped[0].findings.length, 30);
   assert.equal(grouped[0].pages.length, 30);
   assert.equal(context.formatPageRanges(grouped[0].pages), 'Págs. 1-30');
+});
+
+test('renderTimeline updates active version, undo/redo buttons and approved state', () => {
+  const document = fakeDocument();
+  const context = { document, currentJobId: 'job123', escapeHtml: s => String(s) };
+  loadFunctions(context, ['renderTimeline']);
+
+  const history = {
+    active_id: 'v0002',
+    approved_version_id: 'v0002',
+    can_undo: true,
+    can_redo: false,
+    versions: [
+      { id: 'v0001', label: 'Original', size_bytes: 10240, is_approved: false },
+      { id: 'v0002', label: 'Versión aprobada', size_bytes: 20480, is_approved: true }
+    ]
+  };
+
+  context.renderTimeline(history);
+  assert.equal(document.getElementById('timelineActiveBadge').textContent, 'v0002');
+  assert.equal(document.getElementById('timelineActiveLabel').textContent, 'Versión aprobada');
+  assert.equal(document.getElementById('btnUndoVersion').disabled, false);
+  assert.equal(document.getElementById('btnRedoVersion').disabled, true);
+  assert.equal(document.getElementById('btnDownloadApprovedPdf').href, '/api/download-approved/job123');
 });

@@ -97,6 +97,17 @@ from profile_manager import (
     load_custom_profiles,
     save_custom_profiles_to_disk,
 )
+from version_history import (
+    capture_version,
+    select_version,
+    public_history,
+    version_path,
+    compare_versions,
+    render_version_page_image,
+    render_version_diff_image,
+    VersionHistoryError,
+    VersionQuotaError,
+)
 
 from security_limits import (
     RequestLimitsMiddleware, ResourceLimitError, MAX_FILE_BYTES, MAX_BATCH_BYTES,
@@ -483,6 +494,11 @@ def check_pdf(
     }
     update_pdf_identity(report, file_path, original_sha256=pdf_sha256)
     capture_original_analysis(report)
+    try:
+        capture_version(report, file_path, JOBS_DIR, label="PDF original recibido")
+        report["version_history_summary"] = public_history(report, JOBS_DIR)
+    except Exception as exc:
+        print(f"[check_pdf] Aviso versión: {exc}")
 
     # Persist Job JSON
     job_json_path = get_job_json_path(job_id)
@@ -565,6 +581,11 @@ def release_production(
 
     if job_data["triple_result"]["release"]["status"] == "AUTHORIZED":
         job_data["job_meta"]["authorized_sha256"] = current_sha256
+        try:
+            capture_version(job_data, current_pdf, JOBS_DIR, label=f"Versión aprobada ({operator_name})", is_approved=True)
+            job_data["version_history_summary"] = public_history(job_data, JOBS_DIR)
+        except Exception as exc:
+            print(f"[release_production] Aviso versión: {exc}")
     else:
         job_data["job_meta"].pop("authorized_sha256", None)
 
@@ -761,6 +782,27 @@ def register_cumulative_fix(job_data: dict, output_path: str | Path, fix_name: s
         "sha256": current_sha256,
         "timestamp": datetime.now().isoformat()
     })
+    FIX_LABELS = {
+        "cmyk_converted": "Conversión de imágenes a CMYK",
+        "spot_converted": "Conversión de tintas planas a CMYK",
+        "overprint_fixed": "Sobreimpresión 100% K y calado",
+        "varnish_overprint": "Sobreimpresión de barnices y tintas técnicas",
+        "hairline_fixed": "Engrosado de filetes finos (< 0,25 pt)",
+        "icc_fixed": "Incrustación de perfil ICC de salida",
+        "bleed_fixed": "Ajuste de cajas ISO y sangrado 3 mm",
+        "mirror_bleed": "Sangrado sintético por reflejo (Mirror Bleed)",
+        "fonts_outlined": "Trazado de fuentes a curvas vectoriales",
+        "tac_limited": "Limitación de cobertura total de tinta (TAC)",
+        "printer_marks": "Marcas de imprenta, corte y registro",
+        "batch_fixed": "Corrección integral en lote (1 Clic)",
+        "barcode_fixed": "Corrección de códigos de barras",
+    }
+    label = FIX_LABELS.get(fix_name, f"Corrección: {fix_name}")
+    try:
+        capture_version(job_data, output_path, JOBS_DIR, label=label)
+        job_data["version_history_summary"] = public_history(job_data, JOBS_DIR)
+    except Exception as exc:
+        print(f"[register_cumulative_fix] Aviso versión: {exc}")
 
 
 def refresh_job_analysis(job_data: dict, pdf_path: str | Path) -> None:
@@ -2761,6 +2803,179 @@ def download_batch_endpoint(job_id: str):
         media_type="application/pdf",
         filename=download_filename
     )
+
+
+# =============================================================================
+# HISTORIAL DE VERSIONES, TIMELINE, DESHACER / REHACER Y COMPARACIÓN
+# =============================================================================
+
+@app.get("/api/history/{job_id}")
+def get_job_history_endpoint(job_id: str):
+    """Devuelve la línea temporal completa del trabajo (versiones inmutables)."""
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+    try:
+        return public_history(job_data, JOBS_DIR)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _navigate_history(job_id: str, operation: str, version_id: str = None):
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+    try:
+        selected = select_version(job_data, JOBS_DIR, version_id=version_id, operation=operation)
+        new_pdf = version_path(job_data, JOBS_DIR, selected["id"])
+    except (VersionHistoryError, VersionQuotaError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    job_meta = job_data.setdefault("job_meta", {})
+    job_meta["last_fixed_pdf_path"] = str(new_pdf)
+    current_sha256 = update_pdf_identity(job_data, new_pdf)
+
+    # Identificación y protección de versión aprobada
+    auth_sha = job_meta.get("authorized_sha256")
+    if auth_sha and auth_sha == current_sha256:
+        job_data.setdefault("triple_result", {}).setdefault("release", {})["status"] = "AUTHORIZED"
+        operator = job_data["triple_result"]["release"].get("operator", "taller")
+        job_data["triple_result"]["release"]["label"] = f"Autorizado por {operator}"
+    else:
+        clear_pdf_authorization(job_data)
+
+    refresh_job_analysis(job_data, new_pdf)
+
+    hist = public_history(job_data, JOBS_DIR)
+    job_data["version_history_summary"] = hist
+
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "success",
+        "active_version": selected,
+        "report": job_data,
+        "history": hist
+    }
+
+
+@app.post("/api/history/{job_id}/undo")
+def undo_job_version_endpoint(job_id: str):
+    """Deshace la última corrección y vuelve a la versión previa."""
+    return _navigate_history(job_id, operation="undo")
+
+
+@app.post("/api/history/{job_id}/redo")
+def redo_job_version_endpoint(job_id: str):
+    """Rehace la corrección deshecha."""
+    return _navigate_history(job_id, operation="redo")
+
+
+@app.post("/api/history/{job_id}/restore/{version_id}")
+def restore_job_version_endpoint(job_id: str, version_id: str):
+    """Restaura cualquier versión histórica del PDF y re-evalúa el perfil."""
+    return _navigate_history(job_id, operation="restore", version_id=version_id)
+
+
+@app.get("/api/history/{job_id}/compare")
+def compare_job_versions_endpoint(job_id: str, version_a: str, version_b: str, page: int = 1):
+    """Compara técnicamente dos versiones del trabajo (dimensiones, páginas, peso)."""
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+    try:
+        return compare_versions(job_data, JOBS_DIR, version_a, version_b, page_num=page)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/history/{job_id}/preview/{version_id}")
+def preview_version_page_endpoint(job_id: str, version_id: str, page: int = 1):
+    """Renderiza la página indicada de una versión específica a imagen JPEG."""
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+    try:
+        img_bytes = render_version_page_image(job_data, JOBS_DIR, version_id, page_num=page)
+        return Response(content=img_bytes, media_type="image/jpeg")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/history/{job_id}/diff")
+def diff_versions_endpoint(job_id: str, version_a: str, version_b: str, page: int = 1):
+    """Renderiza el mapa de diferencias visuales entre dos versiones del trabajo."""
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+    try:
+        diff_bytes = render_version_diff_image(job_data, JOBS_DIR, version_a, version_b, page_num=page)
+        return Response(content=diff_bytes, media_type="image/jpeg")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/history/{job_id}/download/{version_id}")
+def download_version_pdf_endpoint(job_id: str, version_id: str):
+    """Descarga el PDF inmutable correspondiente a una versión concreta."""
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+    try:
+        path = version_path(job_data, JOBS_DIR, version_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    orig_name = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    stem = Path(orig_name).stem
+    return FileResponse(path=str(path), media_type="application/pdf", filename=f"{stem}_{version_id}.pdf")
+
+
+@app.get("/api/download-approved/{job_id}")
+def download_approved_pdf_endpoint(job_id: str):
+    """Descarga la entrega oficial aprobada y protegida."""
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+    history = job_data.get("version_history", {})
+    approved_id = history.get("approved_version_id")
+    if not approved_id:
+        auth_sha = job_data.get("job_meta", {}).get("authorized_sha256")
+        if auth_sha:
+            for v in history.get("versions", []):
+                if v.get("sha256") == auth_sha:
+                    approved_id = v.get("id")
+                    break
+    if not approved_id:
+        raise HTTPException(status_code=404, detail="No existe una entrega aprobada para este trabajo.")
+    try:
+        path = version_path(job_data, JOBS_DIR, approved_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    orig_name = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    stem = Path(orig_name).stem
+    return FileResponse(path=str(path), media_type="application/pdf", filename=f"IntelliPrint_{stem}_APROBADO.pdf")
 
 
 # =============================================================================

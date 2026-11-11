@@ -428,6 +428,51 @@
 
         </div>
 
+        <!-- Version History & Timeline Bar (Mejora 2: Historial, Deshacer, Restaurar y Comparar) -->
+        <div id="versionTimelinePanel" class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-xl p-3.5 shadow-sm border border-slate-800">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div class="flex items-center gap-2.5">
+              <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-300 font-bold text-xs border border-indigo-400/30 shrink-0">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+              </span>
+              <div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs font-bold uppercase tracking-wider text-indigo-200">Línea Temporal de Versiones</span>
+                  <span id="timelineActiveBadge" class="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-indigo-600 text-white shadow-xs">v0001</span>
+                  <span id="timelineApprovedBadge" class="hidden text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-500 text-white flex items-center gap-1 shadow-xs">
+                    <i class="fa-solid fa-shield-halved"></i> Entrega Aprobada
+                  </span>
+                </div>
+                <p id="timelineActiveLabel" class="text-[11px] text-slate-300">PDF original recibido</p>
+              </div>
+            </div>
+
+            <!-- Botones Deshacer, Rehacer, Comparar -->
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <button onclick="undoVersion()" id="btnUndoVersion" disabled class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed text-white border border-white/10 transition cursor-pointer" title="Deshacer última corrección (Ctrl+Z)">
+                <i class="fa-solid fa-rotate-left text-indigo-300"></i> <span>Deshacer</span>
+              </button>
+              <button onclick="redoVersion()" id="btnRedoVersion" disabled class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed text-white border border-white/10 transition cursor-pointer" title="Rehacer corrección deshecha (Ctrl+Y)">
+                <i class="fa-solid fa-rotate-right text-indigo-300"></i> <span>Rehacer</span>
+              </button>
+              <button onclick="openVersionComparisonModal()" id="btnOpenCompareModal" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition cursor-pointer" title="Comparar cualquier par de versiones (lado a lado o mapa de diferencias)">
+                <i class="fa-solid fa-code-compare"></i> <span>Comparar Versiones</span>
+              </button>
+              <a id="btnDownloadApprovedPdf" href="#" target="_blank" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition" title="Descargar la entrega oficial aprobada">
+                <i class="fa-solid fa-download"></i> <span>PDF Aprobado</span>
+              </a>
+              <button onclick="toggleTimelineNodes()" id="btnToggleTimeline" class="p-1.5 rounded-lg text-xs bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition cursor-pointer" title="Expandir/Plegar árbol cronológico de versiones">
+                <i class="fa-solid fa-chevron-down transition-transform" id="timelineChevron"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Timeline Horizontal Nodes Container -->
+          <div id="timelineNodesContainer" class="mt-3 pt-3 border-t border-white/10 flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            <!-- Dynamically rendered timeline nodes -->
+          </div>
+        </div>
+
         <!-- Triple Result Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           
@@ -2732,6 +2777,114 @@
     </div>
   </div>
 
+  <!-- ======================================================================
+       MODAL: COMPARADOR DE VERSIONES (Side-by-side & Diff Visual)
+  ====================================================================== -->
+  <div id="versionCompareModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="vcModalTitle">
+    <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeVersionComparisonModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-6xl w-full border border-slate-200 overflow-hidden animate-fade-in flex flex-col max-h-[92vh]">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-3.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-400/30">
+            <i class="fa-solid fa-code-compare text-sm"></i>
+          </div>
+          <div>
+            <h3 id="vcModalTitle" class="text-sm font-bold flex items-center gap-2">
+              Comparador de Versiones de Producción
+              <span class="text-[10px] bg-indigo-500 text-white px-2 py-0.5 rounded-full font-bold">Línea Temporal</span>
+            </h3>
+            <p class="text-xs text-slate-300 font-normal">Compara cualquier par de versiones: diferencias de píxeles, cajas de página y metadatos.</p>
+          </div>
+        </div>
+        <button onclick="closeVersionComparisonModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Controls bar: Select A, Select B, Page, Mode -->
+      <div class="px-6 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap text-xs">
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="flex items-center gap-1.5">
+            <span class="font-bold text-slate-700">Versión A (Base):</span>
+            <select data-id="vcSelectA" onchange="updateVersionComparison()" class="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-indigo-500"></select>
+          </div>
+          <div class="text-slate-400 font-bold">vs</div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-bold text-slate-700">Versión B (Comparada):</span>
+            <select data-id="vcSelectB" onchange="updateVersionComparison()" class="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-indigo-500"></select>
+          </div>
+          <div class="flex items-center gap-1.5 border-l border-slate-300 pl-3">
+            <span class="font-bold text-slate-700">Página:</span>
+            <select data-id="vcPageSelect" onchange="updateVersionComparison()" class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-mono text-slate-800"></select>
+          </div>
+        </div>
+
+        <!-- Mode Toggle: Lado a Lado vs Diferencia de Píxeles -->
+        <div class="flex items-center gap-1.5 bg-slate-200/80 p-0.5 rounded-lg">
+          <button id="vcBtnModeSide" onclick="setComparisonMode('side')" class="px-3 py-1 rounded-md font-semibold text-xs transition bg-white text-indigo-900 shadow-xs">
+            <i class="fa-solid fa-columns mr-1"></i> Lado a Lado
+          </button>
+          <button id="vcBtnModeDiff" onclick="setComparisonMode('diff')" class="px-3 py-1 rounded-md font-semibold text-xs transition text-slate-600 hover:text-slate-900">
+            <i class="fa-solid fa-wand-magic-sparkles mr-1 text-red-500"></i> Diferencia de Píxeles
+          </button>
+        </div>
+      </div>
+
+      <!-- Comparison Content Area -->
+      <div class="p-6 overflow-y-auto flex-1 bg-slate-100/50 space-y-4">
+        <!-- Summary Cards Comparison -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div id="vcCardA" class="p-3.5 rounded-xl border border-slate-200 bg-white text-xs space-y-1.5">
+            <!-- Details for version A -->
+          </div>
+          <div id="vcCardB" class="p-3.5 rounded-xl border border-slate-200 bg-white text-xs space-y-1.5">
+            <!-- Details for version B -->
+          </div>
+        </div>
+
+        <!-- Viewport Container -->
+        <div id="vcViewSide" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="flex flex-col items-center p-3 rounded-xl border border-slate-200 bg-white shadow-xs">
+            <span class="text-xs font-bold text-slate-700 mb-2" id="vcLabelA">Versión A</span>
+            <div class="relative w-full max-h-[460px] overflow-auto border border-slate-200 rounded-lg flex items-center justify-center bg-slate-50 min-h-[300px]">
+              <img id="vcImgA" class="max-h-[440px] max-w-full object-contain shadow-xs" src="" alt="Versión A">
+            </div>
+          </div>
+          <div class="flex flex-col items-center p-3 rounded-xl border border-slate-200 bg-white shadow-xs">
+            <span class="text-xs font-bold text-slate-700 mb-2" id="vcLabelB">Versión B</span>
+            <div class="relative w-full max-h-[460px] overflow-auto border border-slate-200 rounded-lg flex items-center justify-center bg-slate-50 min-h-[300px]">
+              <img id="vcImgB" class="max-h-[440px] max-w-full object-contain shadow-xs" src="" alt="Versión B">
+            </div>
+          </div>
+        </div>
+
+        <!-- Diff View Container -->
+        <div id="vcViewDiff" class="hidden flex flex-col items-center p-4 rounded-xl border border-slate-200 bg-white shadow-xs">
+          <div class="w-full flex items-center justify-between mb-2">
+            <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-600"></span> Mapa de Diferencias de Píxeles
+            </span>
+            <span class="text-[11px] text-slate-500">Los cambios entre versiones se resaltan en rojo</span>
+          </div>
+          <div class="relative w-full max-h-[480px] overflow-auto border border-slate-200 rounded-lg flex items-center justify-center bg-slate-50 min-h-[320px]">
+            <img id="vcImgDiff" class="max-h-[460px] max-w-full object-contain shadow-xs" src="" alt="Mapa de diferencias">
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
+        <button onclick="restoreSelectedVersionFromCompare()" id="vcBtnRestoreA" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-rotate-left"></i> Restaurar Versión Seleccionada
+        </button>
+        <button onclick="closeVersionComparisonModal()" class="px-4 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-semibold transition cursor-pointer">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Footer -->
   <footer class="bg-white border-t border-slate-200 py-6 mt-auto">
     <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
@@ -3180,6 +3333,7 @@
       if (typeof closeIssueViewer === 'function') closeIssueViewer(false);
       currentJobId = data.job_meta.job_id;
       currentReport = data;
+      if (typeof loadJobHistory === 'function') loadJobHistory();
       const release = data.triple_result?.release || {};
       const meta = data.job_meta || {};
       const authorized = release.status === 'AUTHORIZED' && !!meta.authorized_sha256 &&
@@ -7880,6 +8034,362 @@
         }
       }
     }
+
+    // =========================================================================
+    // MEJORA 2: HISTORIAL DE VERSIONES, DESHACER, RESTAURAR Y COMPARADOR
+    // =========================================================================
+
+    let currentVersionHistory = null;
+    let comparisonMode = 'side'; // 'side' or 'diff'
+
+    function toggleTimelineNodes() {
+      const container = document.getElementById('timelineNodesContainer');
+      const chevron = document.getElementById('timelineChevron');
+      if (!container) return;
+      container.classList.toggle('hidden');
+      if (chevron) {
+        chevron.classList.toggle('rotate-180');
+      }
+    }
+
+    async function loadJobHistory() {
+      if (!currentJobId) return;
+      try {
+        const res = await fetch(`/api/history/${currentJobId}`);
+        if (!res.ok) return;
+        const history = await res.json();
+        currentVersionHistory = history;
+        renderTimeline(history);
+      } catch (err) {
+        console.warn('No se pudo cargar el historial de versiones:', err);
+      }
+    }
+
+    function renderTimeline(history) {
+      if (!history || !Array.isArray(history.versions)) return;
+
+      const activeBadge = document.getElementById('timelineActiveBadge');
+      const activeLabel = document.getElementById('timelineActiveLabel');
+      const approvedBadge = document.getElementById('timelineApprovedBadge');
+      const btnUndo = document.getElementById('btnUndoVersion');
+      const btnRedo = document.getElementById('btnRedoVersion');
+      const btnDlApproved = document.getElementById('btnDownloadApprovedPdf');
+      const container = document.getElementById('timelineNodesContainer');
+
+      if (activeBadge) activeBadge.textContent = history.active_id || 'v0001';
+
+      const activeEntry = history.versions.find(v => v.id === history.active_id);
+      if (activeLabel) {
+        activeLabel.textContent = activeEntry ? activeEntry.label : 'Versión activa';
+      }
+
+      if (btnUndo) btnUndo.disabled = !history.can_undo;
+      if (btnRedo) btnRedo.disabled = !history.can_redo;
+
+      if (history.approved_version_id) {
+        if (approvedBadge) approvedBadge.classList.remove('hidden');
+        if (btnDlApproved) {
+          btnDlApproved.classList.remove('hidden');
+          btnDlApproved.href = `/api/download-approved/${currentJobId}`;
+        }
+      } else {
+        if (approvedBadge) approvedBadge.classList.add('hidden');
+        if (btnDlApproved) btnDlApproved.classList.add('hidden');
+      }
+
+      if (!container) return;
+      container.innerHTML = '';
+
+      history.versions.forEach((ver, index) => {
+        const isCurrent = ver.id === history.active_id;
+        const isAppr = ver.is_approved;
+        const node = document.createElement('div');
+        node.className = `shrink-0 p-2 rounded-xl border flex items-center gap-2 transition cursor-pointer select-none ${
+          isCurrent
+            ? 'bg-indigo-600/30 border-indigo-400 text-white shadow-xs ring-1 ring-indigo-400/50'
+            : (isAppr ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/40' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10')
+        }`;
+
+        let iconClass = 'fa-file-lines text-slate-400';
+        if (index === 0) iconClass = 'fa-file-import text-blue-400';
+        else if (isAppr) iconClass = 'fa-shield-halved text-emerald-400';
+        else iconClass = 'fa-wand-magic-sparkles text-amber-300';
+
+        const sizeKb = Math.round((ver.size_bytes || 0) / 1024);
+
+        node.innerHTML = `
+          <div class="w-6 h-6 rounded-lg bg-black/30 flex items-center justify-center shrink-0">
+            <i class="fa-solid ${iconClass} text-[11px]"></i>
+          </div>
+          <div class="min-w-[100px]">
+            <div class="flex items-center gap-1.5">
+              <span class="font-mono font-bold text-[10px] ${isCurrent ? 'text-indigo-200' : 'text-slate-400'}">${ver.id}</span>
+              ${isCurrent ? '<span class="text-[9px] px-1 py-0.2 rounded bg-indigo-500 text-white font-bold">ACTUAL</span>' : ''}
+              ${isAppr ? '<span class="text-[9px] px-1 py-0.2 rounded bg-emerald-600 text-white font-bold">APROBADA</span>' : ''}
+            </div>
+            <p class="font-semibold text-xs leading-tight truncate max-w-[140px]" title="${escapeHtml(ver.label)}">${escapeHtml(ver.label)}</p>
+            <span class="text-[10px] text-slate-400 font-mono">${sizeKb} KiB</span>
+          </div>
+          <div class="flex flex-col gap-1 shrink-0 ml-1">
+            ${!isCurrent ? `
+              <button onclick="restoreVersion('${ver.id}'); event.stopPropagation();" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white/10 hover:bg-white/25 text-white transition" title="Restaurar esta versión como activa">
+                Restaurar
+              </button>
+            ` : ''}
+            <a href="/api/history/${currentJobId}/download/${ver.id}" download onclick="event.stopPropagation();" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white/5 hover:bg-white/15 text-slate-300 transition text-center" title="Descargar PDF de esta versión">
+              <i class="fa-solid fa-download"></i>
+            </a>
+          </div>
+        `;
+
+        node.addEventListener('click', () => {
+          openVersionComparisonModal(ver.id, history.active_id);
+        });
+
+        container.appendChild(node);
+
+        if (index < history.versions.length - 1) {
+          const arrow = document.createElement('div');
+          arrow.className = 'text-slate-600 text-xs shrink-0';
+          arrow.innerHTML = '<i class="fa-solid fa-arrow-right"></i>';
+          container.appendChild(arrow);
+        }
+      });
+    }
+
+    async function undoVersion() {
+      if (!currentJobId) return;
+      const btn = document.getElementById('btnUndoVersion');
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch(`/api/history/${currentJobId}/undo`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          currentReport = data.report;
+          renderResults(currentReport);
+          renderTimeline(data.history);
+        } else {
+          alert(data.detail || 'No se pudo deshacer.');
+        }
+      } catch (err) {
+        console.error('Error al deshacer versión:', err);
+        alert('Error de conexión al deshacer.');
+      } finally {
+        if (btn && currentVersionHistory) btn.disabled = !currentVersionHistory.can_undo;
+      }
+    }
+
+    async function redoVersion() {
+      if (!currentJobId) return;
+      const btn = document.getElementById('btnRedoVersion');
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch(`/api/history/${currentJobId}/redo`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          currentReport = data.report;
+          renderResults(currentReport);
+          renderTimeline(data.history);
+        } else {
+          alert(data.detail || 'No se pudo rehacer.');
+        }
+      } catch (err) {
+        console.error('Error al rehacer versión:', err);
+        alert('Error de conexión al rehacer.');
+      } finally {
+        if (btn && currentVersionHistory) btn.disabled = !currentVersionHistory.can_redo;
+      }
+    }
+
+    async function restoreVersion(versionId) {
+      if (!currentJobId || !versionId) return;
+      if (!confirm(`¿Deseas restaurar la versión ${versionId} como el PDF activo del trabajo?`)) return;
+      try {
+        const res = await fetch(`/api/history/${currentJobId}/restore/${versionId}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          currentReport = data.report;
+          renderResults(currentReport);
+          renderTimeline(data.history);
+        } else {
+          alert(data.detail || 'No se pudo restaurar la versión.');
+        }
+      } catch (err) {
+        console.error('Error al restaurar versión:', err);
+        alert('Error de conexión al restaurar.');
+      }
+    }
+
+    // Modal Comparador de Versiones
+    function openVersionComparisonModal(selectA = null, selectB = null) {
+      if (!currentVersionHistory || !currentVersionHistory.versions || currentVersionHistory.versions.length === 0) {
+        alert('No hay historial de versiones disponible aún para este trabajo.');
+        return;
+      }
+      const modal = document.getElementById('versionCompareModal');
+      const selA = document.querySelector('[data-id="vcSelectA"]');
+      const selB = document.querySelector('[data-id="vcSelectB"]');
+      const pageSel = document.querySelector('[data-id="vcPageSelect"]');
+
+      if (!modal || !selA || !selB || !pageSel) return;
+
+      selA.innerHTML = '';
+      selB.innerHTML = '';
+      currentVersionHistory.versions.forEach(v => {
+        const optA = document.createElement('option');
+        optA.value = v.id;
+        optA.textContent = `${v.id}: ${v.label}${v.is_approved ? ' [APROBADA]' : ''}`;
+        selA.appendChild(optA);
+
+        const optB = document.createElement('option');
+        optB.value = v.id;
+        optB.textContent = `${v.id}: ${v.label}${v.is_approved ? ' [APROBADA]' : ''}`;
+        selB.appendChild(optB);
+      });
+
+      // Default selection
+      if (selectA && currentVersionHistory.versions.some(v => v.id === selectA)) {
+        selA.value = selectA;
+      } else {
+        selA.value = currentVersionHistory.versions[0].id;
+      }
+
+      if (selectB && currentVersionHistory.versions.some(v => v.id === selectB)) {
+        selB.value = selectB;
+      } else {
+        selB.value = currentVersionHistory.active_id || currentVersionHistory.versions[currentVersionHistory.versions.length - 1].id;
+      }
+
+      // Populate pages
+      const totalPages = (currentReport?.job_summary?.pages) || 1;
+      pageSel.innerHTML = '';
+      for (let p = 1; p <= totalPages; p++) {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = `Página ${p}`;
+        pageSel.appendChild(opt);
+      }
+
+      modal.classList.remove('hidden');
+      updateVersionComparison();
+    }
+
+    function closeVersionComparisonModal() {
+      const modal = document.getElementById('versionCompareModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function setComparisonMode(mode) {
+      comparisonMode = mode;
+      const btnSide = document.getElementById('vcBtnModeSide');
+      const btnDiff = document.getElementById('vcBtnModeDiff');
+      const viewSide = document.getElementById('vcViewSide');
+      const viewDiff = document.getElementById('vcViewDiff');
+
+      if (mode === 'diff') {
+        if (btnSide) btnSide.className = 'px-3 py-1 rounded-md font-semibold text-xs transition text-slate-600 hover:text-slate-900';
+        if (btnDiff) btnDiff.className = 'px-3 py-1 rounded-md font-semibold text-xs transition bg-white text-indigo-900 shadow-xs';
+        if (viewSide) viewSide.classList.add('hidden');
+        if (viewDiff) viewDiff.classList.remove('hidden');
+      } else {
+        if (btnSide) btnSide.className = 'px-3 py-1 rounded-md font-semibold text-xs transition bg-white text-indigo-900 shadow-xs';
+        if (btnDiff) btnDiff.className = 'px-3 py-1 rounded-md font-semibold text-xs transition text-slate-600 hover:text-slate-900';
+        if (viewSide) viewSide.classList.remove('hidden');
+        if (viewDiff) viewDiff.classList.add('hidden');
+      }
+    }
+
+    async function updateVersionComparison() {
+      const selA = document.querySelector('[data-id="vcSelectA"]');
+      const selB = document.querySelector('[data-id="vcSelectB"]');
+      const pageSel = document.querySelector('[data-id="vcPageSelect"]');
+      if (!selA || !selB || !pageSel || !currentJobId) return;
+
+      const vA = selA.value;
+      const vB = selB.value;
+      const page = pageSel.value || 1;
+
+      const imgA = document.getElementById('vcImgA');
+      const imgB = document.getElementById('vcImgB');
+      const imgDiff = document.getElementById('vcImgDiff');
+      const labelA = document.getElementById('vcLabelA');
+      const labelB = document.getElementById('vcLabelB');
+
+      if (labelA) labelA.textContent = `Versión A (${vA})`;
+      if (labelB) labelB.textContent = `Versión B (${vB})`;
+
+      if (imgA) imgA.src = `/api/history/${currentJobId}/preview/${vA}?page=${page}&t=${Date.now()}`;
+      if (imgB) imgB.src = `/api/history/${currentJobId}/preview/${vB}?page=${page}&t=${Date.now()}`;
+      if (imgDiff) imgDiff.src = `/api/history/${currentJobId}/diff?version_a=${vA}&version_b=${vB}&page=${page}&t=${Date.now()}`;
+
+      try {
+        const res = await fetch(`/api/history/${currentJobId}/compare?version_a=${vA}&version_b=${vB}&page=${page}`);
+        if (!res.ok) return;
+        const comp = await res.json();
+        renderComparisonCards(comp);
+      } catch (err) {
+        console.warn('Error obteniendo comparativa:', err);
+      }
+    }
+
+    function renderComparisonCards(comp) {
+      const cardA = document.getElementById('vcCardA');
+      const cardB = document.getElementById('vcCardB');
+      if (!cardA || !cardB || !comp) return;
+
+      const a = comp.version_a;
+      const b = comp.version_b;
+
+      cardA.innerHTML = `
+        <div class="flex items-center justify-between border-b border-slate-200 pb-1.5">
+          <span class="font-bold text-slate-900">${a.id}: ${escapeHtml(a.label)}</span>
+          ${a.is_approved ? '<span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-600 text-white font-bold">APROBADA</span>' : ''}
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+          <div>Páginas: <strong class="text-slate-900 font-mono">${a.page_count}</strong></div>
+          <div>Tamaño: <strong class="text-slate-900 font-mono">${Math.round(a.size_bytes / 1024)} KiB</strong></div>
+          <div>Corte: <strong class="text-slate-900 font-mono">${a.dimensions_mm ? a.dimensions_mm.join(' × ') + ' mm' : 'N/A'}</strong></div>
+          <div class="truncate" title="${a.sha256}">SHA: <span class="font-mono text-[10px]">${a.sha256.substring(0, 10)}...</span></div>
+        </div>
+      `;
+
+      cardB.innerHTML = `
+        <div class="flex items-center justify-between border-b border-slate-200 pb-1.5">
+          <span class="font-bold text-slate-900">${b.id}: ${escapeHtml(b.label)}</span>
+          ${b.is_approved ? '<span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-600 text-white font-bold">APROBADA</span>' : ''}
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+          <div>Páginas: <strong class="text-slate-900 font-mono">${b.page_count}</strong></div>
+          <div>Tamaño: <strong class="text-slate-900 font-mono">${Math.round(b.size_bytes / 1024)} KiB (${comp.size_diff_bytes >= 0 ? '+' : ''}${Math.round(comp.size_diff_bytes / 1024)} KiB)</strong></div>
+          <div>Corte: <strong class="text-slate-900 font-mono">${b.dimensions_mm ? b.dimensions_mm.join(' × ') + ' mm' : 'N/A'}</strong></div>
+          <div class="truncate" title="${b.sha256}">SHA: <span class="font-mono text-[10px]">${b.sha256.substring(0, 10)}...</span></div>
+        </div>
+      `;
+    }
+
+    function restoreSelectedVersionFromCompare() {
+      const selA = document.querySelector('[data-id="vcSelectA"]');
+      if (!selA || !selA.value) return;
+      closeVersionComparisonModal();
+      restoreVersion(selA.value);
+    }
+
+    // Atajos de teclado: Ctrl+Z (Undo) y Ctrl+Y (Redo)
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+          e.preventDefault();
+          undoVersion();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+          e.preventDefault();
+          redoVersion();
+        }
+      }
+    });
 
     // Inicializar tema al cargar DOM
     document.addEventListener('DOMContentLoaded', initKioskTheme);
