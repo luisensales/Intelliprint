@@ -8,6 +8,8 @@ venv/
 ENV/
 
 # IntelliPrint temporary storage
+data/*
+!data/.gitkeep
 uploads/*
 !uploads/.gitkeep
 jobs/*

@@ -188,6 +188,12 @@
           <button onclick="toggleFullScreen()" class="hidden md:inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition cursor-pointer" title="Pantalla Completa / Kiosko Táctil para Pupitre de Máquina">
             <i class="fa-solid fa-expand"></i> <span class="hidden lg:inline text-xs">Pantalla Completa</span>
           </button>
+          <!-- Sección de Usuario / Sesión RBAC -->
+          <div id="authUserBadge" class="flex items-center gap-1.5 ml-1">
+            <button onclick="openAuthModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer" title="Iniciar sesión con tu cuenta de taller (Diseñador, CTP, Responsable o Docente)">
+              <i class="fa-solid fa-user-lock text-blue-200"></i> <span>Acceso Taller</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -388,6 +394,9 @@
             </button>
             <button onclick="openGwgValidationModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Auditar contra estándar GWG 2015 / ISO PDF/X y descargar certificado oficial de conformidad">
               <i class="fa-solid fa-certificate text-emerald-200"></i> <span>Certificado GWG</span>
+            </button>
+            <button onclick="openClientApprovalModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Generar enlace seguro para que el cliente revise y dé su visto bueno (OK para plancha)">
+              <i class="fa-solid fa-paper-plane text-sky-200"></i> <span>Aprobación Cliente</span>
             </button>
             <button onclick="resetToNewAnalysis()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer" title="Cerrar este reporte y analizar otro PDF desde el principio">
               <i class="fa-solid fa-arrow-left"></i> Nuevo PDF
@@ -3182,6 +3191,129 @@
         <button onclick="closeGwgValidationModal()" class="px-4 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-semibold transition cursor-pointer">
           Cerrar
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       MODAL: AUTENTICACIÓN Y ROLES DE TALLER (RBAC)
+  ====================================================================== -->
+  <div id="authModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+    <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeAuthModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-fade-in flex flex-col">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-blue-400/20 text-blue-200 flex items-center justify-center border border-blue-300/30">
+            <i class="fa-solid fa-id-badge text-sm"></i>
+          </div>
+          <div>
+            <h3 id="authModalTitle" class="text-sm font-bold flex items-center gap-2">
+              Identificación de Usuario & Roles
+            </h3>
+            <p class="text-xs text-blue-100 font-normal">Acceso autenticado y firmas certificadas de taller.</p>
+          </div>
+        </div>
+        <button onclick="closeAuthModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Formulario -->
+      <div class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Nombre de Usuario:</label>
+          <input type="text" data-id="authUsernameInput" placeholder="Ej. responsable, preimpresion, docente" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Contraseña:</label>
+          <input type="password" data-id="authPasswordInput" placeholder="••••••••" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+
+        <!-- Cuentas Rápidas Demo/FP -->
+        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Cuentas Preconfiguradas (Taller y FP):</span>
+          <div class="flex flex-wrap gap-1.5">
+            <button onclick="fillAuthCredentials('responsable', 'taller123')" class="px-2 py-1 rounded bg-white hover:bg-blue-50 border border-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer">
+              Jefe Taller
+            </button>
+            <button onclick="fillAuthCredentials('preimpresion', 'preim123')" class="px-2 py-1 rounded bg-white hover:bg-blue-50 border border-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer">
+              CTP / Preimpresión
+            </button>
+            <button onclick="fillAuthCredentials('docente', 'docente123')" class="px-2 py-1 rounded bg-white hover:bg-blue-50 border border-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer">
+              Profesor FP
+            </button>
+            <button onclick="fillAuthCredentials('disenador', 'diseno123')" class="px-2 py-1 rounded bg-white hover:bg-blue-50 border border-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer">
+              Diseñadora
+            </button>
+          </div>
+        </div>
+
+        <div id="authErrorMsg" class="hidden p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-medium"></div>
+
+        <button onclick="submitUserLogin()" class="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition flex items-center justify-center gap-2 cursor-pointer">
+          <i class="fa-solid fa-right-to-bracket"></i> Iniciar Sesión en Taller
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       MODAL: APROBACIÓN DEL CLIENTE (VISTO BUENO / OK PARA PLANCHA)
+  ====================================================================== -->
+  <div id="clientApprovalModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="clientApprModalTitle">
+    <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeClientApprovalModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden animate-fade-in flex flex-col">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-sky-700 via-blue-800 to-slate-900 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-sky-400/20 text-sky-200 flex items-center justify-center border border-sky-300/30">
+            <i class="fa-solid fa-paper-plane text-sm"></i>
+          </div>
+          <div>
+            <h3 id="clientApprModalTitle" class="text-sm font-bold flex items-center gap-2">
+              Aprobación del Cliente (Visto Bueno / OK Plancha)
+            </h3>
+            <p class="text-xs text-sky-100 font-normal">Enlace protegido para que el cliente revise y autorice la tirada.</p>
+          </div>
+        </div>
+        <button onclick="closeClientApprovalModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Contenido -->
+      <div class="p-6 space-y-4">
+        <div class="p-3 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-900 space-y-1">
+          <p class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-shield-halved text-sky-600"></i> Acceso Seguro Sin Cuenta</p>
+          <p class="text-slate-600 text-[11px]">El cliente no necesita registrarse. Este enlace contiene un token criptográfico único que le permite revisar el PDF final corregido y dar su visto bueno vinculante.</p>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="block text-xs font-bold text-slate-700">Enlace de Aprobación para Compartir:</label>
+          <div class="flex items-center gap-2">
+            <input type="text" readonly data-id="clientApprovalUrlInput" class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-mono text-slate-800 outline-none select-all">
+            <button onclick="copyClientApprovalLink()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition shrink-0 cursor-pointer" title="Copiar enlace al portapapeles">
+              <i class="fa-solid fa-copy"></i> Copiar
+            </button>
+          </div>
+        </div>
+
+        <!-- Estado de Aprobación -->
+        <div id="clientApprovalStatusBox" class="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Estado Actual del Visto Bueno:</span>
+          <div id="clientApprovalStatusContent" class="text-slate-700">Consultando estado...</div>
+        </div>
+
+        <div class="flex items-center justify-between pt-2">
+          <a id="clientApprovalOpenBtn" href="#" target="_blank" class="text-xs text-blue-600 hover:text-blue-800 font-bold underline flex items-center gap-1">
+            <i class="fa-solid fa-up-right-from-square"></i> Abrir Portal de Aprobación del Cliente
+          </a>
+          <button onclick="closeClientApprovalModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition cursor-pointer">
+            Cerrar
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -9250,8 +9382,188 @@
       `;
     }
 
+    // =========================================================================
+    // USUARIOS, SESIONES RBAC Y APROBACIÓN DE CLIENTE (MEJORA 3)
+    // =========================================================================
+
+    let currentAuthUser = null;
+
+    async function checkCurrentUserSession() {
+      try {
+        const resp = await fetch('/api/auth/me');
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.authenticated && data.user) {
+            currentAuthUser = data.user;
+          } else {
+            currentAuthUser = null;
+          }
+        }
+      } catch (err) {
+        console.warn('Sesión auth no disponible:', err);
+      }
+      renderAuthUserBadge();
+    }
+
+    function renderAuthUserBadge() {
+      const container = document.getElementById('authUserBadge');
+      if (!container) return;
+
+      if (currentAuthUser) {
+        let roleBg = 'bg-blue-600';
+        let roleLabel = currentAuthUser.role.toUpperCase();
+        if (currentAuthUser.role === 'responsable') roleBg = 'bg-amber-600';
+        if (currentAuthUser.role === 'docente') roleBg = 'bg-emerald-600';
+
+        container.innerHTML = `
+          <div class="flex items-center gap-1.5 bg-slate-800 border border-slate-700 px-2.5 py-1 rounded-lg text-xs">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span class="font-bold text-white">${escapeHtml(currentAuthUser.full_name.split(' ')[0])}</span>
+            <span class="px-1.5 py-0.2 rounded text-[9px] font-black uppercase text-white ${roleBg}">${escapeHtml(roleLabel)}</span>
+            <button onclick="submitUserLogout()" class="text-slate-400 hover:text-red-400 ml-1 transition cursor-pointer" title="Cerrar sesión">
+              <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+          </div>
+        `;
+      } else {
+        container.innerHTML = `
+          <button onclick="openAuthModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer" title="Iniciar sesión con tu cuenta de taller (Diseñador, CTP, Responsable o Docente)">
+            <i class="fa-solid fa-user-lock text-blue-200"></i> <span>Acceso Taller</span>
+          </button>
+        `;
+      }
+    }
+
+    function openAuthModal() {
+      const modal = document.getElementById('authModal');
+      if (modal) modal.classList.remove('hidden');
+      const err = document.getElementById('authErrorMsg');
+      if (err) err.classList.add('hidden');
+    }
+
+    function closeAuthModal() {
+      const modal = document.getElementById('authModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function fillAuthCredentials(username, pwd) {
+      const uInput = document.querySelector('[data-id="authUsernameInput"]');
+      const pInput = document.querySelector('[data-id="authPasswordInput"]');
+      if (uInput) uInput.value = username;
+      if (pInput) pInput.value = pwd;
+    }
+
+    async function submitUserLogin() {
+      const uInput = document.querySelector('[data-id="authUsernameInput"]');
+      const pInput = document.querySelector('[data-id="authPasswordInput"]');
+      const errBox = document.getElementById('authErrorMsg');
+
+      const username = uInput ? uInput.value.trim() : '';
+      const password = pInput ? pInput.value : '';
+
+      if (!username || !password) {
+        if (errBox) {
+          errBox.textContent = 'Por favor, introduce usuario y contraseña.';
+          errBox.classList.remove('hidden');
+        }
+        return;
+      }
+
+      try {
+        const resp = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || 'Credenciales incorrectas');
+        }
+
+        currentAuthUser = data.user;
+        renderAuthUserBadge();
+        closeAuthModal();
+      } catch (err) {
+        if (errBox) {
+          errBox.textContent = err.message;
+          errBox.classList.remove('hidden');
+        }
+      }
+    }
+
+    async function submitUserLogout() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } catch (err) {
+        console.warn('Error cerrando sesión:', err);
+      }
+      currentAuthUser = null;
+      renderAuthUserBadge();
+    }
+
+    async function openClientApprovalModal() {
+      if (!currentJobId) {
+        alert('Debes subir y analizar un PDF primero antes de enviarlo a aprobación de cliente.');
+        return;
+      }
+
+      const modal = document.getElementById('clientApprovalModal');
+      if (modal) modal.classList.remove('hidden');
+
+      const urlInput = document.querySelector('[data-id="clientApprovalUrlInput"]');
+      const openBtn = document.getElementById('clientApprovalOpenBtn');
+      const statusBox = document.getElementById('clientApprovalStatusContent');
+
+      if (urlInput) urlInput.value = 'Generando enlace protegido...';
+
+      try {
+        const resp = await fetch(`/api/client-approval/create/${currentJobId}`, { method: 'POST' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+
+        if (urlInput) urlInput.value = data.approval_url;
+        if (openBtn) openBtn.href = data.approval_url;
+
+        if (statusBox) {
+          statusBox.innerHTML = `
+            <div class="flex items-center gap-2 text-slate-800 font-medium">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                PENDIENTE DE VISTO BUENO
+              </span>
+              <span>El cliente aún no ha emitido su decisión.</span>
+            </div>
+          `;
+        }
+      } catch (err) {
+        if (urlInput) urlInput.value = 'Error generando enlace';
+        if (statusBox) statusBox.textContent = `Error: ${err.message}`;
+      }
+    }
+
+    function closeClientApprovalModal() {
+      const modal = document.getElementById('clientApprovalModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function copyClientApprovalLink() {
+      const urlInput = document.querySelector('[data-id="clientApprovalUrlInput"]');
+      if (urlInput && urlInput.value) {
+        navigator.clipboard.writeText(urlInput.value).then(() => {
+          alert('¡Enlace de visto bueno copiado al portapapeles!\nPuedes enviarlo al cliente por email o mensajería.');
+        }).catch(() => {
+          urlInput.select();
+          document.execCommand('copy');
+          alert('Enlace copiado.');
+        });
+      }
+    }
+
     // Inicializar tema al cargar DOM
-    document.addEventListener('DOMContentLoaded', initKioskTheme);
+    document.addEventListener('DOMContentLoaded', () => {
+      initKioskTheme();
+      checkCurrentUserSession();
+    });
     initKioskTheme();
   </script>
 </body>

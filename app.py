@@ -127,6 +127,15 @@ from gwg_validator import (
     validate_pdf_gwg,
     generate_gwg_certificate_pdf,
 )
+from auth_manager import (
+    authenticate_user,
+    create_user_session,
+    get_user_from_session,
+    delete_session,
+    generate_client_approval_link,
+    get_client_approval_by_token,
+    submit_client_decision,
+)
 
 from security_limits import (
     RequestLimitsMiddleware, ResourceLimitError, MAX_FILE_BYTES, MAX_BATCH_BYTES,
@@ -575,6 +584,7 @@ def handle_proofreading_action(
 
 @app.post("/api/release")
 def release_production(
+    request: Request,
     job_id: str = Form(...),
     operator_name: str = Form(...),
     decision: str = Form(...), # approved, approved_with_warnings, rejected
@@ -588,6 +598,17 @@ def release_production(
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
+    # Si hay sesión de usuario autenticado, su identidad y rol firman oficialmente
+    auth_user = get_authenticated_user(request)
+    if auth_user:
+        effective_operator = auth_user["full_name"]
+        auth_username = auth_user["username"]
+        auth_role = auth_user["role"]
+    else:
+        effective_operator = operator_name.strip()
+        auth_username = None
+        auth_role = "invitado"
+
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
 
@@ -598,9 +619,12 @@ def release_production(
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     job_data["triple_result"]["release"] = {
         "status": "AUTHORIZED" if is_approved else "REJECTED",
-        "label": f"Autorizado por {operator_name}" if is_approved else f"Rechazado por {operator_name}",
+        "label": f"Autorizado por {effective_operator}" if is_approved else f"Rechazado por {effective_operator}",
         "decision": decision,
-        "operator": operator_name,
+        "operator": effective_operator,
+        "authenticated_username": auth_username,
+        "operator_role": auth_role,
+        "is_certified_signature": bool(auth_user),
         "notes": notes,
         "signed_at": now_str,
         "sha256": current_sha256,
@@ -609,7 +633,7 @@ def release_production(
     if job_data["triple_result"]["release"]["status"] == "AUTHORIZED":
         job_data["job_meta"]["authorized_sha256"] = current_sha256
         try:
-            capture_version(job_data, current_pdf, JOBS_DIR, label=f"Versión aprobada ({operator_name})", is_approved=True)
+            capture_version(job_data, current_pdf, JOBS_DIR, label=f"Versión aprobada ({effective_operator})", is_approved=True)
             job_data["version_history_summary"] = public_history(job_data, JOBS_DIR)
         except Exception as exc:
             print(f"[release_production] Aviso versión: {exc}")
@@ -1035,6 +1059,374 @@ def download_validation_certificate_endpoint(job_id: str):
         media_type="application/pdf",
         filename=f"Certificado_Conformidad_GWG_{safe_id[:8]}.pdf",
     )
+
+
+def get_authenticated_user(request: Request) -> Optional[Dict[str, Any]]:
+    """Extrae el usuario autenticado a partir de la cookie de sesión HttpOnly o encabezado Bearer."""
+    session_id = request.cookies.get("intelliprint_session")
+    if not session_id:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            session_id = auth_header[7:].strip()
+    if session_id:
+        return get_user_from_session(session_id)
+    return None
+
+
+# =============================================================================
+# AUTENTICACIÓN, SESIONES Y ROLES (RBAC)
+# =============================================================================
+
+@app.post("/api/auth/login")
+def auth_login_endpoint(request: Request, response: Response, body: dict = Body(default={})):
+    """Inicia sesión con credenciales y emite una cookie de sesión segura HttpOnly."""
+    username = body.get("username", "").strip()
+    password = body.get("password", "")
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Usuario y contraseña obligatorios.")
+
+    user = authenticate_user(username, password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas o usuario desactivado.")
+
+    session_id = create_user_session(user["id"])
+    response.set_cookie(
+        key="intelliprint_session",
+        value=session_id,
+        httponly=True,
+        samesite="lax",
+        max_age=86400,  # 24h
+        path="/",
+    )
+    return {
+        "status": "ok",
+        "user": user,
+        "session_id": session_id,
+    }
+
+
+@app.post("/api/auth/logout")
+def auth_logout_endpoint(request: Request, response: Response):
+    """Cierra la sesión activa y elimina la cookie de sesión."""
+    session_id = request.cookies.get("intelliprint_session")
+    if session_id:
+        delete_session(session_id)
+    response.delete_cookie("intelliprint_session", path="/")
+    return {"status": "ok"}
+
+
+@app.get("/api/auth/me")
+def auth_me_endpoint(request: Request):
+    """Devuelve los datos del usuario autenticado actual y sus permisos RBAC."""
+    user = get_authenticated_user(request)
+    if not user:
+        return {"authenticated": False, "user": None}
+    return {
+        "authenticated": True,
+        "user": user,
+    }
+
+
+# =============================================================================
+# PORTAL DE APROBACIÓN DE CLIENTE (VISTO BUENO EXTERNO)
+# =============================================================================
+
+@app.post("/api/client-approval/create/{job_id}")
+def create_client_approval_endpoint(job_id: str, request: Request):
+    """Genera un enlace y token protegido para enviar al cliente para Visto Bueno."""
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    base_url = str(request.base_url).rstrip("/")
+    approval_data = generate_client_approval_link(safe_id, base_url=base_url)
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_data["client_approval"] = approval_data
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return approval_data
+
+
+@app.get("/api/client-approval/info/{token}")
+def get_client_approval_info_endpoint(token: str):
+    """Devuelve la información del trabajo para la vista del cliente."""
+    approval = get_client_approval_by_token(token)
+    if not approval:
+        raise HTTPException(status_code=404, detail="Token de aprobación no encontrado o caducado.")
+
+    safe_id = safe_job_id(approval["job_id"])
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    meta = job_data.get("job_meta", {})
+    return {
+        "token": token,
+        "job_id": safe_id,
+        "filename": meta.get("filename", "documento.pdf"),
+        "page_count": meta.get("page_count", 1),
+        "status": approval.get("status", "PENDING"),
+        "created_at": approval.get("created_at"),
+        "client_name": approval.get("client_name"),
+        "decision": approval.get("decision"),
+        "notes": approval.get("notes"),
+        "decided_at": approval.get("decided_at"),
+        "preview_pdf_url": f"/api/download-pdf/{safe_id}",
+    }
+
+
+@app.get("/api/client-approval/view/{token}", response_class=HTMLResponse)
+def client_approval_view_endpoint(token: str):
+    """Página web pública para que el cliente examine el PDF corregido y emita su Visto Bueno."""
+    approval = get_client_approval_by_token(token)
+    if not approval:
+        raise HTTPException(status_code=404, detail="Token de aprobación no encontrado o caducado.")
+
+    safe_id = safe_job_id(approval["job_id"])
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    meta = job_data.get("job_meta", {})
+    filename = html.escape(meta.get("filename", "documento.pdf"))
+    pages = meta.get("page_count", 1)
+    status = approval.get("status", "PENDING")
+    client_name = html.escape(approval.get("client_name") or "")
+    notes = html.escape(approval.get("notes") or "")
+    decided_at = approval.get("decided_at") or ""
+
+    status_banner = ""
+    if status == "APPROVED":
+        status_banner = f"""
+        <div class="p-6 bg-emerald-50 border-2 border-emerald-500 rounded-2xl text-emerald-900 space-y-2 mb-6 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-lg">✓</div>
+            <div>
+              <h2 class="text-base font-extrabold text-emerald-950 uppercase tracking-wide">Visto Bueno Aprobado para Tirada (OK Plancha)</h2>
+              <p class="text-xs text-emerald-800">Aprobado formalmente por: <strong>{client_name}</strong> el {decided_at[:19].replace('T', ' ')} UTC.</p>
+            </div>
+          </div>
+          {f'<p class="text-xs text-emerald-900 bg-white/60 p-2.5 rounded-lg border border-emerald-200 mt-2 font-medium">Observaciones: {notes}</p>' if notes else ''}
+          <p class="text-xs font-semibold text-emerald-800 pt-1">El taller de preimpresión ha recibido la conformidad y procederá a la filmación de planchas y tiro en máquina.</p>
+        </div>
+        """
+    elif status == "REJECTED":
+        status_banner = f"""
+        <div class="p-6 bg-red-50 border-2 border-red-500 rounded-2xl text-red-900 space-y-2 mb-6 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center font-bold text-lg">✕</div>
+            <div>
+              <h2 class="text-base font-extrabold text-red-950 uppercase tracking-wide">Solicitud de Cambios Notificada al Taller</h2>
+              <p class="text-xs text-red-800">Rechazado por: <strong>{client_name}</strong> el {decided_at[:19].replace('T', ' ')} UTC.</p>
+            </div>
+          </div>
+          {f'<p class="text-xs text-red-900 bg-white/60 p-2.5 rounded-lg border border-red-200 mt-2 font-medium">Motivo: {notes}</p>' if notes else ''}
+          <p class="text-xs font-semibold text-red-800 pt-1">El técnico de preimpresión revisará las anotaciones antes de preparar una nueva versión.</p>
+        </div>
+        """
+
+    form_section = ""
+    if status == "PENDING":
+        form_section = f"""
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <h3 class="text-sm font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-sky-500"></span> Formulario de Visto Bueno del Cliente
+          </h3>
+          <p class="text-xs text-slate-500">Por favor, revisa el PDF final en el visor inferior. Si estás de acuerdo con los textos, colores y maquetación, confirma tu Visto Bueno para entrar a máquina.</p>
+
+          <form id="approvalForm" onsubmit="submitApproval(event)" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Nombre y Apellidos / Empresa: *</label>
+                <input type="text" id="clientNameInput" required placeholder="Ej. Ana García - Dpto. Marketing" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Correo Electrónico (para justificante):</label>
+                <input type="email" id="clientEmailInput" placeholder="ana.garcia@empresa.com" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Observaciones o Instrucciones Especiales:</label>
+              <textarea id="clientNotesInput" rows="2" placeholder="Ej. Revisado texto legal y precios. Aprobado para tirada de 1.000 ejemplares." class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none"></textarea>
+            </div>
+
+            <div class="flex flex-col sm:flex-row items-center gap-3 pt-2">
+              <button type="button" onclick="sendDecision('approved')" class="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center justify-center gap-2 cursor-pointer">
+                ✓ Dar Visto Bueno (OK para Imprimir)
+              </button>
+              <button type="button" onclick="sendDecision('rejected')" class="w-full sm:w-auto px-5 py-3 bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer">
+                ✕ Solicitar Cambios / Rechazar
+              </button>
+            </div>
+          </form>
+        </div>
+        """
+
+    page_html = f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visto Bueno de Cliente · {filename} · IntelliPrint</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 antialiased flex flex-col">
+  <header class="bg-slate-900 text-white border-b border-slate-800 py-4 px-6 shadow-md">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center border border-sky-400/30 font-bold">IP</div>
+        <div>
+          <h1 class="text-sm font-extrabold tracking-wide">IntelliPrint · Portal de Aprobación de Clientes</h1>
+          <p class="text-xs text-slate-400">CPIFP Salesianos Urnieta · CIFP Mendizabala LHII</p>
+        </div>
+      </div>
+      <div class="text-right text-xs text-slate-400 hidden sm:block">
+        <span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono">Token: {token[:12]}...</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto p-4 sm:p-6 w-full flex-1 space-y-6">
+    <!-- Header del trabajo -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div>
+        <span class="text-[10px] font-bold text-sky-600 uppercase tracking-wider block">Revisión de Producción</span>
+        <h2 class="text-lg font-black text-slate-900">{filename}</h2>
+        <p class="text-xs text-slate-500 mt-0.5">Documento preparado para imprenta · {pages} página(s)</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="/api/download-pdf/{safe_id}" target="_blank" download class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 border border-slate-200">
+          📥 Descargar PDF
+        </a>
+      </div>
+    </div>
+
+    {status_banner}
+    {form_section}
+
+    <!-- Visor del PDF -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-700">Previsualización del PDF de Producción</h3>
+        <span class="text-xs text-slate-400 font-mono">ID: {safe_id[:8]}</span>
+      </div>
+      <div class="w-full bg-slate-900 rounded-xl overflow-hidden border border-slate-300 min-h-[600px] flex items-center justify-center">
+        <iframe src="/api/download-pdf/{safe_id}#toolbar=0" class="w-full h-[650px] border-0" title="Visor de PDF"></iframe>
+      </div>
+    </div>
+  </main>
+
+  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400">
+    IntelliPrint v2.0 · Plataforma de Preimpresión Profesional y Formación Profesional
+  </footer>
+
+  <script>
+    async function sendDecision(decision) {{
+      const nameInput = document.getElementById('clientNameInput');
+      const emailInput = document.getElementById('clientEmailInput');
+      const notesInput = document.getElementById('clientNotesInput');
+
+      const name = nameInput ? nameInput.value.trim() : '';
+      if (!name) {{
+        alert('Por favor, indica tu nombre o empresa antes de emitir tu decisión.');
+        if (nameInput) nameInput.focus();
+        return;
+      }}
+
+      const actionText = decision === 'approved' ? 'dar tu Visto Bueno para imprimir' : 'solicitar cambios';
+      if (!confirm(`¿Confirmas que deseas ${{actionText}}?`)) return;
+
+      try {{
+        const resp = await fetch('/api/client-approval/submit/{token}', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{
+            client_name: name,
+            client_email: emailInput ? emailInput.value.trim() : '',
+            decision: decision,
+            notes: notesInput ? notesInput.value.trim() : ''
+          }})
+        }});
+
+        if (!resp.ok) throw new Error('Error al registrar la decisión');
+        alert('¡Tu decisión ha sido registrada con éxito y comunicada al taller de imprenta!');
+        window.location.reload();
+      }} catch (err) {{
+        alert(`Error: ${{err.message}}`);
+      }}
+    }}
+  </script>
+</body>
+</html>
+"""
+    return HTMLResponse(content=page_html)
+
+
+@app.post("/api/client-approval/submit/{token}")
+def submit_client_approval_decision_endpoint(token: str, request: Request, body: dict = Body(default={})):
+    """Registra formalmente el visto bueno o rechazo del cliente."""
+    client_name = body.get("client_name", "").strip()
+    decision = body.get("decision", "").strip().lower()
+    notes = body.get("notes", "").strip()
+    client_email = body.get("client_email", "").strip() or None
+
+    if not client_name:
+        raise HTTPException(status_code=400, detail="El nombre del cliente o empresa es obligatorio.")
+    if decision not in ("approved", "rejected", "approved_with_notes"):
+        raise HTTPException(status_code=422, detail="Decisión no válida: debe ser approved o rejected.")
+
+    client_ip = request.client.host if request.client else "desconocido"
+    try:
+        result = submit_client_decision(
+            token=token,
+            decision=decision,
+            client_name=client_name,
+            client_email=client_email,
+            notes=notes,
+            client_ip=client_ip,
+        )
+
+        # Actualizar el trabajo correspondiente
+        job_id = result["job_id"]
+        job_json_path = get_job_json_path(job_id)
+        if job_json_path.exists():
+            with open(job_json_path, "r", encoding="utf-8") as f:
+                job_data = json.load(f)
+
+            job_data["client_approval_record"] = result
+            if decision in ("approved", "approved_with_notes"):
+                current_pdf = get_latest_cumulative_pdf(job_data.get("job_meta", {}))
+                if current_pdf:
+                    try:
+                        capture_version(
+                            job_data,
+                            current_pdf,
+                            JOBS_DIR,
+                            label=f"Visto Bueno Cliente ({client_name})",
+                            is_approved=True,
+                        )
+                        job_data["version_history_summary"] = public_history(job_data, JOBS_DIR)
+                    except Exception as exc:
+                        print(f"[client_approval] Aviso version: {exc}")
+
+            with open(job_json_path, "w", encoding="utf-8") as f:
+                json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+        return {"status": "ok", "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error registrando aprobación: {exc}")
 
 
 
