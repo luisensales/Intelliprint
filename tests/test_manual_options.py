@@ -39,6 +39,7 @@ class DocumentedOptionTests(unittest.TestCase):
         job_file = self.jobs / (job_id + '.json')
         report = json.loads(job_file.read_text(encoding='utf-8'))
         report['job_meta']['imposed_pdf_path'] = str(imposed)
+        report['job_meta']['imposition_source_sha256'] = report['job_meta']['current_sha256']
         job_file.write_text(json.dumps(report), encoding='utf-8')
         with patch.object(app, 'calculate_ink_zone_coverage', wraps=app.calculate_ink_zone_coverage) as calculate:
             result = self.client.post('/api/cip3/calculate/' + job_id, json={'source': 'auto'})

@@ -89,15 +89,26 @@ def get_press_operator_data(job_data: Dict[str, Any]) -> Dict[str, Any]:
     tech = triple.get("technical", {})
     status = tech.get("status", "ANALIZADO")
     is_ready = status in ("PASS", "PASS_WITH_WARNINGS") and triple.get("release", {}).get("status") == "AUTHORIZED"
+    current_hash = job_meta.get("current_sha256") or job_meta.get("sha256")
+    authorized_hash = ((job_meta.get("authorized_sha256") or triple.get("release", {}).get("sha256"))
+                       if triple.get("release", {}).get("status") == "AUTHORIZED" else None)
+    is_ready = is_ready and bool(current_hash) and authorized_hash == current_hash
 
     # 2. Perfil ICC y OutputIntent
     icc_info = job_summary.get("icc_detected", {})
     icc_profile_name = (
-        icc_info.get("profile_name")
+        icc_info.get("friendly_description")
+        or icc_info.get("identifier")
+        or icc_info.get("profile_name")
         or icc_info.get("output_condition")
         or job_meta.get("selected_icc")
-        or "ISOcoated_v2_eci.icc (FOGRA39)"
+        or "No declarado"
     )
+    icc_issue = any(f.get("rule_id") == "DOCUMENT_OUTPUT_ICC" for f in findings)
+    family = job_summary.get("required_color_family")
+    icc_status = ("FAIL" if icc_issue else
+                  "PASS" if icc_info.get("icc_valid") is True and
+                  (not family or icc_info.get("detected_family") == family) else "NOT_VERIFIED")
 
     # 3. Tintas y separaciones
     # Contar si hay tintas planas o barnices
@@ -120,19 +131,44 @@ def get_press_operator_data(job_data: Dict[str, Any]) -> Dict[str, Any]:
     # 4. Cobertura máxima de tinta (TAC)
     measurement = job_summary.get("tac_measurement", {})
     tac_val = measurement.get("peak_percent") if measurement.get("measured") else None
-    tac_status = "NOT_MEASURED" if tac_val is None else ("WARNING" if tac_val > job_summary.get("max_tac_limit", 300) + 0.5 else "OK")
+    tac_limit = job_summary.get("max_tac_limit", 300)
+    tac_issue = any(f.get("rule_id") == "MAX_INK_COVERAGE" for f in findings)
+    tac_status = ("WARNING" if tac_issue else "NOT_APPLICABLE" if measurement.get("not_applicable") else
+                  "NOT_MEASURED" if tac_val is None else "WARNING" if tac_val > tac_limit + 0.5 else "OK")
 
     # 5. Sangrado y Cajas de Página
-    bleed_mm = job_summary.get("bleed_detected_mm", 3.0)
-    has_bleed = bleed_mm >= 2.5
+    bleed_mm = job_summary.get("bleed_detected_mm")
+    bleed_status = job_summary.get("bleed_status", "NOT_VERIFIED")
+    if any(f.get("rule_id") == "BLEED_GEOMETRY_3MM" for f in findings):
+        bleed_status = "FAIL"
+    has_bleed = bleed_status == "PASS"
 
     # 6. Códigos de barras 100% K
     barcode_finding = next((f for f in findings if "código de barras" in f.get("title", "").lower() or "barcode" in f.get("title", "").lower()), None)
-    barcodes_pure_k = (barcode_finding is None)
+    inspection = job_meta.get("barcode_inspection", {})
+    barcode_status = "NOT_VERIFIED"
+    if current_hash and inspection.get("sha256") == current_hash:
+        checked = inspection.get("report", {})
+        if checked.get("status") == "ERROR" or checked.get("errors_count", 0):
+            barcode_status = "FAIL"
+        elif checked.get("status") == "WARNING" or checked.get("warnings_count", 0):
+            barcode_status = "WARNING"
+        elif checked.get("status") == "OK" and checked.get("total_barcodes_found", 0) > 0:
+            barcode_status = "PASS"
+        elif checked.get("status") == "OK":
+            barcode_status = "NOT_DETECTED"
+    if barcode_finding:
+        barcode_status = "FAIL"
+    barcodes_pure_k = True if barcode_status == "PASS" else None if barcode_status in ("NOT_VERIFIED", "NOT_DETECTED") else False
 
     # 7. Líneas finas (hairlines)
     hairline_finding = next((f for f in findings if f.get("rule_id") == "HAIRLINE_DETECTED"), None)
-    hairlines_ok = (hairline_finding is None)
+    hairline_status = job_summary.get("rules_evaluated", {}).get("HAIRLINE_DETECTED", "NOT_VERIFIED")
+    if hairline_finding:
+        hairline_status = "FAIL"
+    elif any(f.get("rule_id") == "GRAPHICS_NOT_VERIFIED" for f in findings):
+        hairline_status = "NOT_VERIFIED"
+    hairlines_ok = True if hairline_status == "PASS" else False if hairline_status == "FAIL" else None
 
     # 8. Datos del pliego impuesto si existe
     last_imp = job_meta.get("last_imposition_plan", {})
@@ -152,21 +188,29 @@ def get_press_operator_data(job_data: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "job_id": job_meta.get("job_id", "DESCONOCIDO"),
         "filename": job_meta.get("filename", "documento.pdf"),
-        "sha256": job_meta.get("sha256", "")[:16] + "...",
+        "sha256": current_hash or "No registrado",
+        "original_sha256": job_meta.get("original_sha256") or job_meta.get("sha256") or "No registrado",
+        "authorized_sha256": authorized_hash or "No registrado",
         "file_size_mb": job_meta.get("file_size_mb", 0.0),
         "status": status,
         "is_ready_for_press": is_ready,
         "description": tech.get("description", "Pliego verificado por IntelliPrint"),
         "icc_profile": icc_profile_name,
+        "icc_status": icc_status,
         "inks_description": f"CMYK (4 Cuerpos){' + Tintas Planas: ' + ', '.join(spots_list) if spots_list else ''}",
         "has_spots": has_spots,
         "spots_list": spots_list,
         "max_tac_percent": tac_val,
         "tac_status": tac_status,
+        "tac_limit": tac_limit,
         "bleed_mm": bleed_mm,
+        "bleed_status": bleed_status,
         "has_bleed": has_bleed,
         "barcodes_pure_k": barcodes_pure_k,
+        "barcode_status": barcode_status,
         "hairlines_ok": hairlines_ok,
+        "hairline_status": hairline_status,
+        "min_hairline_threshold": job_summary.get("min_hairline_threshold"),
         "imposition": imposition_info,
         "institutions": [
             "Salesianos Urnieta",
@@ -191,6 +235,26 @@ def render_press_operator_html(d: Dict[str, Any]) -> str:
         return value
     d = safe(d)
     tac_display = "No medido" if d.get("max_tac_percent") is None else f"{d['max_tac_percent']:.1f}% (estimado)"
+    def badge(state, success, failure, unknown="No verificado"):
+        if state in ("PASS", "OK"):
+            return success, "bg-emerald-100 text-emerald-800", "text-emerald-700"
+        if state in ("FAIL", "WARNING"):
+            return failure, "bg-rose-100 text-rose-800", "text-rose-700"
+        if state in ("NOT_APPLICABLE", "NOT_REQUIRED"):
+            return "No requerido", "bg-slate-100 text-slate-700", "text-slate-600"
+        if state == "NOT_DETECTED":
+            return "No detectados", "bg-slate-100 text-slate-700", "text-slate-600"
+        return unknown, "bg-amber-100 text-amber-800", "text-amber-700"
+
+    icc_text, icc_badge, _ = badge(d.get("icc_status"), "ICC OK", "ICC no conforme")
+    tac_text, tac_badge, _ = badge(d.get("tac_status"), "TAC OK (estimado)", "TAC excedido", "No medido")
+    bleed_text, _, bleed_color = badge(d.get("bleed_status"), "Conforme", "No conforme")
+    if d.get("bleed_mm") is not None and d.get("bleed_status") in ("PASS", "FAIL"):
+        bleed_text += f" · {d['bleed_mm']:.1f} mm"
+    hairline_text, _, hairline_color = badge(d.get("hairline_status"), "Conforme", "No conforme")
+    if d.get("min_hairline_threshold") is not None:
+        hairline_text += f" · mín. {d['min_hairline_threshold']} pt"
+    barcode_text, _, barcode_color = badge(d.get("barcode_status"), "Conforme", "Revisar códigos")
     is_ready = d.get("is_ready_for_press", False)
     status_bg = "bg-emerald-600" if is_ready else "bg-rose-600"
     status_title = "LISTO PARA IMPRESIÓN · TIRADA AUTORIZADA" if is_ready else "REQUIERE AJUSTES PREVIOS · NO IMPRIMIR"
@@ -285,8 +349,10 @@ def render_press_operator_html(d: Dict[str, Any]) -> str:
       <div class="font-bold text-slate-800 text-sm truncate" title="{d.get('filename')}">
         <i class="fa-solid fa-file-pdf text-rose-500 mr-1.5"></i>{d.get('filename')}
       </div>
-      <div class="text-[10px] font-mono text-slate-400 truncate">
-        SHA-256: {d.get('sha256')}
+      <div class="text-[10px] font-mono text-slate-500 break-all space-y-1">
+        <p>SHA-256 original: {d.get('original_sha256')}</p>
+        <p>SHA-256 PDF actual: {d.get('sha256')}</p>
+        <p>SHA-256 autorizado: {d.get('authorized_sha256')}</p>
       </div>
     </div>
 
@@ -304,7 +370,7 @@ def render_press_operator_html(d: Dict[str, Any]) -> str:
             <span class="text-[10px] text-slate-400 block uppercase">Perfil de Color Destino:</span>
             <strong class="text-slate-800 font-mono text-[11px]">{d.get('icc_profile')}</strong>
           </div>
-          <span class="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded">ICC OK</span>
+          <span class="text-[10px] px-2 py-0.5 {icc_badge} font-bold rounded">{icc_text}</span>
         </div>
 
         <!-- 2. Cuerpos / Tintas -->
@@ -323,24 +389,24 @@ def render_press_operator_html(d: Dict[str, Any]) -> str:
           <div>
             <span class="text-[10px] text-slate-400 block uppercase">Cobertura Máx. Tinta (TAC):</span>
             <strong class="text-slate-800">{tac_display}</strong>
-            <span class="text-[10px] text-slate-400 block">(Límite seguro: 300% para evitar repintado)</span>
+            <span class="text-[10px] text-slate-400 block">(Límite del perfil: {d.get('tac_limit')}%)</span>
           </div>
-          <span class="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded">TAC OK</span>
+          <span class="text-[10px] px-2 py-0.5 {tac_badge} font-bold rounded">{tac_text}</span>
         </div>
 
         <!-- 4. Geometría y Cortes -->
         <div class="grid grid-cols-3 gap-1.5 pt-1">
           <div class="p-2 bg-slate-50 rounded-lg text-center">
             <span class="text-[9px] text-slate-400 block uppercase">Sangrado</span>
-            <strong class="text-emerald-700 text-[11px]">✓ {d.get('bleed_mm'):.1f} mm</strong>
+            <strong class="{bleed_color} text-[11px]">{bleed_text}</strong>
           </div>
           <div class="p-2 bg-slate-50 rounded-lg text-center">
             <span class="text-[9px] text-slate-400 block uppercase">Líneas Finas</span>
-            <strong class="text-emerald-700 text-[11px]">✓ ≥ 0,3 pt</strong>
+            <strong class="{hairline_color} text-[11px]">{hairline_text}</strong>
           </div>
           <div class="p-2 bg-slate-50 rounded-lg text-center">
             <span class="text-[9px] text-slate-400 block uppercase">Códigos 100% K</span>
-            <strong class="text-emerald-700 text-[11px]">✓ Conforme</strong>
+            <strong class="{barcode_color} text-[11px]">{barcode_text}</strong>
           </div>
         </div>
       </div>

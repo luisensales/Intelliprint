@@ -236,7 +236,8 @@ class DeepRegressionTests(unittest.TestCase):
         self.assertEqual(list(self.uploads.iterdir()), [])
 
     def test_traceability_uses_canonical_verdict_authorization_and_measurement(self):
-        report = {'triple_result': {'technical': {'status': 'PASS'}, 'release': {'status': 'AUTHORIZED'}}}
+        report = {'job_meta': {'current_sha256': 'a' * 64, 'authorized_sha256': 'a' * 64},
+                  'triple_result': {'technical': {'status': 'PASS'}, 'release': {'status': 'AUTHORIZED'}}}
         data = get_press_operator_data(report)
         self.assertTrue(data['is_ready_for_press'])
         self.assertIsNone(data['max_tac_percent'])

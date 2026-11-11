@@ -19,6 +19,7 @@ Funcionalidades:
 from __future__ import annotations
 
 from pdf_utils import atomic_output, copy_pdf
+from security_limits import bounded_render_dpi
 
 import io
 import math
@@ -66,6 +67,7 @@ def _analyze_cmyk_region(
     Renderiza la región en CMYK nativo y analiza la composición de tinta
     de las barras oscuras y del fondo blanco circundante.
     """
+    dpi = bounded_render_dpi(page.rect, dpi)
     zoom = dpi / 72.0
     mat = pymupdf.Matrix(zoom, zoom)
     try:
@@ -156,6 +158,7 @@ def _detect_qrcodes_in_page(
     dpi: int = 150
 ) -> List[Dict[str, Any]]:
     """Detecta códigos QR mediante cv2.QRCodeDetector sobre la página renderizada."""
+    dpi = bounded_render_dpi(page.rect, dpi)
     zoom = dpi / 72.0
     mat = pymupdf.Matrix(zoom, zoom)
     pix = page.get_pixmap(matrix=mat, alpha=False)
@@ -237,6 +240,7 @@ def _detect_1d_barcodes_in_page(
     Detecta códigos de barras lineales 1D mediante análisis morfológico de frecuencias
     y correlación con patrones numéricos EAN/UPC en el texto del documento.
     """
+    dpi = bounded_render_dpi(page.rect, dpi)
     zoom = dpi / 72.0
     mat = pymupdf.Matrix(zoom, zoom)
     pix = page.get_pixmap(matrix=mat, alpha=False)
@@ -523,7 +527,8 @@ def fix_barcodes_in_pdf(
             rect_pt = pymupdf.Rect(item["rect_pt"])
 
             # Capture the untouched code before painting its quiet zone.
-            capture = page.get_pixmap(clip=rect_pt, matrix=pymupdf.Matrix(300 / 72, 300 / 72),
+            capture_dpi = bounded_render_dpi(rect_pt, 300)
+            capture = page.get_pixmap(clip=rect_pt, matrix=pymupdf.Matrix(capture_dpi / 72, capture_dpi / 72),
                                       colorspace=pymupdf.csGRAY if force_pure_k else pymupdf.csRGB)
             captured_samples = bytes(capture.samples)
             captured_width, captured_height = capture.width, capture.height
@@ -606,6 +611,7 @@ def render_barcode_preview_image(
         raise ValueError(f"Página {page_index} fuera de rango.")
 
     page = doc[page_index]
+    dpi = bounded_render_dpi(page.rect, dpi)
     zoom = dpi / 72.0
     mat = pymupdf.Matrix(zoom, zoom)
 

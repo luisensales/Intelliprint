@@ -14,7 +14,6 @@ import logging
 import re
 from pathlib import Path
 from typing import Union, Optional
-from decimal import Decimal
 
 import pikepdf
 
@@ -80,231 +79,298 @@ def rgb_to_cmyk(r: float, g: float, b: float) -> tuple[float, float, float, floa
     y = (1.0 - b - k) / (1.0 - k)
     return round(c, 4), round(m, 4), round(y, 4), round(k, 4)
 
+def _spot_names(space):
+    if str(space[0]) == '/DeviceN':
+        return [str(name).lstrip('/') for name in space[1]]
+    return [str(space[1]).lstrip('/')]
+
+
+class _SpotColor:
+    """Evaluate a supported single-channel tint transform in its actual alternate space."""
+
+    def __init__(self, definition, resources=None):
+        self.definition = definition
+        self.resources = resources or pikepdf.Dictionary()
+        self.names = _spot_names(definition)
+        self.name = ', '.join(self.names)
+        self.parameters = None
+
+    def _load(self):
+        import math
+        if len(self.names) != 1:
+            raise ValueError(f"DeviceN multicanal no convertible sin perder tintas: {self.name}")
+        alternate = self.definition[2]
+        visited = set()
+        while isinstance(alternate, pikepdf.Name) and str(alternate) not in (
+                '/DeviceCMYK', '/DeviceRGB', '/DeviceGray'):
+            key = str(alternate)
+            if key in visited or key not in self.resources.get('/ColorSpace', {}):
+                break
+            visited.add(key)
+            alternate = self.resources.ColorSpace[key]
+        family = str(alternate[0]) if isinstance(alternate, pikepdf.Array) else str(alternate)
+        components = {'/DeviceCMYK': 4, '/DeviceRGB': 3, '/DeviceGray': 1, '/Lab': 3}.get(family)
+        if components is None:
+            raise ValueError(f"Espacio alternativo no soportado para {self.name}: {family}")
+        function = self.definition[3]
+        if not hasattr(function, 'get') or int(function.get('/FunctionType', -1)) != 2:
+            raise ValueError(f"Transformación de tinta no soportada para {self.name}.")
+        c0 = tuple(float(v) for v in function.get('/C0', [0]))
+        c1 = tuple(float(v) for v in function.get('/C1', [1]))
+        exponent = float(function.get('/N', 1))
+        domain = tuple(float(v) for v in function.get('/Domain', [0, 1]))
+        if (len(c0) != components or len(c1) != components or domain != (0, 1)
+                or not all(math.isfinite(v) for v in (*c0, *c1, exponent)) or exponent < 0):
+            raise ValueError(f"Parámetros de tinta no válidos para {self.name}.")
+        ranges = function.get('/Range')
+        if ranges is not None:
+            ranges = tuple(float(v) for v in ranges)
+            if (len(ranges) != components * 2 or not all(math.isfinite(v) for v in ranges)
+                    or any(ranges[i] > ranges[i + 1] for i in range(0, len(ranges), 2))):
+                raise ValueError(f"Rango de tinta no válido para {self.name}.")
+        self.parameters = family, c0, c1, exponent, ranges
+
+    def color(self, tint):
+        import math
+        if self.parameters is None:
+            self._load()
+        tint = float(tint)
+        if not math.isfinite(tint):
+            raise ValueError("El porcentaje de tinta debe ser finito.")
+        family, c0, c1, exponent, ranges = self.parameters
+        factor = max(0.0, min(1.0, tint)) ** exponent
+        values = [a + factor * (b - a) for a, b in zip(c0, c1)]
+        if not all(math.isfinite(v) for v in values):
+            raise ValueError(f"Resultado de tinta no válido para {self.name}.")
+        if ranges:
+            values = [max(ranges[2*i], min(ranges[2*i+1], v)) for i, v in enumerate(values)]
+        if family == '/Lab':
+            # Retain the existing approximate Lab conversion, only for actual Lab spaces.
+            return lab_to_cmyk(*values)
+        values = [max(0.0, min(1.0, v)) for v in values]
+        if family == '/DeviceRGB':
+            return rgb_to_cmyk(*values)
+        if family == '/DeviceGray':
+            return 0.0, 0.0, 0.0, round(1 - values[0], 4)
+        return tuple(round(v, 4) for v in values)
+
 
 def extract_spot_cmyk_equivalent(cs_val: pikepdf.Array) -> tuple[str, tuple[float, float, float, float]]:
+    """Return the full tint's CMYK equivalent; never infer a space from component count."""
+    conversion = _SpotColor(cs_val)
+    return conversion.name, conversion.color(1)
+
+
+def _mapped_color(conversion, tint):
+    if isinstance(conversion, _SpotColor):
+        return conversion.color(tint)
+    # Retain the internal helper's previous (name, CMYK base) calling contract.
+    import math
+    if not math.isfinite(float(tint)):
+        raise ValueError("El porcentaje de tinta debe ser finito.")
+    tint = max(0.0, min(1.0, float(tint)))
+    return tuple(round(tint * float(v), 4) for v in conversion[1])
+
+
+def _transform_stream_spots_to_cmyk(commands, spots_map, initial_state=(None, None),
+                                    form_handler=None, on_convert=None):
+    """Track independent fill/stroke spaces through the complete q/Q stack."""
+    fill, stroke = initial_state
+    stack = []
+    output = []
+
+    def note(key, conversion):
+        if on_convert is not None:
+            on_convert(key, conversion)
+
+    for command in commands:
+        if isinstance(command, pikepdf.ContentStreamInlineImage):
+            output.append(command)
+            continue
+        operands, operator = command
+        op = str(operator)
+        if op == 'q':
+            stack.append((fill, stroke))
+        elif op == 'Q':
+            if not stack:
+                raise ValueError("El PDF contiene un Q sin su q correspondiente.")
+            fill, stroke = stack.pop()
+        elif op in ('cs', 'CS') and operands:
+            key = str(operands[0])
+            conversion = spots_map.get(key)
+            if op == 'cs':
+                fill = conversion
+            else:
+                stroke = conversion
+            if conversion is not None:
+                output.append(([pikepdf.Name.DeviceCMYK], pikepdf.Operator(op)))
+                # cs/CS reset the original Separation tint to 1, not CMYK black.
+                output.append((list(_mapped_color(conversion, 1)),
+                               pikepdf.Operator('k' if op == 'cs' else 'K')))
+                note(key, conversion)
+                continue
+        elif op in ('sc', 'scn', 'SC', 'SCN'):
+            conversion = fill if op.islower() else stroke
+            if conversion is not None:
+                if len(operands) != 1:
+                    raise ValueError("La tinta seleccionada exige un único componente.")
+                tint = float(operands[0])
+                output.append((list(_mapped_color(conversion, tint)),
+                               pikepdf.Operator('k' if op.islower() else 'K')))
+                note(None, conversion)
+                continue
+        elif op in ('g', 'rg', 'k'):
+            fill = None
+        elif op in ('G', 'RG', 'K'):
+            stroke = None
+        elif op == 'Do' and operands and form_handler is not None:
+            replacement = form_handler(operands[0], (fill, stroke))
+            if replacement is not None:
+                output.append(([replacement], operator))
+                continue
+        output.append((operands, operator))
+    if stack:
+        raise ValueError("El PDF contiene bloques q/Q sin equilibrar.")
+    return output
+
+
+def _contains_name(value, key, seen=None):
+    """Find named color references in resources that are not content streams."""
+    if isinstance(value, pikepdf.Name):
+        return str(value) == key
+    if not isinstance(value, (pikepdf.Array, pikepdf.Dictionary, pikepdf.Stream)):
+        return False
+    seen = set() if seen is None else seen
+    # Direct dictionaries cannot form cycles without an indirect reference.
+    # Their temporary Python wrappers can reuse ids while iterating siblings.
+    if value.objgen != (0, 0):
+        if value.objgen in seen:
+            return False
+        seen.add(value.objgen)
+    children = value if isinstance(value, pikepdf.Array) else value.values()
+    return any(_contains_name(child, key, seen) for child in children)
+
+
+def _needs_original_color(resources, key, commands):
+    if any(isinstance(cmd, pikepdf.ContentStreamInlineImage) for cmd in commands):
+        return True
+    for name, space in resources.get('/ColorSpace', {}).items():
+        if str(name) != key and _contains_name(space, key):
+            return True
+    for section in ('/Pattern', '/Shading'):
+        if _contains_name(resources.get(section), key):
+            return True
+    for obj in resources.get('/XObject', {}).values():
+        if str(obj.get('/Subtype')) != '/Form' and _contains_name(obj, key):
+            return True
+    return False
+
+
+def convert_spot_colors_to_cmyk(pdf_path: Union[str, Path], output_path: Union[str, Path],
+                                target_spots: Optional[list[str]] = None,
+                                convert_technical: bool = False) -> dict:
+    """Convert vector spots atomically, including nested Forms and inherited state.
+
+    Unsupported tint functions and multi-channel DeviceN are rejected explicitly,
+    keeping both the source and any previous output intact.
     """
-    Dada la definición de un espacio de color Separation o DeviceN,
-    devuelve (nombre_tinta, (c, m, y, k)) con su equivalente CMYK al 100%.
-    """
-    if len(cs_val) < 2:
-        return "", (0.0, 0.0, 0.0, 1.0)
+    from pdf_utils import atomic_output
+    converted_info = {}
+    pages_modified = 0
 
-    name = str(cs_val[1]).lstrip('/')
-    alt_space = str(cs_val[2]) if len(cs_val) > 2 else "/DeviceCMYK"
-    func = cs_val[3] if len(cs_val) > 3 else None
-
-    cmyk = (0.0, 0.0, 0.0, 1.0)
-
-    if func and hasattr(func, 'get') and '/C1' in func:
-        try:
-            c1 = [float(x) for x in func['/C1']]
-            if '/DeviceCMYK' in alt_space or len(c1) == 4:
-                cmyk = (round(c1[0], 4), round(c1[1], 4), round(c1[2], 4), round(c1[3], 4))
-            elif 'Lab' in alt_space or len(c1) == 3:
-                cmyk = lab_to_cmyk(c1[0], c1[1], c1[2])
-            elif '/DeviceRGB' in alt_space:
-                cmyk = rgb_to_cmyk(c1[0], c1[1], c1[2])
-        except Exception as e:
-            logger.warning(f"No se pudo extraer C1 de la tinta {name}: {e}")
-
-    return name, cmyk
-
-
-def convert_spot_colors_to_cmyk(
-    pdf_path: Union[str, Path],
-    output_path: Union[str, Path],
-    target_spots: Optional[list[str]] = None,
-    convert_technical: bool = False,
-) -> dict:
-    """
-    Convierte tintas planas (Separation y DeviceN) a cuatricromía (CMYK).
-    
-    - target_spots: si se indica, solo convierte las tintas de la lista.
-    - convert_technical: si es False (por defecto), nunca convierte barnices ni troqueles.
-    
-    Retorna dict con claves:
-        success: bool
-        spots_converted: list[dict]
-        pages_modified: int
-        errors: list[str]
-    """
-    pdf_path = Path(pdf_path)
-    output_path = Path(output_path)
-    errors: list[str] = []
-    converted_info: dict[str, dict] = {}
-    pages_modified_count = 0
+    def eligible(definition):
+        if not isinstance(definition, pikepdf.Array) or len(definition) < 4:
+            return False
+        if str(definition[0]) not in ('/Separation', '/DeviceN'):
+            return False
+        names = _spot_names(definition)
+        return (names and not any(n in ('All', 'None') for n in names)
+                and (convert_technical or not any(is_technical_ink(n) for n in names))
+                and (target_spots is None or any(n in target_spots for n in names)))
 
     try:
-        pdf = pikepdf.open(str(pdf_path), allow_overwriting_input=True)
-    except Exception as e:
-        return {
-            "success": False,
-            "spots_converted": [],
-            "pages_modified": 0,
-            "errors": [f"No se pudo abrir el PDF: {e}"],
-        }
+        with atomic_output(output_path) as temporary:
+            with pikepdf.open(pdf_path) as pdf:
+                def process_scope(content, original_resources, page_index,
+                                  initial_state=(None, None), ancestors=()):
+                    if len(ancestors) > 50:
+                        raise ValueError("Demasiados formularios PDF anidados.")
+                    resources = pikepdf.Dictionary(original_resources)
+                    colors = pikepdf.Dictionary(resources.get('/ColorSpace', {}))
+                    originals = resources.get('/XObject', {})
+                    xobjects = pikepdf.Dictionary(originals)
+                    spots = {str(key): _SpotColor(value, original_resources)
+                             for key, value in colors.items() if eligible(value)}
+                    changed_keys = set()
+                    modified = False
+                    form_cache = {}
 
-    try:
-        for p_idx, page in enumerate(pdf.pages, 1):
-            page_modified = False
-            res = page.obj.get('/Resources')
-            if not res or '/ColorSpace' not in res:
-                continue
+                    def record(key, conversion):
+                        nonlocal modified
+                        modified = True
+                        if key is not None:
+                            changed_keys.add(key)
+                        base = conversion.color(1)
+                        info = converted_info.setdefault(conversion.name, {
+                            'name': conversion.name, 'cmyk_base': list(base),
+                            'cmyk_str': ' '.join(f'{label}:{round(value*100)}%'
+                                                 for label, value in zip('CMYK', base)),
+                            'pages': []})
+                        if page_index not in info['pages']:
+                            info['pages'].append(page_index)
 
-            cs_dict = res['/ColorSpace']
-            # Mapeo: cs_key_in_resources -> (spot_name, (c, m, y, k))
-            spots_to_convert: dict[str, tuple[str, tuple[float, float, float, float]]] = {}
+                    def form_handler(key, state):
+                        nonlocal modified
+                        original = originals.get(key)
+                        if original is None or str(original.get('/Subtype')) != '/Form':
+                            return None
+                        cache_key = (str(key), id(state[0]), id(state[1]))
+                        if cache_key in form_cache:
+                            return form_cache[cache_key]
+                        identity = original.objgen
+                        if identity in ancestors:
+                            raise ValueError("El PDF contiene referencias cíclicas entre formularios.")
+                        own_resources = original.get('/Resources', original_resources)
+                        commands, child_resources, changed = process_scope(
+                            original, own_resources, page_index, state, ancestors + (identity,))
+                        replacement = None
+                        if changed:
+                            index = 1
+                            while f'/IPSpotForm{index}' in xobjects:
+                                index += 1
+                            replacement = pikepdf.Name(f'/IPSpotForm{index}')
+                            clone = pdf.make_stream(pikepdf.unparse_content_stream(commands))
+                            for attr, value in original.items():
+                                if str(attr) not in ('/Length', '/Filter', '/DecodeParms', '/Resources'):
+                                    clone[attr] = value
+                            clone.Resources = child_resources
+                            xobjects[replacement] = clone
+                            modified = True
+                        form_cache[cache_key] = replacement
+                        return replacement
 
-            for cs_key, cs_val in list(cs_dict.items()):
-                if not isinstance(cs_val, pikepdf.Array) or len(cs_val) < 2:
-                    continue
+                    raw_commands = list(pikepdf.parse_content_stream(content))
+                    new_commands = _transform_stream_spots_to_cmyk(
+                        raw_commands, spots, initial_state, form_handler, record)
+                    for key in changed_keys:
+                        if not _needs_original_color(original_resources, key, raw_commands):
+                            colors[key] = pikepdf.Name.DeviceCMYK
+                    if '/ColorSpace' in resources:
+                        resources.ColorSpace = colors
+                    if '/XObject' in resources:
+                        resources.XObject = xobjects
+                    return new_commands, resources, modified
 
-                cs_type = str(cs_val[0])
-                if cs_type not in ('/Separation', '/DeviceN'):
-                    continue
-
-                spot_name, cmyk_base = extract_spot_cmyk_equivalent(cs_val)
-                if not spot_name or spot_name in ('All', 'None'):
-                    continue
-
-                # Filtrar si no se deben convertir barnices/troqueles
-                if not convert_technical and is_technical_ink(spot_name):
-                    continue
-
-                # Filtrar por lista objetivo si se especificó
-                if target_spots is not None and spot_name not in target_spots:
-                    continue
-
-                key_str = str(cs_key)
-                spots_to_convert[key_str] = (spot_name, cmyk_base)
-                if spot_name not in converted_info:
-                    converted_info[spot_name] = {
-                        "name": spot_name,
-                        "cmyk_base": list(cmyk_base),
-                        "cmyk_str": f"C:{int(round(cmyk_base[0]*100))}% M:{int(round(cmyk_base[1]*100))}% Y:{int(round(cmyk_base[2]*100))}% K:{int(round(cmyk_base[3]*100))}%",
-                        "pages": []
-                    }
-                if p_idx not in converted_info[spot_name]["pages"]:
-                    converted_info[spot_name]["pages"].append(p_idx)
-
-            if not spots_to_convert:
-                continue
-
-            # Procesar el stream de contenido de la página
-            try:
-                raw_cmds = pikepdf.parse_content_stream(page)
-                new_cmds = _transform_stream_spots_to_cmyk(raw_cmds, spots_to_convert)
-                page.Contents = pikepdf.Stream(pdf, pikepdf.unparse_content_stream(new_cmds))
-                page_modified = True
-            except Exception as e:
-                errors.append(f"Error procesando stream de pág {p_idx}: {e}")
-
-            # También procesar XObjects Form si los hay en la página
-            if '/XObject' in res:
-                for xk, xv in res['/XObject'].items():
-                    if isinstance(xv, pikepdf.Stream) and xv.get('/Subtype') == '/Form':
-                        try:
-                            f_cmds = pikepdf.parse_content_stream(xv)
-                            new_f_cmds = _transform_stream_spots_to_cmyk(f_cmds, spots_to_convert)
-                            xv.write(pikepdf.unparse_content_stream(new_f_cmds))
-                            page_modified = True
-                        except Exception:
-                            pass
-
-            # Eliminar o sustituir los ColorSpaces convertidos de Resources
-            for cs_key in spots_to_convert.keys():
-                try:
-                    cs_dict[cs_key] = pikepdf.Name('/DeviceCMYK')
-                except Exception:
-                    pass
-
-            if page_modified:
-                pages_modified_count += 1
-
-        pdf.save(str(output_path))
-        logger.info(f"[spot_converter] Guardado en {output_path} con {len(converted_info)} tintas convertidas.")
-
-    except Exception as e:
-        errors.append(f"Error al guardar el PDF convertido: {e}")
-        return {
-            "success": False,
-            "spots_converted": list(converted_info.values()),
-            "pages_modified": pages_modified_count,
-            "errors": errors,
-        }
-    finally:
-        pdf.close()
-
-    return {
-        "success": True,
-        "spots_converted": list(converted_info.values()),
-        "pages_modified": pages_modified_count,
-        "errors": errors,
-    }
-
-
-def _transform_stream_spots_to_cmyk(
-    commands: list,
-    spots_map: dict[str, tuple[str, tuple[float, float, float, float]]]
-) -> list:
-    """
-    Sustituye los operadores de tintas directas en el stream por operadores DeviceCMYK equivalentes.
-    """
-    new_commands = []
-    current_fill_cmyk: Optional[tuple[float, float, float, float]] = None
-    current_stroke_cmyk: Optional[tuple[float, float, float, float]] = None
-
-    for operands, op in commands:
-        op_str = str(op)
-
-        if op_str == 'cs':
-            if operands:
-                cs_key = str(operands[0])
-                if cs_key in spots_map:
-                    current_fill_cmyk = spots_map[cs_key][1]
-                    new_commands.append(([pikepdf.Name('/DeviceCMYK')], pikepdf.Operator('cs')))
-                    continue
-                else:
-                    current_fill_cmyk = None
-        elif op_str == 'CS':
-            if operands:
-                cs_key = str(operands[0])
-                if cs_key in spots_map:
-                    current_stroke_cmyk = spots_map[cs_key][1]
-                    new_commands.append(([pikepdf.Name('/DeviceCMYK')], pikepdf.Operator('CS')))
-                    continue
-                else:
-                    current_stroke_cmyk = None
-        elif op_str in ('sc', 'scn') and current_fill_cmyk:
-            try:
-                tint = float(operands[0]) if operands else 1.0
-                tint = max(0.0, min(1.0, tint))
-                c = round(tint * current_fill_cmyk[0], 4)
-                m = round(tint * current_fill_cmyk[1], 4)
-                y = round(tint * current_fill_cmyk[2], 4)
-                k = round(tint * current_fill_cmyk[3], 4)
-                new_commands.append(([c, m, y, k], pikepdf.Operator('k')))
-                continue
-            except Exception:
-                pass
-        elif op_str in ('SC', 'SCN') and current_stroke_cmyk:
-            try:
-                tint = float(operands[0]) if operands else 1.0
-                tint = max(0.0, min(1.0, tint))
-                c = round(tint * current_stroke_cmyk[0], 4)
-                m = round(tint * current_stroke_cmyk[1], 4)
-                y = round(tint * current_stroke_cmyk[2], 4)
-                k = round(tint * current_stroke_cmyk[3], 4)
-                new_commands.append(([c, m, y, k], pikepdf.Operator('K')))
-                continue
-            except Exception:
-                pass
-        elif op_str in ('g', 'rg', 'k'):
-            current_fill_cmyk = None
-        elif op_str in ('G', 'RG', 'K'):
-            current_stroke_cmyk = None
-
-        new_commands.append((operands, op))
-
-    return new_commands
+                for page_index, page in enumerate(pdf.pages, 1):
+                    commands, resources, modified = process_scope(page, page.resources, page_index)
+                    if modified:
+                        page.Contents = pdf.make_stream(pikepdf.unparse_content_stream(commands))
+                        page.Resources = resources
+                        pages_modified += 1
+                pdf.save(temporary)
+        return {'success': True, 'spots_converted': list(converted_info.values()),
+                'pages_modified': pages_modified, 'errors': []}
+    except Exception as exc:
+        logger.warning("Spot conversion aborted: %s", exc)
+        return {'success': False, 'spots_converted': [], 'pages_modified': 0, 'errors': [str(exc)]}
 

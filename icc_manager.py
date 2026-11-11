@@ -1,10 +1,63 @@
 import os
 import json
 import struct
+import io
+import hashlib
+import threading
+from collections import OrderedDict
 from pathlib import Path
 import pikepdf
 
 ICC_DIR = Path(__file__).parent / "icc_profiles"
+MAX_ICC_BYTES = 16 * 1024 * 1024
+_validated_profiles = OrderedDict()
+_validation_lock = threading.Lock()
+
+
+def validate_icc_bytes(data):
+    """Check the binary profile and a usable LittleCMS transform, not its label.
+
+    Cache only the fingerprint and metadata; embedded profile bytes and native
+    transforms are released after validation, keeping the cache small.
+    """
+    from PIL import ImageCms
+    if not isinstance(data, bytes) or not 132 <= len(data) <= MAX_ICC_BYTES:
+        raise ValueError("Tamaño de perfil ICC no válido.")
+    fingerprint = hashlib.sha256(data).digest()
+    with _validation_lock:
+        if fingerprint in _validated_profiles:
+            _validated_profiles.move_to_end(fingerprint)
+            return _validated_profiles[fingerprint]
+    declared_size = struct.unpack_from('>I', data, 0)[0]
+    if declared_size != len(data) or data[36:40] != b'acsp':
+        raise ValueError("Cabecera o longitud del perfil ICC no válidas.")
+    count = struct.unpack_from('>I', data, 128)[0]
+    end_table = 132 + count * 12
+    if not count or end_table > len(data):
+        raise ValueError("Tabla de etiquetas ICC incompleta.")
+    signatures = set()
+    for index in range(count):
+        signature, offset, size = struct.unpack_from('>4sII', data, 132 + index * 12)
+        if signature in signatures or offset < end_table or size < 8 or offset + size > len(data):
+            raise ValueError("Etiquetas ICC duplicadas, truncadas o fuera del perfil.")
+        signatures.add(signature)
+    try:
+        profile = ImageCms.ImageCmsProfile(io.BytesIO(data))
+        family = profile.profile.xcolor_space.strip().upper()
+        if family not in ('CMYK', 'RGB', 'GRAY'):
+            raise ValueError("Espacio ICC no admitido para salida.")
+        mode = 'L' if family == 'GRAY' else family
+        ImageCms.buildTransformFromOpenProfiles(profile, ImageCms.createProfile('sRGB'),
+                                                mode, 'RGB', renderingIntent=1)
+        description = ImageCms.getProfileDescription(profile).strip()
+    except Exception as exc:
+        raise ValueError("El perfil ICC no contiene una transformación de color válida.") from exc
+    metadata = family, description
+    with _validation_lock:
+        _validated_profiles[fingerprint] = metadata
+        while len(_validated_profiles) > 32:
+            _validated_profiles.popitem(last=False)
+    return metadata
 
 FRIENDLY_NAMES = {
     "PSOcoated_v3.icc": ("PSO Coated v3 (FOGRA51 - Estucado)", "CMYK"),
@@ -26,15 +79,16 @@ def get_available_icc_profiles():
                 path = ICC_DIR / f
                 if not path.is_file() or path.stat().st_size < 100:
                     continue
+                try:
+                    family, description = validate_icc_bytes(path.read_bytes())
+                except ValueError:
+                    continue
                 size_kb = round(path.stat().st_size / 1024, 1)
                 
                 if f in FRIENDLY_NAMES:
-                    name, family = FRIENDLY_NAMES[f]
+                    name = FRIENDLY_NAMES[f][0]
                 else:
-                    family = "CMYK" if any(k in f.lower() for k in ["coated", "cmyk", "fogra", "gracol", "swop"]) else "RGB"
-                    if "gray" in f.lower():
-                        family = "Gray"
-                    name = f.replace(".icc", "").replace(".icm", "").replace("_", " ")
+                    name = description or f.replace(".icc", "").replace(".icm", "").replace("_", " ")
 
                 seen_keys.add(f.lower())
                 seen_keys.add(name.lower())
@@ -104,87 +158,58 @@ def parse_icc_description(icc_bytes):
     return None
 
 def detect_pdf_output_intent(doc_or_pike):
-    """
-    Detects if the PDF contains an OutputIntent with embedded ICC.
-    Accepts a pikepdf.Pdf object, file path (str or Path), or bytes.
-    """
+    """Validate embedded ICC bytes and classify the actual profile color space."""
+    empty = dict(has_output_intent=False, subtype=None, identifier='No declarado',
+                 profile_name='Sin perfil incrustado', friendly_description='Sin perfil ICC validado',
+                 has_icc_stream=False, icc_valid=False, detected_family='Desconocido',
+                 validation_error=None)
+    document = None
     close_when_done = False
-    pike_doc = None
-    if isinstance(doc_or_pike, (str, Path)):
-        try:
-            pike_doc = pikepdf.open(str(doc_or_pike))
-            close_when_done = True
-        except Exception:
-            return {
-                "has_output_intent": False,
-                "subtype": None,
-                "identifier": "No declarado",
-                "profile_name": "Sin perfil incrustado",
-                "friendly_description": "Sin perfil incrustado (DeviceCMYK genérico)",
-                "has_icc_stream": False,
-                "detected_family": "Desconocido"
-            }
-    else:
-        pike_doc = doc_or_pike
-
     try:
-        if hasattr(pike_doc, 'Root') and '/OutputIntents' in pike_doc.Root:
-            intents = pike_doc.Root['/OutputIntents']
-            if len(intents) > 0:
-                intent = intents[0]
-                subtype = str(intent.get('/S', 'Desconocido')).lstrip('/')
-                info = str(intent.get('/OutputConditionIdentifier', intent.get('/Info', 'ICC Incrustado')))
-                dest_output = intent.get('/DestOutputProfile', None)
-                has_icc_stream = dest_output is not None
-
-                profile_desc = None
-                if has_icc_stream:
-                    try:
-                        stream_bytes = dest_output.read_bytes()
-                        profile_desc = parse_icc_description(stream_bytes)
-                    except Exception:
-                        pass
-
-                # Build descriptive friendly name
-                parts = []
-                if profile_desc:
-                    parts.append(profile_desc)
-                if info and info not in ['ICC Incrustado', 'None', 'Desconocido']:
-                    if not profile_desc or info.lower() not in profile_desc.lower():
-                        parts.append(f"({info})")
-                elif not profile_desc and info:
-                    parts.append(info)
-
-                friendly_desc = " ".join(parts).strip() if parts else "OutputIntent documental incrustado"
-                family = "CMYK" if any(k in (friendly_desc + " " + info).lower() for k in ["cmyk", "coated", "fogra", "offset", "uncoated", "iso", "pso"]) else "RGB"
-
-                return {
-                    "has_output_intent": True,
-                    "subtype": subtype,
-                    "identifier": info,
-                    "profile_name": profile_desc or info,
-                    "friendly_description": friendly_desc,
-                    "has_icc_stream": has_icc_stream,
-                    "detected_family": family
-                }
-    except Exception:
-        pass
-    finally:
-        if close_when_done and pike_doc:
+        if isinstance(doc_or_pike, (str, Path)):
+            document = pikepdf.open(doc_or_pike)
+            close_when_done = True
+        elif isinstance(doc_or_pike, (bytes, bytearray, memoryview)):
+            document = pikepdf.open(io.BytesIO(bytes(doc_or_pike)))
+            close_when_done = True
+        else:
+            document = doc_or_pike
+        intents = document.Root.get('/OutputIntents', [])
+        first_invalid = None
+        for intent in intents:
+            result = dict(empty, has_output_intent=True)
             try:
-                pike_doc.close()
-            except Exception:
-                pass
-
-    return {
-        "has_output_intent": False,
-        "subtype": None,
-        "identifier": "No declarado",
-        "profile_name": "Sin perfil incrustado",
-        "friendly_description": "Sin perfil incrustado (DeviceCMYK genérico)",
-        "has_icc_stream": False,
-        "detected_family": "Desconocido"
-    }
+                if not isinstance(intent, pikepdf.Dictionary):
+                    raise ValueError('OutputIntent con estructura no válida.')
+                info = str(intent.get('/OutputConditionIdentifier', intent.get('/Info', 'ICC incrustado')))
+                result.update(identifier=info, profile_name=info,
+                              subtype=str(intent.get('/S', '')).lstrip('/'))
+                stream = intent.get('/DestOutputProfile')
+                result['has_icc_stream'] = isinstance(stream, pikepdf.Stream)
+                if not result['has_icc_stream']:
+                    raise ValueError('OutputIntent sin perfil ICC incrustado.')
+                family, description = validate_icc_bytes(stream.read_bytes())
+                channels = stream.get('/N')
+                if channels is not None and (type(channels) is not int or channels != {'GRAY': 1, 'RGB': 3, 'CMYK': 4}[family]):
+                    raise ValueError('El número de canales declarado no coincide con el ICC.')
+                if not isinstance(intent.get('/S'), pikepdf.Name):
+                    raise ValueError('OutputIntent sin subtipo válido.')
+                parts = [description] if description else []
+                if info and (not description or info.lower() not in description.lower()):
+                    parts.append('(' + info + ')')
+                result.update(icc_valid=True, detected_family=family,
+                              profile_name=description or info,
+                              friendly_description=' '.join(parts) or 'Perfil ICC validado')
+                return result
+            except Exception as exc:
+                result.update(validation_error=str(exc), friendly_description='OutputIntent sin ICC válido')
+                first_invalid = first_invalid or result
+        return first_invalid or empty
+    except Exception as exc:
+        return dict(empty, validation_error=str(exc))
+    finally:
+        if close_when_done and document is not None:
+            document.close()
 
 
 CATALOG_FILES = {
@@ -196,7 +221,6 @@ CATALOG_FILES = {
 
 def resolve_icc_profile(profile_id):
     """Resolve catalog IDs and validate profile bytes without accepting filesystem paths."""
-    from PIL import ImageCms
     if not isinstance(profile_id, str) or any(c in profile_id for c in '/\\:'):
         raise ValueError("Selecciona un perfil ICC del catalogo.")
     name = CATALOG_FILES.get(profile_id, profile_id)
@@ -205,15 +229,7 @@ def resolve_icc_profile(profile_id):
     if candidate.parent != base or candidate.suffix.lower() not in (".icc", ".icm") or not candidate.is_file():
         raise ValueError("Perfil ICC no disponible en el catalogo.")
     data = candidate.read_bytes()
-    if len(data) < 128 or data[36:40] != b"acsp":
-        raise ValueError("El archivo no es un perfil ICC valido.")
-    try:
-        profile = ImageCms.ImageCmsProfile(str(candidate))
-        family = profile.profile.xcolor_space.strip().upper()
-    except Exception as exc:
-        raise ValueError("Perfil ICC invalido.") from exc
-    if family not in ("CMYK", "RGB", "GRAY"):
-        raise ValueError("Espacio de color ICC no admitido.")
+    family, _ = validate_icc_bytes(data)
     return candidate, family
 
 
@@ -234,6 +250,4 @@ def apply_icc_to_pdf(pdf_path, selected_icc_id):
             ))
             pdf.Root.OutputIntents = pikepdf.Array([intent])
             pdf.save(temporary)
-    return {"applied": True, "has_output_intent": True, "subtype": "GTS_PDFX",
-            "identifier": name, "profile_name": name, "has_icc_stream": True,
-            "detected_family": family}
+    return {"applied": True, **detect_pdf_output_intent(pdf_path)}

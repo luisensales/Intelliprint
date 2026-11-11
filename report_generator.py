@@ -121,7 +121,7 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     y = HEADER_H + 20
 
     # -- Metadatos --
-    page.draw_rect(pymupdf.Rect(MARGIN_X, y, PAGE_W - MARGIN_X, y + 80),
+    page.draw_rect(pymupdf.Rect(MARGIN_X, y, PAGE_W - MARGIN_X, y + 124),
                    fill=p["light"], color=p["border"], width=0.8)
     page.insert_text(pymupdf.Point(45, y + 20),
                      f"Archivo: {meta.get('filename', 'documento.pdf')}",
@@ -155,60 +155,29 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     page.insert_text(pymupdf.Point(45, y + 70),
                      f"Fecha/Hora: {now_str}", fontsize=8, fontname="helv", color=p["slate"])
-    page.insert_text(pymupdf.Point(220, y + 70),
-                     f"SHA-256: {meta.get('sha256', '')[:28]}...", fontsize=8, fontname="helv", color=p["slate"])
     page.insert_text(pymupdf.Point(400, y + 70),
                      f"Imágenes: {summary.get('total_images', 0)} "
                      f"({summary.get('low_res_images', 0)} bajas, {summary.get('non_cmyk_images', 0)} RGB)",
                      fontsize=8, fontname="helv", color=p["slate"])
 
-    y += 95
+    for offset, label, value in (
+        (86, "Original", meta.get("original_sha256") or meta.get("sha256")),
+        (99, "PDF actual", meta.get("current_sha256") or meta.get("sha256")),
+        (112, "Autorizado", meta.get("authorized_sha256")),
+    ):
+        page.insert_text(pymupdf.Point(45, y + offset),
+                         f"SHA-256 {label}: {value or 'No registrado'}",
+                         fontsize=7, fontname="cour", color=p["slate"])
+
+    y += 139
 
     # -- Triple Result --
     box_w = 166.5
     gap   = 10
 
-    tech = triple.get("technical", {})
-    all_findings  = job_data.get("findings", [])
-
-    # Filtrar incidencias resueltas según historial de correcciones
-    findings = list(all_findings)
-    if meta.get("has_cmyk_converted") or meta.get("cmyk_converted_pdf_path"):
-        findings = [f for f in findings
-                    if f.get("rule_id") != "SOURCE_COLOR_DIAGNOSTIC"
-                    and "rgb" not in f.get("title", "").lower()
-                    and "rgb" not in f.get("message", "").lower()]
-
-    if meta.get("has_overprint_fixed") or meta.get("overprint_fixed_pdf_path"):
-        findings = [f for f in findings
-                    if f.get("rule_id") not in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100")
-                    and not (("calado" in f.get("title", "").lower() or "knockout" in f.get("title", "").lower())
-                             and "barniz" not in f.get("title", "").lower())]
-
-    if meta.get("has_varnish_overprint_fixed"):
-        findings = [f for f in findings
-                    if f.get("rule_id") != "VARNISH_KNOCKOUT"
-                    and "barniz" not in f.get("title", "").lower()]
-
-    if meta.get("has_hairline_fixed") or meta.get("hairline_fixed_pdf_path"):
-        findings = [f for f in findings
-                    if f.get("rule_id") != "HAIRLINE_DETECTED"
-                    and "filete" not in f.get("title", "").lower()]
-
-    if meta.get("has_icc_fixed") or meta.get("icc_fixed_pdf_path"):
-        findings = [f for f in findings
-                    if f.get("rule_id") != "DOCUMENT_OUTPUT_ICC"
-                    and "icc" not in f.get("title", "").lower()]
-
-    if meta.get("has_bleed_fixed") or meta.get("bleed_fixed_pdf_path"):
-        findings = [f for f in findings
-                    if f.get("rule_id") != "BLEED_GEOMETRY_3MM"
-                    and "sangrado" not in f.get("title", "").lower()]
-
-    if meta.get("has_fonts_outlined") or meta.get("fonts_outlined_pdf_path"):
-        findings = [f for f in findings
-                    if f.get("rule_id") != "USED_FONTS_EMBEDDED"
-                    and "no incrustada" not in f.get("title", "").lower()]
+    # El análisis actual determina lo pendiente; las acciones históricas no
+    # garantizan que una corrección haya resuelto todas las páginas u objetos.
+    findings = list(job_data.get("findings", []))
 
     adj_errors   = sum(1 for f in findings if f.get("severity") == "ERROR")
     adj_warnings = sum(1 for f in findings if f.get("severity") == "WARNING")
@@ -243,7 +212,7 @@ def generate_preflight_certificate_pdf(job_data, output_path):
                      fontsize=7.5, fontname="helv", color=p["slate"])
 
     decision_val = release.get("decision", "")
-    rel_status   = release.get("status", "AUTHORIZED" if "approved" in decision_val else "PENDING_AUTHORIZATION")
+    rel_status   = release.get("status", "AUTHORIZED" if decision_val in ("approved", "approved_with_warnings") else "PENDING_AUTHORIZATION")
     r_color      = p["green"] if rel_status == "AUTHORIZED" else (p["red"] if rel_status == "REJECTED" else p["amber"])
     x3 = x2 + box_w + gap
     page.draw_rect(pymupdf.Rect(x3, y, x3 + box_w, y + 60), color=r_color, width=1.2, fill=(1,1,1))
@@ -285,7 +254,7 @@ def generate_preflight_certificate_pdf(job_data, output_path):
     y += 30
 
     # -----------------------------------------------------------------------
-    # Findings con paginación dinámica (usando la lista ya filtrada)
+    # Findings actuales con paginación dinámica
     # -----------------------------------------------------------------------
     # Límite inferior del área útil en cada página
     BOTTOM_LIMIT = FOOTER_Y - 15
@@ -328,7 +297,8 @@ def generate_preflight_certificate_pdf(job_data, output_path):
             page.draw_rect(pymupdf.Rect(MARGIN_X, y, PAGE_W - MARGIN_X, y + FINDINGS_ROW_H - 4),
                            fill=fill_col, color=b_col, width=0.5)
 
-            raw_title = f"{badge} Pág {f.get('page', 1)}: {f.get('title', '')}"
+            image_ref = f" · Imagen {f['image_index']}" if f.get("image_index") is not None else ""
+            raw_title = f"{badge} Pág {f.get('page', 1)}{image_ref}: {f.get('title', '')}"
             # Reemplazar símbolos matemáticos no compatibles con Helvetica en PyMuPDF
             clean_title = raw_title.replace("≥", ">=").replace("≤", "<=")
             if len(clean_title) > 88: clean_title = clean_title[:85] + "..."
@@ -351,4 +321,6 @@ def generate_preflight_certificate_pdf(job_data, output_path):
 
     doc.save(str(output_path), deflate=True, garbage=4)
     doc.close()
+    meta["certificate_identity_version"] = 3
+    meta["certificate_sha256"] = meta.get("current_sha256") or meta.get("sha256")
     return output_path

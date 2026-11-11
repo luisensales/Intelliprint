@@ -11,7 +11,7 @@ Módulos incluidos:
      - Historial y telemetría de eventos en tiempo real.
   2. BatchQueueManager:
      - Subida masiva de múltiples PDFs (Multi-PDF Drop).
-     - Procesamiento paralelo de preflight con ThreadPoolExecutor.
+     - Preflight en un proceso independiente con memoria y concurrencia acotadas.
      - Auto-corrección masiva de todo el lote en 1 clic.
      - Empaquetado y descarga consolidada en ZIP organizado (PDFs corregidos + certificados + informes).
 """
@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import io
 import hashlib
+from document_identity import update_pdf_identity
+from analysis_history import capture_original_analysis, ensure_original_analysis
 from pdf_utils import atomic_output, copy_pdf
 import json
 import logging
@@ -29,7 +31,7 @@ import threading
 import time
 import uuid
 import zipfile
-from concurrent.futures import ThreadPoolExecutor
+from pdf_workers import run_pdf_task, preflight_in_worker, hotfolder_in_worker, profile_paths
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -301,6 +303,32 @@ class HotFolderService:
 
     def process_file_sync(self, file_path: Path) -> Optional[Dict[str, Any]]:
         """Procesa un archivo PDF individual a través del ciclo completo de prepress."""
+        file_path = Path(file_path)
+        if not file_path.exists() or not file_path.name.lower().endswith('.pdf'):
+            return None
+        job_id = str(uuid.uuid4())[:8]
+        paths = {name: str(globals()[name]) for name in (
+            'UPLOAD_DIR', 'JOBS_DIR', 'IN_DIR', 'PROCESSING_DIR', 'APPROVED_DIR', 'REJECTED_DIR', 'LOGS_FILE')}
+        options = {name: getattr(self, name) for name in ('profile_id', 'auto_fix', 'generate_reports')}
+        try:
+            event = run_pdf_task(hotfolder_in_worker, str(file_path), paths, options, profile_paths(), job_id)
+            with self._lock:
+                self.events_log = self._load_persisted_events()
+            return event
+        except Exception as exc:
+            event = dict(job_id=job_id, filename=file_path.name,
+                         timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                         status='ERROR', message=str(exc))
+            self._save_event(event)
+            # Quarantine the unfinished input after a native worker crash.
+            pending = PROCESSING_DIR / f'{job_id}_{file_path.name}'
+            source = pending if pending.exists() else file_path
+            if source.exists():
+                shutil.move(str(source), str(REJECTED_DIR / f'ERROR_{job_id}_{file_path.name}'))
+            return event
+
+    def _process_file_in_worker(self, file_path: Path, job_id: str) -> Optional[Dict[str, Any]]:
+        """Entire native PDF pipeline; called only by the spawned worker process."""
         if not file_path.exists() or not file_path.name.lower().endswith(".pdf"):
             return None
 
@@ -311,7 +339,6 @@ class HotFolderService:
         engine = IntelliPrintEngine()
         filename = file_path.name
         stem = file_path.stem
-        job_id = str(uuid.uuid4())[:8]
 
         # 1. Mover a processing
         proc_path = PROCESSING_DIR / f"{job_id}_{filename}"
@@ -345,6 +372,8 @@ class HotFolderService:
                 "profile_id": self.profile_id,
             }
             report["job_meta"] = job_meta
+            update_pdf_identity(report, proc_path)
+            capture_original_analysis(report)
 
             # Contar incidencias
             findings = report.get("findings", [])
@@ -362,6 +391,8 @@ class HotFolderService:
                     # Re-preflight sobre el archivo corregido
                     report_fixed = engine.run_preflight(str(final_pdf_path), profile_id=self.profile_id)
                     report_fixed["job_meta"] = job_meta
+                    if "original_analysis" in report:
+                        report_fixed["original_analysis"] = report["original_analysis"]
                     report_fixed["job_meta"]["last_fixed_pdf_path"] = str(final_pdf_path)
                     report = report_fixed
                     findings = report.get("findings", [])
@@ -380,8 +411,7 @@ class HotFolderService:
             report["job_meta"]["pdf_path"] = str(dest_pdf)
             if "last_fixed_pdf_path" in report["job_meta"]:
                 report["job_meta"]["last_fixed_pdf_path"] = str(dest_pdf)
-            report["job_meta"]["sha256"] = hashlib.sha256(dest_pdf.read_bytes()).hexdigest()
-            report["job_meta"]["file_size_mb"] = round(dest_pdf.stat().st_size / 1024**2, 2)
+            update_pdf_identity(report, dest_pdf)
             job_json = JOBS_DIR / f"{job_id}.json"
             with atomic_output(job_json) as temporary:
                 temporary.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -466,11 +496,9 @@ def process_batch_upload(
     selected_icc: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Recibe una lista de archivos (nombre, bytes), los analiza en paralelo con el motor
+    Recibe una lista de archivos (nombre, bytes), los analiza en un proceso aislado
     de Preflight y devuelve la lista de resultados para poblar la tabla de la cola.
     """
-    from preflight_engine import IntelliPrintEngine
-
     files = [(validate_pdf_filename(name), content) for name, content in files]
     results: List[Dict[str, Any]] = []
 
@@ -485,15 +513,9 @@ def process_batch_upload(
             f.write(fbytes)
 
         file_size_mb = round(len(fbytes) / (1024 * 1024), 2)
-        engine = IntelliPrintEngine()
-
         try:
-            report = engine.run_preflight(
-                pdf_path=str(file_path),
-                profile_id=profile_id,
-                icc_choice=icc_option,
-                selected_icc=selected_icc
-            )
+            report = run_pdf_task(preflight_in_worker, str(file_path), profile_id,
+                                  icc_option, selected_icc, profile_paths())
             report["job_meta"] = {
                 "job_id": job_id,
                 "filename": fname,
@@ -504,6 +526,8 @@ def process_batch_upload(
                 "pdf_path": str(file_path),
                 "sha256": hashlib.sha256(fbytes).hexdigest(),
             }
+            update_pdf_identity(report, file_path, original_sha256=report["job_meta"]["sha256"])
+            capture_original_analysis(report)
 
             job_json = JOBS_DIR / f"{job_id}.json"
             with open(job_json, "w", encoding="utf-8") as jf:
@@ -541,10 +565,9 @@ def process_batch_upload(
                 "pdf_path": str(file_path),
             }
 
-    # Ejecutar concurrentemente con 4 hilos de CPU
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        for item_res in executor.map(_process_one, files):
-            results.append(item_res)
+    # Keep original order and never run MuPDF from concurrent parent threads.
+    for item in files:
+        results.append(_process_one(item))
 
     return results
 
@@ -563,6 +586,8 @@ def batch_fix_jobs(job_ids):
             source = meta.get("last_fixed_pdf_path") or meta.get("pdf_path")
             if not source or not Path(source).is_file():
                 raise ValueError("PDF no encontrado.")
+            ensure_original_analysis(job_data, engine.run_preflight,
+                                     (UPLOAD_DIR, APPROVED_DIR, REJECTED_DIR, PROCESSING_DIR))
             output = JOBS_DIR / f"{safe_id}_batch_fixed.pdf"
             fix = apply_full_batch_fix(source, output, profile_id=meta.get("profile_id", "OFFSET_300"), job_id=safe_id)
             if fix.get("status") != "success":
@@ -573,6 +598,7 @@ def batch_fix_jobs(job_ids):
             job_data["triple_result"]["technical"] = verified["triple_result"]["technical"]
             job_data["triple_result"]["release"] = verified["triple_result"]["release"]
             meta.update(last_fixed_pdf_path=str(output), batch_fixed_pdf_path=str(output))
+            update_pdf_identity(job_data, output)
             with atomic_output(JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf") as temporary:
                 generate_preflight_certificate_pdf(job_data, temporary)
             with atomic_output(job_json) as temporary:
@@ -617,14 +643,14 @@ def create_batch_zip(job_ids: List[str]) -> bytes:
             )
 
             if best_pdf and Path(best_pdf).exists():
-                zf.write(best_pdf, arcname=f"PDFs_Listos_Impresion/{stem}_CORREGIDO.pdf")
+                zf.write(best_pdf, arcname=f"PDFs_Listos_Impresion/{safe_id}_{stem}_CORREGIDO.pdf")
 
             # Certificado técnico PDF
             cert_temp = JOBS_DIR / f"{safe_id}_temp_cert.pdf"
             try:
                 generate_preflight_certificate_pdf(job_data, cert_temp)
                 if cert_temp.exists():
-                    zf.write(cert_temp, arcname=f"Certificados_Tecnicos/{stem}_Certificado.pdf")
+                    zf.write(cert_temp, arcname=f"Certificados_Tecnicos/{safe_id}_{stem}_Certificado.pdf")
                     cert_temp.unlink(missing_ok=True)
             except Exception:
                 pass
@@ -634,7 +660,7 @@ def create_batch_zip(job_ids: List[str]) -> bytes:
             try:
                 generate_client_educational_report_pdf(job_data, edu_temp)
                 if edu_temp.exists():
-                    zf.write(edu_temp, arcname=f"Informes_Pedagogicos_Cliente/{stem}_Informe_Cliente.pdf")
+                    zf.write(edu_temp, arcname=f"Informes_Pedagogicos_Cliente/{safe_id}_{stem}_Informe_Cliente.pdf")
                     edu_temp.unlink(missing_ok=True)
             except Exception:
                 pass

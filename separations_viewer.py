@@ -16,6 +16,7 @@ from typing import Optional
 import numpy as np
 import pikepdf
 import pymupdf
+from security_limits import bounded_render_dpi
 from PIL import Image, ImageCms
 
 ICC_DIR = Path(__file__).parent / "icc_profiles"
@@ -156,7 +157,7 @@ def render_page_separation(
 
     # Renderizar la página directamente con el draw device nativo de MuPDF
     # (evita DisplayList, que descarta los estados de sobreimpresión /OP True /op True)
-    zoom = dpi / 72.0
+    zoom = bounded_render_dpi(page.rect, dpi) / 72.0
     mat = pymupdf.Matrix(zoom, zoom)
     try:
         pix = page._makePixmap(doc, mat, pymupdf.csCMYK, 0, 1, None)

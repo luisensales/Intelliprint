@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IntelliPrint - Preflight & Verificación PDF</title>
+  <link rel="stylesheet" href="/static/issue-viewer.css">
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
@@ -541,6 +542,10 @@
             </div>
           </div>
 
+          <div class="flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+            <div class="text-xs text-blue-900"><strong>Revisión visual del PDF</strong><p class="mt-1">Localiza las imágenes y fuentes afectadas sin perder el contexto de la página.</p></div>
+            <button id="openIssueViewerBtn" type="button" onclick="openIssueViewer(0)" class="shrink-0 rounded-lg bg-blue-700 hover:bg-blue-800 text-white px-3 py-2 text-xs font-semibold disabled:opacity-40">Abrir visor</button>
+          </div>
           <div id="tacCorrectionStatus" role="status" aria-live="polite" class="hidden"></div>
           <div id="findingsList" class="space-y-2.5">
             <!-- Dynamic findings -->
@@ -2495,6 +2500,53 @@
     </div>
   </div>
 
+  <div id="issueViewerModal" class="issue-viewer-modal" hidden role="dialog" aria-modal="true" aria-labelledby="issueViewerDialogTitle" aria-busy="false">
+    <div class="issue-viewer-dialog">
+      <header class="issue-viewer-header">
+        <div><h2 id="issueViewerDialogTitle">Visor de incidencias</h2><p id="issueViewerDocument"></p></div>
+        <button id="issueViewerClose" type="button" onclick="closeIssueViewer()" aria-label="Cerrar visor de incidencias">Cerrar ✕</button>
+      </header>
+      <div class="issue-viewer-layout">
+        <aside class="issue-viewer-sidebar" aria-label="Incidencias del documento">
+          <nav class="issue-viewer-nav" aria-label="Navegar por las incidencias">
+            <button id="issueViewerPrevious" type="button" onclick="loadIssueViewer(issueViewerState.index - 1)" aria-label="Incidencia anterior">←</button>
+            <span id="issueViewerCounter"></span>
+            <button id="issueViewerNext" type="button" onclick="loadIssueViewer(issueViewerState.index + 1)" aria-label="Incidencia siguiente">→</button>
+          </nav>
+          <div id="issueViewerList" class="issue-viewer-list"></div>
+          <section class="issue-viewer-details" aria-label="Detalle de la incidencia seleccionada">
+            <h3 id="issueViewerTitle"></h3>
+            <p id="issueViewerDescription"></p>
+            <dl id="issueViewerFacts" class="issue-viewer-facts"></dl>
+            <p id="issueViewerLocation" class="issue-viewer-location"></p>
+          </section>
+        </aside>
+        <div class="issue-viewer-main">
+          <div class="issue-viewer-toolbar" role="toolbar" aria-label="Controles de la página PDF">
+            <span id="issueViewerPageLabel">PDF actual</span>
+            <button type="button" onclick="setIssueViewerZoom(issueViewerState.zoom - .25)" aria-label="Alejar página">−</button>
+            <span id="issueViewerZoomLabel">100 %</span>
+            <button type="button" onclick="setIssueViewerZoom(issueViewerState.zoom + .25)" aria-label="Acercar página">+</button>
+            <button type="button" onclick="setIssueViewerZoom(1)">Ajustar al ancho</button>
+            <button id="issueViewerFocus" type="button" onclick="focusIssueViewerRegion()" disabled>Acercar al objeto</button>
+          </div>
+          <div id="issueViewerViewport" class="issue-viewer-viewport" tabindex="0" aria-label="Página PDF, desplazable">
+            <div id="issueViewerCanvas">
+              <div id="issueViewerPage" class="issue-viewer-page">
+                <img id="issueViewerImage" alt="Página del PDF actual con la incidencia seleccionada" hidden>
+                <div id="issueViewerRegions" class="issue-viewer-regions" aria-hidden="true"></div>
+              </div>
+            </div>
+          </div>
+          <div class="issue-viewer-statusbar">
+            <p id="issueViewerStatus" role="status" aria-live="polite"></p>
+            <button id="issueViewerRetry" class="issue-viewer-retry" type="button" onclick="loadIssueViewer(issueViewerState.index)" hidden>Reintentar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: Manual completo de usuario -->
   <div id="manualModal" role="dialog" aria-modal="true" aria-labelledby="manualModalTitle" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 md:p-6">
     <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeManualModal()"></div>
@@ -2712,6 +2764,7 @@
   </footer>
 
   <!-- App Client Script -->
+  <script src="/static/issue-viewer.js"></script>
   <script>
     let selectedFile = null;
     let currentJobId = null;
@@ -2764,7 +2817,8 @@
         const data = await res.json();
         cachedTargetProfiles = data.profiles || [];
 
-        const currentlyChecked = document.querySelector('input[name="profile"]:checked')?.value || 'OFFSET_300';
+        const selectedId = document.querySelector('input[name="profile"]:checked')?.value;
+        const currentlyChecked = data.profiles.some(p => p.id === selectedId) ? selectedId : (data.profiles.find(p => p.id === 'OFFSET_300')?.id || data.profiles[0]?.id);
 
         container.innerHTML = cachedTargetProfiles.map(p => {
           const isChecked = (p.id === currentlyChecked) ? 'checked' : '';
@@ -2781,10 +2835,10 @@
           const desc = p.destination || `≥${p.target_dpi || 300} ppp · ${p.min_bleed_mm || 0} mm sangre · TAC ≤${p.max_tac || 300}% · ${p.color_family || 'CMYK'}`;
           return `
             <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all ${borderClass}">
-              <input type="radio" name="profile" value="${p.id}" ${isChecked} class="mt-1 ${radioClass}">
+              <input type="radio" name="profile" value="${escapeHtml(p.id)}" ${isChecked} class="mt-1 ${radioClass}">
               <div class="text-xs">
-                <span class="font-bold text-slate-800">${p.name}</span>${typeBadge}
-                <span class="block text-[11px] text-slate-500 mt-0.5">${desc}</span>
+                <span class="font-bold text-slate-800">${escapeHtml(p.name)}</span>${typeBadge}
+                <span class="block text-[11px] text-slate-500 mt-0.5">${escapeHtml(desc)}</span>
               </div>
             </label>
           `;
@@ -2833,6 +2887,7 @@
     });
 
     async function handleFileSelect(file) {
+      if (typeof closeIssueViewer === 'function') closeIssueViewer(false);
       selectedFile = file;
       fileName.textContent = file.name;
       const mbStr = (file.size / (1024 * 1024)).toFixed(2);
@@ -2856,8 +2911,8 @@
         if (res.ok) {
           const info = await res.json();
           const icc = info.output_intent || {};
-          const hasIcc = icc.has_output_intent;
-          const desc = hasIcc ? (icc.friendly_description || icc.identifier) : 'Sin perfil incrustado (DeviceCMYK genérico / no declarado)';
+          const hasIcc = icc.icc_valid === true;
+          const desc = hasIcc ? (icc.friendly_description || icc.identifier) : 'Sin ICC válido incrustado';
 
           if (metaSpan) {
             metaSpan.textContent = `· ${mbStr} MB · ${info.pages} pág(s) (${info.page_size_mm}) · ${info.total_images} imág(s)`;
@@ -2868,7 +2923,7 @@
               <div class="flex flex-wrap items-center gap-2">
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${hasIcc ? 'bg-emerald-100 text-emerald-800 font-semibold border border-emerald-300' : 'bg-amber-100 text-amber-800 font-medium border border-amber-300'}">
                   <i class="fa-solid fa-palette ${hasIcc ? 'text-emerald-600' : 'text-amber-600'}"></i>
-                  <span><strong>Perfil detectado en el PDF:</strong> ${desc}</span>
+                  <span><strong>Perfil detectado en el PDF:</strong> ${escapeHtml(desc)}</span>
                 </span>
               </div>
             `;
@@ -2877,9 +2932,13 @@
           const preserveHint = document.getElementById('preserveIccHint');
           if (preserveHint) {
             preserveHint.innerHTML = hasIcc
-              ? `<i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>Recomendado: se conservará <strong>${desc}</strong> para producción`
-              : `<i class="fa-solid fa-triangle-exclamation text-amber-600 mr-1"></i>El PDF no declara perfil incrustado. Puedes elegir uno de <strong>icc_profiles/</strong> a continuación.`;
+              ? `<i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>Recomendado: se conservará <strong>${escapeHtml(desc)}</strong> para producción`
+              : `<i class="fa-solid fa-triangle-exclamation text-amber-600 mr-1"></i>El PDF no contiene un ICC válido incrustado. Puedes elegir uno de <strong>icc_profiles/</strong> a continuación.`;
           }
+        } else {
+          const error = await res.json();
+          if (detectedIccEl) detectedIccEl.textContent = error.detail || 'No se pudo inspeccionar el PDF.';
+          startCheckBtn.disabled = res.status === 413 || res.status === 422;
         }
       } catch (e) {
         console.error('Error al inspeccionar PDF:', e);
@@ -2897,10 +2956,15 @@
 
     // Resetear todo para comenzar un nuevo análisis desde el principio
     function resetToNewAnalysis() {
+      if (typeof closeIssueViewer === 'function') closeIssueViewer(false);
       // 1. Resetear variables de trabajo
       selectedFile = null;
       currentJobId = null;
       currentReport = null;
+      const badge = document.getElementById('badgeRelease');
+      badge.textContent = 'PENDIENTE';
+      badge.className = 'text-sm font-bold bg-slate-200 text-slate-700';
+      document.getElementById('descRelease').textContent = 'Requiere visto bueno del PDF actual.';
 
       // 2. Limpiar input y datos del archivo
       if (pdfFileInput) pdfFileInput.value = '';
@@ -2987,7 +3051,7 @@
     startCheckBtn.addEventListener('click', async () => {
       if (!selectedFile) return;
 
-      const profile = document.querySelector('input[name="profile"]:checked').value;
+      const profile = document.querySelector('input[name="profile"]:checked')?.value || 'OFFSET_300';
       const iccOption = document.querySelector('input[name="icc_option"]:checked').value;
       const selectedIcc = iccCatalogSelect.value;
 
@@ -3032,8 +3096,46 @@
       }
     });
 
+    function createSpellSuggestionCard(item) {
+      const card = document.createElement('div');
+      card.id = `card_${item.id}`;
+      card.className = 'p-3 bg-white border border-slate-200 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs';
+      card.innerHTML = `
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-red-600 line-through">${escapeHtml(item.word)}</span>
+            <i class="fa-solid fa-arrow-right text-slate-400 text-[10px]"></i>
+            <span class="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">${escapeHtml(item.suggestion)}</span>
+            <span class="text-[10px] text-slate-400">Pág ${item.page}</span>
+          </div>
+          <p class="text-slate-500 italic mt-1 text-[11px]">${escapeHtml(item.context)}</p>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button data-spell-action="accept" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-semibold">Aceptar</button>
+          <button data-spell-action="ignore" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold">Ignorar</button>
+          <button data-spell-action="add_to_glossary" class="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[11px] font-semibold">+ Glosario</button>
+        </div>
+      `;
+      card.querySelectorAll('[data-spell-action]').forEach(button => {
+        button.addEventListener('click', () => handleSpellAction(item.id, button.dataset.spellAction, item.word));
+      });
+      return card;
+    }
+
     // Render Results
     function renderResults(data) {
+      if (typeof closeIssueViewer === 'function') closeIssueViewer(false);
+      currentJobId = data.job_meta.job_id;
+      currentReport = data;
+      const release = data.triple_result?.release || {};
+      const meta = data.job_meta || {};
+      const authorized = release.status === 'AUTHORIZED' && !!meta.authorized_sha256 &&
+        meta.authorized_sha256 === (meta.current_sha256 || meta.sha256);
+      const releaseBadge = document.getElementById('badgeRelease');
+      releaseBadge.textContent = authorized ? 'AUTHORIZED' : (release.status === 'REJECTED' ? 'RECHAZADO' : 'PENDIENTE');
+      releaseBadge.className = authorized ? 'text-sm font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800' : 'text-sm font-bold px-3 py-1 rounded-full bg-slate-200 text-slate-700';
+      document.getElementById('descRelease').textContent = authorized ? release.label : 'Requiere visto bueno del PDF actual.';
+
       const tacStatus = document.getElementById('tacCorrectionStatus');
       if (tacStatus) { tacStatus.classList.add('hidden'); tacStatus.textContent = ''; }
       const tacButton = document.getElementById('btnTacLimiter');
@@ -3045,7 +3147,9 @@
       }
       document.getElementById('resFileName').textContent = data.job_meta.filename;
       document.getElementById('resProfileBadge').textContent = data.job_meta.profile_id;
-      document.getElementById('resFileHash').textContent = data.job_meta.sha256.substring(0, 16) + '...';
+      const hashField = document.getElementById('resFileHash');
+      hashField.textContent = (data.job_meta.current_sha256 || data.job_meta.sha256 || '').substring(0, 16) + '...';
+      hashField.title = `PDF actual: ${data.job_meta.current_sha256 || data.job_meta.sha256 || 'No registrado'}\nOriginal: ${data.job_meta.original_sha256 || 'No registrado'}\nAutorizado: ${data.job_meta.authorized_sha256 || 'No registrado'}`;
 
       const downloadPdfBtn = document.getElementById('downloadPdfBtn');
       if (downloadPdfBtn && currentJobId) {
@@ -3093,11 +3197,12 @@
       const findingsList = document.getElementById('findingsList');
       findingsList.innerHTML = '';
       document.getElementById('findingsCount').textContent = data.findings.length;
+      document.getElementById('openIssueViewerBtn').disabled = data.findings.length === 0;
 
       if (data.findings.length === 0) {
         findingsList.innerHTML = '<div class="p-4 bg-emerald-50 text-emerald-800 rounded-lg text-xs font-medium">✅ El documento supera todos los requisitos obligatorios y avisos del perfil.</div>';
       } else {
-        data.findings.forEach(f => {
+          data.findings.forEach((f, findingIndex) => {
           const div = document.createElement('div');
           const isErr = f.severity === 'ERROR';
           const is100KO = (f.rule_id === 'BLACK_TEXT_KNOCKOUT_100') || (f.rule_id === 'BLACK_TEXT_KNOCKOUT');
@@ -3105,7 +3210,7 @@
           const isIccMissing = (f.rule_id === 'DOCUMENT_OUTPUT_ICC');
           const isBleedMissing = (f.rule_id === 'BLEED_GEOMETRY_3MM');
           const isFontMissing = (f.rule_id === 'USED_FONTS_EMBEDDED');
-          const isRgbImage = (f.rule_id === 'SOURCE_COLOR_DIAGNOSTIC') || (f.category === 'Color' && f.title.toLowerCase().includes('rgb'));
+          const isRgbImage = (data.job_summary.required_color_family !== 'RGB') && ((f.rule_id === 'SOURCE_COLOR_DIAGNOSTIC') || (f.category === 'Color' && f.title.toLowerCase().includes('rgb')));
           const isTacExcess = f.rule_id === 'MAX_INK_COVERAGE';
 
           let cardStyle = '';
@@ -3208,6 +3313,13 @@
               ${actionHtml}
             </div>
           `;
+          const inspectButton = document.createElement('button');
+          inspectButton.type = 'button';
+          inspectButton.className = 'shrink-0 px-2.5 py-1.5 rounded-lg bg-white border border-blue-200 text-blue-700 font-semibold hover:bg-blue-50';
+          inspectButton.textContent = 'Ver en PDF';
+          inspectButton.setAttribute('aria-label', `Ver en PDF: ${f.title || 'incidencia'}`);
+          inspectButton.addEventListener('click', () => openIssueViewer(findingIndex));
+          div.appendChild(inspectButton);
           findingsList.appendChild(div);
         });
       }
@@ -3221,26 +3333,7 @@
         spellList.innerHTML = '<div class="p-4 bg-emerald-50 text-emerald-800 rounded-lg text-xs font-medium">✅ No se han detectado posibles erratas en el texto analizado.</div>';
       } else {
         data.spell_suggestions.forEach(item => {
-          const card = document.createElement('div');
-          card.id = `card_${item.id}`;
-          card.className = 'p-3 bg-white border border-slate-200 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs';
-          card.innerHTML = `
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-red-600 line-through">${item.word}</span>
-                <i class="fa-solid fa-arrow-right text-slate-400 text-[10px]"></i>
-                <span class="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">${item.suggestion}</span>
-                <span class="text-[10px] text-slate-400">Pág ${item.page}</span>
-              </div>
-              <p class="text-slate-500 italic mt-1 text-[11px]">${item.context}</p>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <button onclick="handleSpellAction('${item.id}', 'accept', '${item.word}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-semibold">Aceptar</button>
-              <button onclick="handleSpellAction('${item.id}', 'ignore', '${item.word}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold">Ignorar</button>
-              <button onclick="handleSpellAction('${item.id}', 'add_to_glossary', '${item.word}')" class="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[11px] font-semibold">+ Glosario</button>
-            </div>
-          `;
-          spellList.appendChild(card);
+          spellList.appendChild(createSpellSuggestionCard(item));
         });
       }
 
@@ -3369,13 +3462,13 @@
 
       // Res Detected ICC Badge
       const origIcc = summ.original_icc_detected || summ.icc_detected || {};
-      const hasOrigIcc = origIcc.has_output_intent;
-      const origDesc = hasOrigIcc ? (origIcc.friendly_description || origIcc.identifier) : 'Sin perfil incrustado (DeviceCMYK genérico)';
+      const hasOrigIcc = origIcc.icc_valid === true;
+      const origDesc = hasOrigIcc ? (origIcc.friendly_description || origIcc.identifier) : 'Sin ICC válido incrustado';
       const badgeEl = document.getElementById('resDetectedIccBadge');
       if (badgeEl) {
         badgeEl.innerHTML = `
           <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold ${hasOrigIcc ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}">
-            <i class="fa-solid fa-palette text-blue-500"></i> Perfil origen PDF: <strong>${origDesc}</strong>
+            <i class="fa-solid fa-palette text-blue-500"></i> Perfil origen PDF: <strong>${escapeHtml(origDesc)}</strong>
           </span>
         `;
       }
@@ -3481,11 +3574,14 @@
             } else if (img.is_rgb) {
               csBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">RGB (Alerta)</span>';
             } else {
-              csBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">${img.colorspace}</span>`;
+              csBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">${escapeHtml(img.colorspace)}</span>`;
             }
 
             // DPI badge
-            const targetDpi = (data.job_meta.profile_id === 'DIGITAL_200') ? 200 : ((data.job_meta.profile_id === 'PANTALLA_RGB') ? 96 : 300);
+            const targetDpi = Number(data.job_summary.target_dpi) || 300;
+            const targetFamily = data.job_summary.required_color_family || 'CMYK';
+            const needsCmyk = targetFamily === 'CMYK' && img.is_rgb;
+            const needsRgb = targetFamily === 'RGB' && img.is_cmyk;
             let dpiBadge = '';
             if (img.effective_dpi <= 0) {
               dpiBadge = '<span class="text-slate-400">N/D</span>';
@@ -3499,10 +3595,12 @@
 
             // Status message
             let statusDesc = '';
-            if (img.is_rgb && img.effective_dpi < targetDpi && img.effective_dpi > 0) {
+            if (needsCmyk && img.effective_dpi < targetDpi && img.effective_dpi > 0) {
               statusDesc = '<span class="text-amber-700 font-semibold"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Requiere CMYK y mayor resolución</span>';
-            } else if (img.is_rgb) {
+            } else if (needsCmyk) {
               statusDesc = '<span class="text-amber-600 font-medium"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Requiere conversión gestionada a CMYK</span>';
+            } else if (needsRgb) {
+              statusDesc = '<span class="text-amber-600">Convertir a sRGB para el destino de pantalla</span>';
             } else if (img.effective_dpi < targetDpi && img.effective_dpi > 0) {
               statusDesc = `<span class="text-red-600 font-semibold"><i class="fa-solid fa-circle-xmark mr-1"></i>Resolución insuficiente (<${targetDpi} ppp)</span>`;
             } else {
@@ -3515,7 +3613,7 @@
               <td class="py-2.5 px-3">${csBadge}</td>
               <td class="py-2.5 px-3">${dpiBadge}</td>
               <td class="py-2.5 px-3 font-mono text-slate-600">${img.width_px} × ${img.height_px} px</td>
-              <td class="py-2.5 px-3 text-slate-600">${img.placed_mm}</td>
+              <td class="py-2.5 px-3 text-slate-600">${escapeHtml(img.placed_mm)}</td>
               <td class="py-2.5 px-3">${statusDesc}</td>
             `;
             imagesTbody.appendChild(tr);
@@ -3563,6 +3661,8 @@
     // Production Release
     document.getElementById('submitReleaseBtn').addEventListener('click', async () => {
       if (!currentJobId) return;
+      const jobId = currentJobId;
+      const releaseReport = currentReport;
       const name = document.getElementById('operatorNameInput').value.trim();
       if (!name) {
         alert('Por favor, indica el nombre del operario.');
@@ -3572,7 +3672,7 @@
       const notes = document.getElementById('releaseNotesInput').value.trim();
 
       const formData = new FormData();
-      formData.append('job_id', currentJobId);
+      formData.append('job_id', jobId);
       formData.append('operator_name', name);
       formData.append('decision', decision);
       formData.append('notes', notes);
@@ -3583,7 +3683,14 @@
           body: formData
         });
         const data = await res.json();
+        if (!res.ok || !data.release_result) throw new Error('No se pudo registrar la autorización.');
+        if (currentJobId !== jobId || currentReport !== releaseReport) return;
         const release = data.release_result;
+        currentReport.triple_result.release = release;
+        if (release.status === 'AUTHORIZED') currentReport.job_meta.authorized_sha256 = release.sha256;
+        else delete currentReport.job_meta.authorized_sha256;
+        const hashField = document.getElementById('resFileHash');
+        hashField.title = `PDF actual: ${currentReport.job_meta.current_sha256 || currentReport.job_meta.sha256}\nOriginal: ${currentReport.job_meta.original_sha256 || 'No registrado'}\nAutorizado: ${currentReport.job_meta.authorized_sha256 || 'No registrado'}`;
         const badge = document.getElementById('badgeRelease');
         badge.textContent = release.status;
         badge.className = release.status === 'AUTHORIZED' 
@@ -3596,7 +3703,7 @@
         if (panel) {
           panel.classList.remove('hidden');
           const summEl = document.getElementById('signedSummaryText');
-          summEl.innerHTML = `Registrado por <b>${name}</b> en el archivo oficial (ID: ${currentJobId}). Decisión: <i>${release.label}</i>.<br>Guardado en <code>${data.saved_location}</code>. Ya puedes descargar los PDFs oficiales:`;
+          summEl.innerHTML = `Registrado por <b>${escapeHtml(name)}</b> en el archivo oficial (ID: ${currentJobId}). Decisión: <i>${escapeHtml(release.label)}</i>.<br>Guardado en <code>${escapeHtml(data.saved_location)}</code>. Ya puedes descargar los PDFs oficiales:`;
           document.getElementById('signedDownloadPdfBtn').href = data.production_pdf_url || `/api/download-pdf/${currentJobId}`;
           document.getElementById('signedDownloadCertBtn').href = data.certificate_url || `/api/download-certificate/${currentJobId}`;
           const signedClientBtn = document.getElementById('signedDownloadClientReportBtn');
@@ -3632,12 +3739,14 @@
     }
 
     async function applyOverprintFix() {
+      const operationJobId = currentJobId, operationReport = currentReport;
       if (!currentJobId) {
         alert('No hay ningún trabajo activo. Sube un PDF primero.');
         return;
       }
       // Actualizar todos los botones de Auto-Trapping en la interfaz
       const allButtons = document.querySelectorAll('.btn-apply-overprint');
+      const savedControls = Array.from(allButtons, b => [b, b.innerHTML]);
       allButtons.forEach(b => {
         b.disabled = true;
         b.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Sobreimprimiendo...';
@@ -3654,8 +3763,9 @@
       });
 
       try {
-        const res = await fetch(`/api/apply-overprint/${currentJobId}`, { method: 'POST' });
+        const res = await fetch(`/api/apply-overprint/${operationJobId}`, { method: 'POST' });
         const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
         if (res.ok && data.status === 'success') {
           if (data.report) {
             currentReport = data.report;
@@ -3822,7 +3932,7 @@
         } else {
           const errMsg = data.detail || (data.errors && data.errors.join('; ')) || 'Error desconocido';
           statusEls.forEach(el => {
-            el.innerHTML = `<div class="text-xs text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-lg mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error: ${errMsg}</div>`;
+            el.innerHTML = `<div class="text-xs text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-lg mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error: ${escapeHtml(errMsg)}</div>`;
           });
           allButtons.forEach(b => {
             b.disabled = false;
@@ -3831,12 +3941,14 @@
         }
       } catch (err) {
         statusEls.forEach(el => {
-          el.innerHTML = `<div class="text-xs text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-lg mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error de red: ${err.message}</div>`;
+          el.innerHTML = `<div class="text-xs text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-lg mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error de red: ${escapeHtml(err.message)}</div>`;
         });
         allButtons.forEach(b => {
           b.disabled = false;
           b.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Reintentar Auto-Trapping';
         });
+      } finally {
+        savedControls.forEach(([b, text]) => { b.disabled = false; b.innerHTML = text; });
       }
     }
 
@@ -3844,6 +3956,7 @@
     // Fase 2: Corrección Contextual de Filetes Finos (Hairline Fixer)
     // -----------------------------------------------------------------------
     async function applyHairlineFix(btn) {
+      const operationJobId = currentJobId, operationReport = currentReport;
       if (!currentJobId) {
         alert('No hay ningún trabajo activo.');
         return;
@@ -3854,8 +3967,9 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Engrosando a 0,3 pt...';
 
       try {
-        const res = await fetch(`/api/fix-hairlines/${currentJobId}`, { method: 'POST' });
+        const res = await fetch(`/api/fix-hairlines/${operationJobId}`, { method: 'POST' });
         const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
         if (res.ok && data.status === 'success') {
           if (data.report) {
             currentReport = data.report;
@@ -3925,6 +4039,8 @@
         alert('Error de conexión al engrosar líneas finas.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
       }
     }
 
@@ -3932,6 +4048,7 @@
     // Fase 2: Corrección Contextual de OutputIntent ICC
     // -----------------------------------------------------------------------
     async function applyOutputIntentFix(btn) {
+      const operationJobId = currentJobId, operationReport = currentReport;
       if (!currentJobId) {
         alert('No hay ningún trabajo activo.');
         return;
@@ -3942,8 +4059,9 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Incrustando OutputIntent...';
 
       try {
-        const res = await fetch(`/api/fix-output-intent/${currentJobId}`, { method: 'POST' });
+        const res = await fetch(`/api/fix-output-intent/${operationJobId}`, { method: 'POST' });
         const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
         if (res.ok && data.status === 'success') {
           if (data.report) {
             currentReport = data.report;
@@ -3959,7 +4077,7 @@
               <div><i class="fa-solid fa-circle-check text-emerald-600 text-base"></i></div>
               <div class="flex-1">
                 <span class="font-bold">OutputIntent incrustado con éxito</span>
-                <p class="text-[11px] text-emerald-700">Se ha declarado formalmente la condición de impresión <strong>${iccName}</strong> en el catálogo del PDF. El RIP ya conoce el estándar de salida.</p>
+                <p class="text-[11px] text-emerald-700">Se ha declarado formalmente la condición de impresión <strong>${escapeHtml(iccName)}</strong> en el catálogo del PDF. El RIP ya conoce el estándar de salida.</p>
               </div>
               <a href="${data.download_url}" target="_blank" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-semibold transition flex items-center gap-1 shadow-xs">
                 <i class="fa-solid fa-download"></i> PDF Certificado
@@ -3972,7 +4090,7 @@
           if (badgeEl && data.applied_icc) {
             badgeEl.innerHTML = `
               <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                <i class="fa-solid fa-palette text-blue-500"></i> Perfil origen PDF: <strong>${data.applied_icc.identifier || 'ISO Coated v2 (FOGRA39)'}</strong>
+                <i class="fa-solid fa-palette text-blue-500"></i> Perfil origen PDF: <strong>${escapeHtml(data.applied_icc.identifier || 'ISO Coated v2 (FOGRA39)')}</strong>
               </span>
             `;
           }
@@ -4024,6 +4142,8 @@
         alert('Error de conexión al incrustar OutputIntent.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
       }
     }
 
@@ -4031,6 +4151,7 @@
     // Fase 2: Corrección Contextual de Cajas y Sangrado (BLEED_GEOMETRY_3MM)
     // -----------------------------------------------------------------------
     async function applyBleedGeometryFix(btn) {
+      const operationJobId = currentJobId, operationReport = currentReport;
       if (!currentJobId) {
         alert('No hay ningún trabajo activo.');
         return;
@@ -4041,8 +4162,9 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Ajustando cajas y sangrado...';
 
       try {
-        const res = await fetch(`/api/fix-bleed-geometry/${currentJobId}`, { method: 'POST' });
+        const res = await fetch(`/api/fix-bleed-geometry/${operationJobId}`, { method: 'POST' });
         const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
         if (res.ok && data.status === 'success') {
           if (data.report) {
             currentReport = data.report;
@@ -4118,6 +4240,8 @@
         alert('Error de conexión al ajustar sangrado.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
       }
     }
 
@@ -4125,6 +4249,7 @@
     // Fase 3: Generador de Sangrado Sintético por Reflejo (Mirror Bleed)
     // -----------------------------------------------------------------------
     async function applyMirrorBleedFix(btn) {
+      const operationJobId = currentJobId, operationReport = currentReport;
       if (!currentJobId) {
         alert('No hay ningún trabajo activo.');
         return;
@@ -4135,8 +4260,9 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Reflejando sangrado...';
 
       try {
-        const res = await fetch(`/api/generate-mirror-bleed/${currentJobId}`, { method: 'POST' });
+        const res = await fetch(`/api/generate-mirror-bleed/${operationJobId}`, { method: 'POST' });
         const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
         if (res.ok && data.status === 'success') {
           if (data.report) {
             currentReport = data.report;
@@ -4212,6 +4338,8 @@
         alert('Error de conexión al generar sangrado por reflejo.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
       }
     }
 
@@ -4219,6 +4347,7 @@
     // Fase 3: Inyector de Marcas de Imprenta (Printer Marks)
     // -----------------------------------------------------------------------
     async function applyPrinterMarks(btn) {
+      const operationJobId = currentJobId, operationReport = currentReport;
       if (!currentJobId) {
         alert('No hay ningún trabajo activo.');
         return;
@@ -4228,8 +4357,9 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Inyectando marcas...';
 
       try {
-        const res = await fetch(`/api/add-printer-marks/${currentJobId}`, { method: 'POST' });
+        const res = await fetch(`/api/add-printer-marks/${operationJobId}`, { method: 'POST' });
         const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
         if (res.ok && data.status === 'success') {
           if (data.report) {
             currentReport = data.report;
@@ -4266,6 +4396,8 @@
         alert('Error de conexión al añadir marcas de imprenta.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
       }
     }
 
@@ -4310,6 +4442,7 @@
     }
 
     async function applyTacLimiter(btn) {
+      const operationJobId = currentJobId, operationReport = currentReport;
       if (!currentJobId) {
         alert('No hay ningún trabajo activo.');
         return;
@@ -4320,8 +4453,9 @@
       btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1"></i> Limitando TAC a ${maxTac} %...`;
 
       try {
-        const res = await fetch(`/api/limit-tac/${currentJobId}?max_tac=${maxTac}`, { method: 'POST' });
+        const res = await fetch(`/api/limit-tac/${operationJobId}?max_tac=${maxTac}`, { method: 'POST' });
         const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
         if (res.ok && data.status === 'success') {
           if (data.report) {
             currentReport = data.report;
@@ -4360,6 +4494,8 @@
         alert('Error de conexión al limitar TAC.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
       }
     }
 
@@ -4367,6 +4503,7 @@
     // Fase 2: Trazador / Curvado Vectorial de Fuentes (USED_FONTS_EMBEDDED)
     // -----------------------------------------------------------------------
     async function applyFontOutlineFix(btn, pageNum) {
+      const operationJobId = currentJobId, operationReport = currentReport;
       if (!currentJobId) {
         alert('No hay ningún trabajo activo.');
         return;
@@ -4378,8 +4515,9 @@
 
       try {
         const queryParams = pageNum ? `?pages=${pageNum}` : '';
-        const res = await fetch(`/api/outline-fonts/${currentJobId}${queryParams}`, { method: 'POST' });
+        const res = await fetch(`/api/outline-fonts/${operationJobId}${queryParams}`, { method: 'POST' });
         const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
         if (res.ok && data.status === 'success') {
           if (data.report) {
             currentReport = data.report;
@@ -4449,6 +4587,8 @@
         alert('Error de conexión al trazar tipografías a curvas.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
       }
     }
 
@@ -4456,6 +4596,7 @@
     // Fase 2: Conversión Contextual de Imágenes RGB a CMYK (SOURCE_COLOR_DIAGNOSTIC)
     // -----------------------------------------------------------------------
     async function applyCmykImageConversion(btn) {
+      const operationJobId = currentJobId, operationReport = currentReport;
       if (!currentJobId) {
         alert('No hay ningún trabajo activo.');
         return;
@@ -4465,8 +4606,9 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Convirtiendo a CMYK...';
 
       try {
-        const res = await fetch(`/api/convert-to-cmyk/${currentJobId}`, { method: 'POST' });
+        const res = await fetch(`/api/convert-to-cmyk/${operationJobId}`, { method: 'POST' });
         const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
         if (res.ok && data.status === 'success') {
           currentReport = data.report;
           renderResults(currentReport);
@@ -4480,23 +4622,28 @@
         alert('Error de conexión al convertir imágenes a CMYK.');
         btn.disabled = false;
         btn.innerHTML = origHtml;
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
       }
     }
 
     async function applyVarnishOverprintFix() {
+      const operationJobId = currentJobId, operationReport = currentReport;
       if (!currentJobId) {
         alert('No hay ningún trabajo activo. Sube un PDF primero.');
         return;
       }
       const allButtons = document.querySelectorAll('.btn-apply-varnish-overprint');
+      const savedControls = Array.from(allButtons, b => [b, b.innerHTML]);
       allButtons.forEach(b => {
         b.disabled = true;
         b.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sobreimprimiendo...';
       });
 
       try {
-        const res = await fetch(`/api/apply-varnish-overprint/${currentJobId}`, { method: 'POST' });
+        const res = await fetch(`/api/apply-varnish-overprint/${operationJobId}`, { method: 'POST' });
         const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
         if (res.ok && data.status === 'success') {
           if (data.report) {
             currentReport = data.report;
@@ -4595,10 +4742,13 @@
           b.disabled = false;
           b.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Reintentar';
         });
+      } finally {
+        savedControls.forEach(([b, text]) => { b.disabled = false; b.innerHTML = text; });
       }
     }
 
     async function convertImagesToCmyk() {
+      const operationJobId = currentJobId, operationReport = currentReport;
       if (!currentJobId) {
         alert('No hay ningún trabajo activo. Sube un PDF primero.');
         return;
@@ -4627,11 +4777,12 @@
       }
 
       try {
-        const res = await fetch(`/api/convert-to-cmyk/${currentJobId}`, {
+        const res = await fetch(`/api/convert-to-cmyk/${operationJobId}`, {
           method: 'POST',
           body: formData
         });
         const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
 
         if (!res.ok || data.status !== 'success') {
           const errMsg = data.detail || data.errors?.join('; ') || 'Error desconocido';
@@ -4640,14 +4791,14 @@
               <i class="fa-solid fa-circle-xmark mt-0.5 text-red-500"></i>
               <div>
                 <p class="font-semibold">Error en la conversión</p>
-                <p class="mt-0.5">${errMsg}</p>
+                <p class="mt-0.5">${escapeHtml(errMsg)}</p>
               </div>
             </div>`;
           return;
         }
 
         const warnings = data.errors?.length > 0
-          ? `<p class="mt-1 text-amber-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Advertencias en ${data.errors.length} imagen(es) — ${data.errors.slice(0,2).join('; ')}</p>`
+          ? `<p class="mt-1 text-amber-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Advertencias en ${data.errors.length} imagen(es) — ${escapeHtml(data.errors.slice(0,2).join('; '))}</p>`
           : '';
 
         statusEl.innerHTML = `
@@ -4685,7 +4836,7 @@
         statusEl.innerHTML = `
           <div class="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
             <i class="fa-solid fa-circle-xmark mt-0.5"></i>
-            <span>Error de red o del servidor: ${err.message}</span>
+            <span>Error de red o del servidor: ${escapeHtml(err.message)}</span>
           </div>`;
       } finally {
         btn.disabled = false;
@@ -4735,22 +4886,24 @@
       spots.forEach(spot => {
         const label = document.createElement('label');
         label.className = 'flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 p-1 rounded transition-colors';
-        const spotEscaped = spot.name.replace(/'/g, "\\'");
+        const spotColor = /^#[0-9a-f]{6}$/i.test(spot.color_hex || '') ? spot.color_hex : '#808080';
         label.innerHTML = `
           <span class="flex items-center gap-2">
-            <input type="checkbox" checked id="spot_${spotEscaped}" onchange="toggleSpotPlate('${spotEscaped}', this.checked)" class="rounded text-blue-600 focus:ring-blue-500 spot-plate-chk">
-            <span class="font-medium text-slate-800">${spot.name}</span>
+            <input type="checkbox" checked class="rounded text-blue-600 focus:ring-blue-500 spot-plate-chk">
+            <span class="font-medium text-slate-800">${escapeHtml(spot.name)}</span>
           </span>
           <div class="flex items-center gap-1.5">
-            <span class="text-[9px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-500 uppercase">${spot.type}</span>
-            <span class="w-3.5 h-3.5 rounded border border-slate-300 shadow-2xs" style="background-color: ${spot.color_hex};" title="${spot.name} (${spot.color_hex})"></span>
+            <span class="text-[9px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-500 uppercase">${escapeHtml(spot.type)}</span>
+            <span class="w-3.5 h-3.5 rounded border border-slate-300 shadow-2xs" style="background-color: ${spotColor};" title="${escapeHtml(spot.name)} (${spotColor})"></span>
           </div>
         `;
+        label.querySelector('input').addEventListener('change', event => toggleSpotPlate(spot.name, event.target.checked));
         listEl.appendChild(label);
       });
     }
 
     async function convertSpotsToCmyk() {
+      const operationJobId = currentJobId, operationReport = currentReport;
       if (!currentJobId) {
         alert('No hay ningún trabajo activo.');
         return;
@@ -4769,8 +4922,9 @@
       }
 
       try {
-        const res = await fetch(`/api/convert-spots-to-cmyk/${currentJobId}`, { method: 'POST' });
+        const res = await fetch(`/api/convert-spots-to-cmyk/${operationJobId}`, { method: 'POST' });
         const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
 
         if (res.ok && data.status === 'success') {
           if (data.report) {
@@ -4780,7 +4934,7 @@
           }
 
           const nConverted = data.spots_converted.length;
-          const detailsStr = data.spots_converted.map(s => `<strong>${s.name}</strong> (${s.cmyk_str})`).join('<br>');
+          const detailsStr = data.spots_converted.map(s => `<strong>${escapeHtml(s.name)}</strong> (${escapeHtml(s.cmyk_str)})`).join('<br>');
 
           if (statusEl) {
             statusEl.innerHTML = `
@@ -4861,7 +5015,7 @@
         } else {
           const errMsg = data.detail || (data.errors && data.errors.join('; ')) || 'Error al procesar la conversión';
           if (statusEl) {
-            statusEl.innerHTML = `<div class="p-2 rounded bg-red-50 text-red-700 text-xs mt-1 border border-red-200"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${errMsg}</div>`;
+            statusEl.innerHTML = `<div class="p-2 rounded bg-red-50 text-red-700 text-xs mt-1 border border-red-200"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${escapeHtml(errMsg)}</div>`;
           }
           if (btn) {
             btn.disabled = false;
@@ -4870,7 +5024,7 @@
         }
       } catch (err) {
         if (statusEl) {
-          statusEl.innerHTML = `<div class="p-2 rounded bg-red-50 text-red-700 text-xs mt-1 border border-red-200"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error de red: ${err.message}</div>`;
+          statusEl.innerHTML = `<div class="p-2 rounded bg-red-50 text-red-700 text-xs mt-1 border border-red-200"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Error de red: ${escapeHtml(err.message)}</div>`;
         }
         if (btn) {
           btn.disabled = false;
@@ -5226,6 +5380,7 @@
 
     async function executeBatchFix(btn) {
       if (!currentJobId) return;
+      const jobId = currentJobId;
       const trapping    = document.getElementById('batchChkTrapping')?.checked ?? true;
       const hairlines   = document.getElementById('batchChkHairlines')?.checked ?? true;
       const fonts       = document.getElementById('batchChkFonts')?.checked ?? true;
@@ -5256,7 +5411,7 @@
           tac,
           printer_marks: marks
         });
-        const resp = await fetch(`/api/batch-fix/${currentJobId}?${params.toString()}`, { method: 'POST' });
+        const resp = await fetch(`/api/batch-fix/${jobId}?${params.toString()}`, { method: 'POST' });
         const rawText = await resp.text();
         let data = {};
         try {
@@ -5270,11 +5425,17 @@
           };
         }
 
+        if (currentJobId !== jobId) return;
         const resultArea    = document.getElementById('batchResultArea');
         const resultContent = document.getElementById('batchResultContent');
         resultArea.classList.remove('hidden');
 
         if (resp.ok && data.success) {
+          if (!data.report?.job_summary || data.report?.job_meta?.job_id !== jobId) {
+            throw new Error('El servidor no ha devuelto el informe verificado del trabajo.');
+          }
+          currentReport = data.report;
+          renderResults(currentReport);
           const escapeBHtml = (str) => {
             if (!str) return '';
             return String(str)
@@ -5364,7 +5525,7 @@
             mainPdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
           }
           if (mainPdfBtnLabel) {
-            mainPdfBtnLabel.textContent = 'Descargar PDF (Lote OK)';
+            mainPdfBtnLabel.textContent = 'Descargar PDF corregido';
           }
 
           btn.disabled = false;
@@ -5384,7 +5545,7 @@
             <p class="font-bold text-red-800 flex items-center gap-1.5">
               <i class="fa-solid fa-circle-xmark text-red-600"></i> ${isExpired ? 'Sesión de trabajo expirada' : 'Error en el lote'}
             </p>
-            <p class="text-red-700 mt-1 leading-relaxed">${msg}</p>
+            <p class="text-red-700 mt-1 leading-relaxed">${escapeHtml(msg)}</p>
             ${isExpired ? `
               <div class="mt-2.5 pt-2 border-t border-red-200">
                 <button onclick="closeBatchFixModal(); window.scrollTo({top: 0, behavior: 'smooth'});"
@@ -5397,6 +5558,7 @@
         }
       } catch (err) {
         console.error('Batch fix error:', err);
+        if (currentJobId !== jobId) return;
         const resultArea    = document.getElementById('batchResultArea');
         const resultContent = document.getElementById('batchResultContent');
         resultArea.classList.remove('hidden');
@@ -5407,13 +5569,19 @@
             <i class="fa-solid fa-triangle-exclamation text-red-600"></i> Error de conexión al ejecutar el lote
           </p>
           <p class="text-red-700 mt-1 leading-snug">
-            ${isTimeout ? 'La conexión con el servidor ha caducado por exceso de tiempo.' : (err.message || 'No se pudo comunicar con el servidor.')}
+            ${escapeHtml(isTimeout ? 'La conexión con el servidor ha caducado por exceso de tiempo.' : (err.message || 'No se pudo comunicar con el servidor.'))}
           </p>
           <div class="mt-2 text-[11px] text-slate-600">
             Consejo: Si el archivo es muy pesado, prueba de nuevo tras esta optimización o desmarca opciones no críticas.
           </div>`;
         btn.disabled = false; btn.innerHTML = origHtml;
         if (cancelBtn) cancelBtn.disabled = false;
+      } finally {
+        if (currentJobId !== jobId) {
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+          if (cancelBtn) cancelBtn.disabled = false;
+        }
       }
     }
 
@@ -5533,7 +5701,7 @@
               msgs.push(...plan.pdf_warnings);
             }
             if (msgs.length > 0) {
-              warningBox.innerHTML = msgs.map(m => `<div class="py-0.5">${m}</div>`).join('');
+              warningBox.innerHTML = msgs.map(m => `<div class="py-0.5">${escapeHtml(m)}</div>`).join('');
               warningBox.classList.remove('hidden');
             } else {
               warningBox.classList.add('hidden');
@@ -5737,7 +5905,7 @@
         }
 
         // Render Cards
-        listContainer.innerHTML = currentBarcodeFindings.map(item => {
+        listContainer.innerHTML = currentBarcodeFindings.map((item, index) => {
           const col = item.color_analysis;
           const isError = item.status === 'ERROR';
           const isOk = item.status === 'OK';
@@ -5751,27 +5919,27 @@
                 <img src="${previewUrl}" alt="Preview" class="w-24 h-16 object-contain bg-white rounded border border-slate-200 p-1 shadow-2xs shrink-0">
                 <div class="space-y-1">
                   <div class="flex items-center gap-2">
-                    <span class="text-xs font-bold text-slate-800">${item.type}</span>
+                    <span class="text-xs font-bold text-slate-800">${escapeHtml(item.type)}</span>
                     <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeClass}">${item.status}</span>
                     <span class="text-[10px] text-slate-400">Pág ${item.page_number} (${item.dimensions_mm[0]} × ${item.dimensions_mm[1]} mm)</span>
                   </div>
                   <div class="text-xs font-mono font-bold text-indigo-700 bg-slate-100 px-2 py-0.5 rounded inline-block">
-                    ${item.payload}
+                    ${escapeHtml(item.payload)}
                   </div>
                   <div class="text-[11px] text-slate-600 flex items-center gap-3">
-                    <span>Tintas: <strong>${col.bar_color_desc}</strong></span>
+                    <span>Tintas: <strong>${escapeHtml(col.bar_color_desc)}</strong></span>
                     <span>TAC: <strong>${col.tac_pct}%</strong></span>
                   </div>
                   ${item.reasons.length > 0 ? `
                     <div class="text-[11px] text-rose-700 font-medium">
-                      ${item.reasons.map(r => `<div>⚠ ${r}</div>`).join('')}
+                      ${item.reasons.map(r => `<div>⚠ ${escapeHtml(r)}</div>`).join('')}
                     </div>
                   ` : ''}
                 </div>
               </div>
 
               ${item.fixable ? `
-                <button onclick="executeFixBarcodes('${item.id}', this)" class="shrink-0 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                <button data-barcode-index="${index}" class="shrink-0 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
                   <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Corregir a 100% K
                 </button>
               ` : `
@@ -5782,6 +5950,9 @@
             </div>
           `;
         }).join('');
+        listContainer.querySelectorAll('[data-barcode-index]').forEach(button => {
+          button.addEventListener('click', () => executeFixBarcodes(currentBarcodeFindings[Number(button.dataset.barcodeIndex)].id, button));
+        });
 
       } catch (err) {
         console.error('Error cargando inspección de códigos:', err);
@@ -5791,6 +5962,7 @@
 
     async function executeFixBarcodes(barcodeId = null, btn = null) {
       if (!currentJobId) return;
+      const jobId = currentJobId;
 
       const origHtml = btn ? btn.innerHTML : null;
       if (btn) {
@@ -5804,7 +5976,7 @@
       }
 
       try {
-        const resp = await fetch(`/api/barcodes/fix/${currentJobId}`, {
+        const resp = await fetch(`/api/barcodes/fix/${jobId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -5816,7 +5988,12 @@
         });
 
         const res = await resp.json();
+        if (currentJobId !== jobId) return;
         if (resp.ok && res.status === 'success') {
+          if (res.report) {
+            currentReport = res.report;
+            renderResults(currentReport);
+          }
           // Re-inspeccionar para actualizar la vista
           await loadBarcodeInspection();
         } else {
@@ -5943,7 +6120,7 @@
           <tr>
             <td colspan="6" class="py-8 text-center text-slate-500">
               <i class="fa-solid fa-spinner fa-spin text-sky-600 text-xl mb-2 block"></i>
-              Subiendo y analizando ${files.length} archivo(s) en paralelo...
+              Subiendo y analizando ${files.length} archivo(s)...
             </td>
           </tr>
         `;
@@ -6030,7 +6207,7 @@
             </td>
             <td class="py-2.5 px-3 text-[11px] text-slate-600">
               ${item.errors_count > 0 ? `<span class="text-rose-600 font-bold">${item.errors_count} error(es)</span> · ` : ''}
-              ${item.warnings_count} adv · <span class="text-slate-400">${item.summary || 'Completado'}</span>
+              ${item.warnings_count} adv · <span class="text-slate-400">${escapeHtml(item.summary || 'Completado')}</span>
             </td>
             <td class="py-2.5 px-3 text-right">
               <div class="inline-flex items-center gap-1.5">
@@ -6144,17 +6321,31 @@
       }
     }
 
-    function loadBatchJobIntoInspector(jobId) {
-      currentJobId = jobId;
-      closeBatchHotfolderModal();
-      fetch(`/api/report/${jobId}`)
-        .then(r => r.json())
-        .then(data => {
-          if (data && data.triple_result) {
-            renderResults(data);
-          }
-        })
-        .catch(err => console.error('Error cargando trabajo:', err));
+    async function loadBatchJobIntoInspector(jobId) {
+      const requestId = (loadBatchJobIntoInspector.requestId || 0) + 1;
+      loadBatchJobIntoInspector.requestId = requestId;
+      const previousReport = currentReport;
+      const previousId = currentJobId;
+      try {
+        const response = await fetch(`/api/report/${encodeURIComponent(jobId)}`);
+        if (!response.ok) throw new Error('No se pudo cargar el trabajo seleccionado.');
+        const data = await response.json();
+        if (!data?.triple_result?.technical || !data.job_summary || data.job_meta?.job_id !== jobId) {
+          throw new Error('El informe del trabajo está incompleto.');
+        }
+        // Keep the active ID and its criteria together, and ignore stale responses.
+        if (loadBatchJobIntoInspector.requestId !== requestId ||
+            currentReport !== previousReport || currentJobId !== previousId) return;
+        currentReport = data;
+        currentJobId = jobId;
+        renderResults(data);
+        closeBatchHotfolderModal();
+      } catch (err) {
+        if (loadBatchJobIntoInspector.requestId === requestId) {
+          console.error('Error cargando trabajo:', err);
+          alert(err.message || 'Error cargando el trabajo.');
+        }
+      }
     }
 
     // --- HOT-FOLDER FUNCTIONS ---
@@ -6224,13 +6415,13 @@
                 : 'bg-rose-100 text-rose-800';
               return `
                 <tr class="hover:bg-slate-50 transition">
-                  <td class="py-2 px-3 text-slate-400 font-mono text-[11px]">${ev.timestamp}</td>
+                  <td class="py-2 px-3 text-slate-400 font-mono text-[11px]">${escapeHtml(ev.timestamp)}</td>
                   <td class="py-2 px-3 font-semibold text-slate-800">${escapeHtml(ev.filename)}</td>
                   <td class="py-2 px-3 text-center">
                     <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">${ev.status}</span>
                   </td>
-                  <td class="py-2 px-3 text-slate-600 text-[11px]">${ev.message}</td>
-                  <td class="py-2 px-3 font-mono text-slate-500 text-[11px]">${ev.destination || '-'}</td>
+                  <td class="py-2 px-3 text-slate-600 text-[11px]">${escapeHtml(ev.message)}</td>
+                  <td class="py-2 px-3 font-mono text-slate-500 text-[11px]">${escapeHtml(ev.destination || '-')}</td>
                 </tr>
               `;
             }).join('');
@@ -6421,20 +6612,20 @@
           const icon = isCrit ? 'fa-triangle-exclamation text-rose-600' : 'fa-circle-exclamation text-amber-600';
           const badgeTag = isSpine
             ? '<span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-bold text-[9px]">LOMO</span>'
-            : `<span class="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-bold text-[9px] uppercase">${iss.side}</span>`;
+            : `<span class="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-bold text-[9px] uppercase">${escapeHtml(iss.side)}</span>`;
 
           return `
             <div class="p-2.5 rounded-xl border ${bgBorder} text-xs flex items-start gap-2 shadow-2xs">
               <i class="fa-solid ${icon} mt-0.5 shrink-0"></i>
               <div class="space-y-0.5 flex-1 min-w-0">
                 <div class="flex items-center justify-between gap-1">
-                  <span class="font-bold font-mono truncate text-slate-800 bg-white/70 px-1 rounded">${iss.content}</span>
+                  <span class="font-bold font-mono truncate text-slate-800 bg-white/70 px-1 rounded">${escapeHtml(iss.content)}</span>
                   <div class="flex items-center gap-1 shrink-0">
                     ${badgeTag}
                     <strong class="${isCrit ? 'text-rose-700' : 'text-amber-700'}">${iss.distance_mm} mm</strong>
                   </div>
                 </div>
-                <p class="text-[10px] text-slate-600">${iss.description}</p>
+                <p class="text-[10px] text-slate-600">${escapeHtml(iss.description)}</p>
               </div>
             </div>
           `;

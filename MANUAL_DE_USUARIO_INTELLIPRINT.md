@@ -651,7 +651,7 @@ Utiliza el índice y la búsqueda del navegador, del lector PDF o de Word para l
 
 ### Conservación temporal y reinicios
 
-Los trabajos no forman un archivo documental permanente. La limpieza automática usa una referencia aproximada de cuatro horas para los informes y se ejecuta periódicamente, aproximadamente cada hora. La actividad que actualiza un informe puede influir en su fecha de modificación; no utilices ese detalle como garantía de conservación.
+Los trabajos se conservan durante 24 horas desde la última modificación de los archivos del trabajo. La limpieza automática se ejecuta aproximadamente cada hora y elimina los trabajos que han superado ese plazo.
 
 Un reinicio o un despliegue en un almacenamiento efímero también puede eliminar trabajos. Los retos incluidos pueden recargarse desde su banco de prácticas; eso no significa que cualquier PDF de un usuario pueda recuperarse. Un QR puede dejar de encontrar su trabajo después de una limpieza o reinicio.
 

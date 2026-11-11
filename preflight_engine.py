@@ -1,11 +1,15 @@
 import os
 import re
 import json
+import math
 import pymupdf as fitz
 import pikepdf
 from decimal import Decimal
 from pathlib import Path
 from pdf_utils import iter_resources
+from security_limits import validate_pdf_resources
+from pdf_graphics import (GraphicsState, resolve_color_space, new_graphics_state,
+                          form_initial_state, effective_font_size, painting_components, visible_text)
 from icc_manager import detect_pdf_output_intent, apply_icc_to_pdf
 from spellcheck_engine import PrepressSpellChecker
 
@@ -20,18 +24,8 @@ def is_pantone_name(name):
     return 'pantone' in clean or 'pms' in clean
 
 def resolve_cs(cs_ref, resources):
-    if isinstance(cs_ref, pikepdf.Name):
-        cs_str = str(cs_ref).lstrip('/')
-        if resources and '/ColorSpace' in resources and cs_ref in resources['/ColorSpace']:
-            return resolve_cs(resources['/ColorSpace'][cs_ref], resources)
-        return (cs_str, None)
-    elif isinstance(cs_ref, pikepdf.Array) and len(cs_ref) > 0:
-        cs_type = str(cs_ref[0]).lstrip('/')
-        if cs_type in ['Separation', 'DeviceN'] and len(cs_ref) > 1:
-            spot_name = str(cs_ref[1]).lstrip('/')
-            return (cs_type, spot_name)
-        return (cs_type, None)
-    return (str(cs_ref), None)
+    return resolve_color_space(cs_ref, resources)
+
 
 def _lab_to_rgb(L, a, b):
     try:
@@ -127,17 +121,7 @@ def extract_pdf_spot_colors(pike_doc) -> list[dict]:
 
 
 def _has_visible_text(op_str: str, operands: list) -> bool:
-    """Retorna True si la operacion contiene texto visible (no solo espacios en blanco)."""
-    if not operands:
-        return False
-    txt = []
-    if op_str in ('Tj', "'", '"'):
-        txt.append(str(operands[0]))
-    elif op_str == 'TJ':
-        for item in operands[0]:
-            if not isinstance(item, (int, float)):
-                txt.append(str(item))
-    return bool(''.join(txt).strip())
+    return visible_text(op_str, operands)
 
 
 def is_fill_color_white(cs_type, fill_color):
@@ -164,122 +148,31 @@ def is_stroke_color_white(cs_type, stroke_color):
         return all(c <= 0.01 for c in stroke_color[:4])
     return False
 
-def scan_content_stream(commands, resources, page_num, overprint_data):
-    ext_gstates = {}
-    if resources and '/ExtGState' in resources:
-        for k, v in resources['/ExtGState'].items():
-            ext_gstates[k] = v
-
-    xobjects = {}
-    if resources and '/XObject' in resources:
-        for k, v in resources['/XObject'].items():
-            xobjects[k] = v
-
-    state_stack = []
-    state = {
-        'op': False,
-        'OP': False,
-        'OPM': 0,
-        'fill_cs': ('DeviceGray', None),
-        'stroke_cs': ('DeviceGray', None),
-        'fill_color': (0,),
-        'stroke_color': (0,),
-        'text_render_mode': 0,
-        'font_size': 0.0,          # tamaño de fuente actual (pt)
-        'ctm_scale': 1.0,          # escala del CTM para calcular tamaño real
-        'line_width': 1.0,         # grosor de línea en pt (por defecto 1.0 en spec PDF)
-    }
-
-    for operands, operator in commands:
+def scan_content_stream(commands, resources, page_num, overprint_data, initial_state=None, ancestors=()):
+    resources = resources if resources is not None else pikepdf.Dictionary()
+    if len(ancestors) > 50:
+        raise ValueError('Demasiados formularios PDF anidados.')
+    tracker = GraphicsState(initial_state)
+    xobjects = resources.get('/XObject', {})
+    for command in commands:
+        if isinstance(command, pikepdf.ContentStreamInlineImage):
+            continue
+        operands, operator = command
         op_str = str(operator)
-
-        if op_str == 'q':
-            state_stack.append(dict(state))
-        elif op_str == 'Q':
-            if state_stack:
-                state = state_stack.pop()
-        elif op_str == 'gs':
-            if operands and operands[0] in ext_gstates:
-                gs_dict = ext_gstates[operands[0]]
-                if '/op' in gs_dict:
-                    state['op'] = bool(gs_dict['/op'])
-                if '/OP' in gs_dict:
-                    state['OP'] = bool(gs_dict['/OP'])
-                if '/OPM' in gs_dict:
-                    state['OPM'] = int(gs_dict['/OPM'])
-        elif op_str == 'Tr':
-            if operands:
-                try:
-                    state['text_render_mode'] = int(operands[0])
-                except Exception:
-                    pass
-        elif op_str == 'Tf':
-            # Tf fontname fontsize — rastrear tamaño de fuente actual
-            if len(operands) >= 2:
-                try:
-                    state['font_size'] = float(operands[1])
-                except Exception:
-                    pass
-        elif op_str == 'cm':
-            # cm a b c d e f — actualizar escala aproximada del CTM
-            if len(operands) >= 6:
-                try:
-                    import math
-                    a, b = float(operands[0]), float(operands[1])
-                    state['ctm_scale'] = math.sqrt(a*a + b*b)
-                except Exception:
-                    pass
-        elif op_str == 'w':
-            # w line_width — grosor de trazo en espacio de usuario
-            if operands:
-                try:
-                    state['line_width'] = float(operands[0])
-                except Exception:
-                    pass
-        elif op_str == 'g':
-            state['fill_cs'] = ('DeviceGray', None)
-            state['fill_color'] = tuple(float(x) for x in operands)
-        elif op_str == 'G':
-            state['stroke_cs'] = ('DeviceGray', None)
-            state['stroke_color'] = tuple(float(x) for x in operands)
-        elif op_str == 'k':
-            state['fill_cs'] = ('DeviceCMYK', None)
-            state['fill_color'] = tuple(float(x) for x in operands)
-        elif op_str == 'K':
-            state['stroke_cs'] = ('DeviceCMYK', None)
-            state['stroke_color'] = tuple(float(x) for x in operands)
-        elif op_str == 'rg':
-            state['fill_cs'] = ('DeviceRGB', None)
-            state['fill_color'] = tuple(float(x) for x in operands)
-        elif op_str == 'RG':
-            state['stroke_cs'] = ('DeviceRGB', None)
-            state['stroke_color'] = tuple(float(x) for x in operands)
-        elif op_str == 'cs':
-            if operands:
-                state['fill_cs'] = resolve_cs(operands[0], resources)
-        elif op_str == 'CS':
-            if operands:
-                state['stroke_cs'] = resolve_cs(operands[0], resources)
-        elif op_str in ['sc', 'scn']:
-            state['fill_color'] = tuple(float(x) for x in operands if isinstance(x, (int, float, Decimal)))
-        elif op_str in ['SC', 'SCN']:
-            state['stroke_color'] = tuple(float(x) for x in operands if isinstance(x, (int, float, Decimal)))
-        elif op_str == 'Do':
-            if operands and operands[0] in xobjects:
-                xobj = xobjects[operands[0]]
-                if isinstance(xobj, pikepdf.Stream) and xobj.get('/Subtype') == '/Form':
-                    sub_resources = xobj.get('/Resources', resources)
-                    try:
-                        sub_cmds = list(pikepdf.parse_content_stream(xobj))
-                        scan_content_stream(sub_cmds, sub_resources, page_num, overprint_data)
-                    except Exception:
-                        pass
+        state = tracker.feed(operands, op_str, resources)
+        white_counted = False
+        if op_str == 'Do' and operands:
+            form = xobjects.get(operands[0])
+            if form is not None and str(form.get('/Subtype')) == '/Form':
+                if form.objgen in ancestors:
+                    raise ValueError('Referencia circular entre formularios PDF.')
+                scan_content_stream(list(pikepdf.parse_content_stream(form)),
+                                    form.get('/Resources', resources), page_num, overprint_data,
+                                    form_initial_state(form, state), ancestors + (form.objgen,))
 
         # Text operations
-        elif op_str in ['Tj', "'", '"', 'TJ']:
-            mode = state['text_render_mode']
-            is_fill = (mode in [0, 2])
-            is_stroke = (mode in [1, 2])
+        if op_str in ['Tj', "'", '"', 'TJ']:
+            is_fill, is_stroke = painting_components(op_str, operands, state)
 
             is_dark_black = False
             k_percent = 100
@@ -319,8 +212,8 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
                         })
 
             # Comprobar texto blanco en sobreimpresión (Error Crítico: desaparece en plancha)
-            if not spot_name and _has_visible_text(op_str, operands):
-                is_white_fill = is_fill and is_fill_color_white(cs_type, state['fill_color'])
+            if _has_visible_text(op_str, operands):
+                is_white_fill = is_fill and not spot_name and is_fill_color_white(cs_type, state['fill_color'])
                 stroke_cs_type, stroke_spot = state['stroke_cs']
                 is_white_stroke = is_stroke and not stroke_spot and is_stroke_color_white(stroke_cs_type, state['stroke_color'])
                 if (is_white_fill and state['op']) or (is_white_stroke and state['OP']):
@@ -335,13 +228,16 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
                             "message": f"Texto blanco configurado para sobreimprimir en pág {page_num}. En plancha se borrará por completo al no calar las tintas inferiores."
                         })
 
-            if spot_name:
-                check_spot(spot_name, state['op'] if is_fill else state['OP'], page_num, overprint_data, "texto")
+            if is_fill and spot_name:
+                check_spot(spot_name, state['op'], page_num, overprint_data, "texto")
+            stroke_spot = state['stroke_cs'][1]
+            if is_stroke and stroke_spot:
+                check_spot(stroke_spot, state['OP'], page_num, overprint_data, "texto")
 
             # Comprobar negro enriquecido en texto pequeño (< 12 pt)
             # En imprenta offset el negro enriquecido en cuerpo pequeño provoca halos por desajuste de registro
             if is_fill and not spot_name and _has_visible_text(op_str, operands):
-                font_pt = state.get('font_size', 0.0) * state.get('ctm_scale', 1.0)
+                font_pt = effective_font_size(state)
                 is_small = 0 < font_pt < 12.0
                 cs_type_f, _ = state['fill_cs']
                 if is_small and cs_type_f == 'DeviceCMYK' and len(state['fill_color']) >= 4:
@@ -361,12 +257,13 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
                             })
 
         # Vector fills
-        elif op_str in ['f', 'F', 'f*', 'b', 'b*', 'B', 'B*']:
+        if op_str in ['f', 'F', 'f*', 'b', 'b*', 'B', 'B*']:
             cs_type, spot_name = state['fill_cs']
             if spot_name:
                 check_spot(spot_name, state['op'], page_num, overprint_data, "relleno")
             elif state['op'] and is_fill_color_white(cs_type, state['fill_color']):
                 overprint_data["white_overprint"] += 1
+                white_counted = True
                 if not any(inc["page"] == page_num and inc["type"] == "WHITE_OVERPRINT" for inc in overprint_data["incidents"]):
                     overprint_data["incidents"].append({
                         "page": page_num,
@@ -378,12 +275,13 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
                     })
 
         # Vector strokes
-        elif op_str in ['s', 'S', 'b', 'b*', 'B', 'B*']:
+        if op_str in ['s', 'S', 'b', 'b*', 'B', 'B*']:
             cs_type, spot_name = state['stroke_cs']
             if spot_name:
                 check_spot(spot_name, state['OP'], page_num, overprint_data, "trazo")
             elif state['OP'] and is_stroke_color_white(cs_type, state['stroke_color']):
-                overprint_data["white_overprint"] += 1
+                if not white_counted:
+                    overprint_data["white_overprint"] += 1
                 if not any(inc["page"] == page_num and inc["type"] == "WHITE_OVERPRINT" for inc in overprint_data["incidents"]):
                     overprint_data["incidents"].append({
                         "page": page_num,
@@ -411,8 +309,15 @@ def scan_content_stream(commands, resources, page_num, overprint_data):
                         "message": f"Se detectan trazos de {effective_lw:.2f} pt en pág {page_num}; el perfil exige {minimum_line_width:.2f} pt. En plancha CTP o imprenta pueden romperse o no imprimirse.",
                         "can_autofix": True,
                     })
+    if tracker.stack:
+        raise ValueError('El PDF contiene bloques q/Q sin equilibrar.')
+
 
 def check_spot(spot_name, is_overprinting, page_num, overprint_data, context="objeto"):
+    if isinstance(spot_name, tuple):
+        for name in spot_name:
+            check_spot(name, is_overprinting, page_num, overprint_data, context)
+        return
     if is_varnish_name(spot_name):
         if is_overprinting:
             overprint_data["varnish_overprint"] += 1
@@ -579,6 +484,8 @@ class IntelliPrintEngine:
         allow_spot_colors = prof.get("allow_spot_colors", True)
         require_fonts_embedded = prof.get("require_fonts_embedded", True)
 
+        validate_pdf_resources(pdf_path)
+
         # Inspect original OutputIntent of uploaded PDF before applying any custom choices
         original_icc_info = detect_pdf_output_intent(pdf_path)
 
@@ -720,31 +627,35 @@ class IntelliPrintEngine:
         images_inventory = []
         for p_idx in range(page_count):
             page = doc[p_idx]
-            img_list = page.get_images(full=True)
+            # Actual paint occurrences include reused XObjects, Forms and inline images.
+            img_list = page.get_image_info(xrefs=True)
             total_images += len(img_list)
 
             for i_idx, img in enumerate(img_list):
-                xref = img[0]
-                base_img = doc.extract_image(xref)
-                if not base_img:
-                    continue
-
-                cs = base_img.get("colorspace", "Desconocido")
-                width_px = base_img.get("width", 0)
-                height_px = base_img.get("height", 0)
-
-                rects = page.get_image_rects(xref)
+                xref = img.get("xref", 0)
+                cs = img.get("colorspace", "Desconocido")
+                width_px = img.get("width", 0)
+                height_px = img.get("height", 0)
                 dpi_x, dpi_y = 0, 0
                 effective_dpi = 0
                 placed_w_mm, placed_h_mm = 0.0, 0.0
-                if rects and rects[0].width > 0 and rects[0].height > 0:
-                    r = rects[0]
-                    dpi_x = round(width_px / (r.width / 72.0))
-                    dpi_y = round(height_px / (r.height / 72.0))
-                    effective_dpi = round((dpi_x + dpi_y) / 2)
-                    placed_w_mm = round(r.width * 25.4 / 72.0, 1)
-                    placed_h_mm = round(r.height * 25.4 / 72.0, 1)
-
+                matrix = fitz.Matrix(img["transform"])
+                # The transform maps the unit square to the painted image. Its
+                # axis lengths remain correct after rotation, reflection and shear.
+                placed_w_pt = math.hypot(matrix.a, matrix.b)
+                placed_h_pt = math.hypot(matrix.c, matrix.d)
+                measurable = (all(math.isfinite(v) for v in matrix)
+                              and placed_w_pt > 0 and placed_h_pt > 0
+                              and abs(matrix.a * matrix.d - matrix.b * matrix.c) > 1e-12
+                              and width_px > 0 and height_px > 0)
+                if measurable:
+                    dpi_x = width_px * 72.0 / placed_w_pt
+                    dpi_y = height_px * 72.0 / placed_h_pt
+                    minimum_dpi = min(dpi_x, dpi_y)
+                    effective_dpi = (math.floor(minimum_dpi + 1e-6) if minimum_dpi >= 1
+                                     else round(minimum_dpi, 3))
+                    placed_w_mm = round(placed_w_pt * 25.4 / 72.0, 1)
+                    placed_h_mm = round(placed_h_pt * 25.4 / 72.0, 1)
                 # Color check for images
                 is_cmyk = (cs == 4 or "CMYK" in str(cs).upper())
                 is_gray = (cs == 1 or "GRAY" in str(cs).upper() or "GRIS" in str(cs).upper())
@@ -759,14 +670,38 @@ class IntelliPrintEngine:
                 elif is_gray:
                     cs_label = "Escala de grises"
 
+                bbox = list(img.get("bbox", ()))
+                if len(bbox) != 4 or not all(math.isfinite(v) for v in bbox):
+                    bbox = None
+                image_details = {
+                    "image_index": i_idx + 1,
+                    "effective_dpi": effective_dpi,
+                    "target_dpi": target_dpi,
+                    "colorspace": cs_label,
+                    "width_px": width_px,
+                    "height_px": height_px,
+                    "placed_mm": f"{placed_w_mm} × {placed_h_mm} mm" if placed_w_mm > 0 else "N/D",
+                    "bbox": bbox,
+                    "xref": xref,
+                }
+                if not measurable:
+                    findings.append({
+                        "page": p_idx + 1, "rule_id": "PRINT_IMAGE_EFFECTIVE_PPI",
+                        **image_details,
+                        "severity": "WARNING", "category": "Imágenes",
+                        "title": "Resolución de imagen no verificable",
+                        "message": f"No se pudo medir la colocación {i_idx + 1} de la página {p_idx + 1}. Revísala antes de imprimir."
+                    })
+
                 dpi_desc = f"{effective_dpi} ppp" if effective_dpi > 0 else "Resolución N/D"
 
                 # Check Resolution
-                if effective_dpi > 0 and effective_dpi < target_dpi:
+                if measurable and min(dpi_x, dpi_y) < target_dpi - 1e-6:
                     low_res_images += 1
                     findings.append({
                         "page": p_idx + 1,
                         "rule_id": "PRINT_IMAGE_EFFECTIVE_PPI",
+                        **image_details,
                         "severity": "ERROR" if (requires_bleed and effective_dpi < 150) else "WARNING",
                         "category": "Imágenes",
                         "title": f"Resolución insuficiente ({effective_dpi} ppp · {cs_label})",
@@ -779,6 +714,7 @@ class IntelliPrintEngine:
                     findings.append({
                         "page": p_idx + 1,
                         "rule_id": "SOURCE_COLOR_DIAGNOSTIC",
+                        **image_details,
                         "severity": "WARNING",
                         "category": "Color",
                         "title": f"Imagen en modo {cs_label} · {dpi_desc} (requiere CMYK)",
@@ -788,6 +724,7 @@ class IntelliPrintEngine:
                     findings.append({
                         "page": p_idx + 1,
                         "rule_id": "SOURCE_COLOR_DIAGNOSTIC",
+                        **image_details,
                         "severity": "WARNING",
                         "category": "Color",
                         "title": f"Imagen en modo CMYK · {dpi_desc} (se recomienda sRGB)",
@@ -801,6 +738,10 @@ class IntelliPrintEngine:
                     "xref": xref,
                     "colorspace": cs_label,
                     "effective_dpi": effective_dpi,
+                    "dpi_x": round(dpi_x, 1),
+                    "dpi_y": round(dpi_y, 1),
+                    "transform": list(matrix),
+                    "bbox": bbox,
                     "width_px": width_px,
                     "height_px": height_px,
                     "placed_mm": f"{placed_w_mm} × {placed_h_mm} mm" if placed_w_mm > 0 else "N/D",
@@ -848,18 +789,20 @@ class IntelliPrintEngine:
         }
 
         spot_colors_detected = []
+        graphics_verified = True
         try:
-            pike_doc = pikepdf.open(pdf_path)
-            output_intent_info = detect_pdf_output_intent(pike_doc)
-            spot_colors_detected = extract_pdf_spot_colors(pike_doc)
-            
-            # Run overprint & spot check
-            for p_idx, p_page in enumerate(pike_doc.pages, 1):
-                cmds = list(pikepdf.parse_content_stream(p_page))
-                scan_content_stream(cmds, p_page.get('/Resources'), p_idx, overprint_data)
-            pike_doc.close()
-        except Exception:
-            pass
+            with pikepdf.open(pdf_path) as pike_doc:
+                output_intent_info = detect_pdf_output_intent(pike_doc)
+                spot_colors_detected = extract_pdf_spot_colors(pike_doc)
+                for p_idx, p_page in enumerate(pike_doc.pages, 1):
+                    cmds = list(pikepdf.parse_content_stream(p_page))
+                    scan_content_stream(cmds, p_page.resources, p_idx, overprint_data,
+                                        new_graphics_state(p_page))
+        except Exception as exc:
+            graphics_verified = False
+            findings.append({"page": 1, "rule_id": "GRAPHICS_NOT_VERIFIED", "severity": "ERROR",
+                             "category": "PDF", "title": "Comprobación gráfica incompleta",
+                             "message": str(exc)})
 
         if not allow_spot_colors:
             for spot in spot_colors_detected:
@@ -881,13 +824,9 @@ class IntelliPrintEngine:
                                  "category": "Color", "title": "TAC no medido",
                                  "message": "No se pudo estimar la cobertura. Requiere verificacion en el RIP."})
 
-        # If custom ICC was applied, ensure output_intent_info reflects it
-        if applied_icc_info and applied_icc_info.get("applied"):
-            output_intent_info = applied_icc_info
-
         # Check Output Intent requirements
         if req_family == "CMYK":
-            if not output_intent_info["has_output_intent"] or output_intent_info["detected_family"] != "CMYK":
+            if not output_intent_info.get("icc_valid", False) or output_intent_info.get("detected_family") != "CMYK":
                 findings.append({
                     "page": 1,
                     "rule_id": "DOCUMENT_OUTPUT_ICC",
@@ -897,7 +836,7 @@ class IntelliPrintEngine:
                     "message": f"El perfil {profile_id} exige un OutputIntent documental CMYK válido incrustado."
                 })
         elif req_family == "RGB":
-            if not output_intent_info["has_output_intent"] or output_intent_info["detected_family"] != "RGB":
+            if not output_intent_info.get("icc_valid", False) or output_intent_info.get("detected_family") != "RGB":
                 findings.append({
                     "page": 1,
                     "rule_id": "DOCUMENT_OUTPUT_ICC",
@@ -922,6 +861,9 @@ class IntelliPrintEngine:
             findings.append(finding_dict)
 
         # Run Spellchecker
+        rules_evaluated["HAIRLINE_DETECTED"] = (
+            "FAIL" if overprint_data["hairlines_count"] else
+            "PASS" if graphics_verified else "NOT_VERIFIED")
         spell_suggestions = self.spellchecker.check_pdf_text(doc)
 
         doc.close()
@@ -957,6 +899,8 @@ class IntelliPrintEngine:
         return {
             "job_summary": {
                 "profile_id": profile_id,
+                "required_color_family": req_family,
+                "rules_evaluated": rules_evaluated,
                 "target_dpi": target_dpi,
                 "min_bleed_req_mm": min_bleed_req_mm,
                 "max_tac_limit": max_tac_limit,

@@ -19,12 +19,18 @@ Norma y Especificación Técnica:
 from __future__ import annotations
 import os
 import time
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
 import pymupdf
+from security_limits import bounded_render_dpi
 import numpy as np
+from PIL import Image
+from pdf_utils import atomic_output, iter_resources
+from security_limits import MAX_RENDER_PIXELS, MAX_RENDER_EDGE
+import pikepdf
 
 
 # Factores de peso de capa de tinta estándar (g/m² a 100% de cobertura)
@@ -54,28 +60,25 @@ def calculate_ink_zone_coverage(
     - Desglose por zona (1 a num_zones): ancho, % de cobertura y % de apertura recomendada
     - Alertas técnicas de fricción en rodillos para zonas sin tinta
     """
-    doc = pymupdf.open(pdf_path)
-    if len(doc) == 0:
-        raise ValueError("El archivo PDF no contiene páginas.")
-    
-    # Seleccionar página (por defecto la primera página o el pliego impuesto)
-    page_idx = min(page_number, len(doc) - 1)
-    page = doc[page_idx]
-    
-    rect = page.rect
-    w_pt, h_pt = rect.width, rect.height
+    if num_zones not in (16, 24, 32):
+        raise ValueError("Selecciona 16, 24 o 32 zonas de tintero.")
+    if not 1 <= run_length <= 10_000_000:
+        raise ValueError("La tirada debe estar entre 1 y 10.000.000 ejemplares.")
+    with pymupdf.open(pdf_path) as doc:
+        if not 0 <= page_number < len(doc):
+            raise ValueError("Página de cálculo CIP3 fuera de rango.")
+        page = doc[page_number]
+        w_pt, h_pt = page.rect.width, page.rect.height
+        pix = page.get_pixmap(colorspace=pymupdf.csCMYK,
+                             dpi=bounded_render_dpi(page.rect, 72), alpha=False, annots=False)
     w_mm = round(w_pt * 25.4 / 72.0, 1)
     h_mm = round(h_pt * 25.4 / 72.0, 1)
     sheet_area_m2 = (w_pt * 0.000352778) * (h_pt * 0.000352778)
 
-    # Renderizar en espacio DeviceCMYK a 72 DPI (suficiente resolución y máxima velocidad para integración de área)
-    pix = page.get_pixmap(colorspace=pymupdf.csCMYK, dpi=72)
     img_h, img_w = pix.height, pix.width
     
     # Extraer array numpy uint8 (alto, ancho, 4 canales: C, M, Y, K)
     arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape((img_h, img_w, 4))
-    
-    doc.close()
     
     # Calcular cobertura media global
     global_c = float(np.mean(arr[..., 0]) / 255.0 * 100.0)
@@ -95,18 +98,18 @@ def calculate_ink_zone_coverage(
     zones = []
     zone_px_w = img_w / float(num_zones)
     zone_mm_w = round(w_mm / float(num_zones), 2)
+    columns = np.mean(arr, axis=0)
+    integral = np.vstack((np.zeros((1, 4)), np.cumsum(columns, axis=0)))
+
+    def integrated_at(position):
+        index = min(int(position), img_w)
+        return integral[index] + (position - index) * columns[min(index, img_w - 1)]
     
     for i in range(num_zones):
-        x0 = int(round(i * zone_px_w))
-        x1 = int(round((i + 1) * zone_px_w)) if i < num_zones - 1 else img_w
-        x1 = max(x0 + 1, x1)
-        
-        slice_zone = arr[:, x0:x1, :]
-        
-        zc = float(np.mean(slice_zone[..., 0]) / 255.0 * 100.0)
-        zm = float(np.mean(slice_zone[..., 1]) / 255.0 * 100.0)
-        zy = float(np.mean(slice_zone[..., 2]) / 255.0 * 100.0)
-        zk = float(np.mean(slice_zone[..., 3]) / 255.0 * 100.0)
+        x0, x1 = i * zone_px_w, min((i + 1) * zone_px_w, img_w)
+        # Split boundary pixels proportionally, including pages narrower than 32 px.
+        coverage = (integrated_at(x1) - integrated_at(x0)) / (x1 - x0) / 255 * 100
+        zc, zm, zy, zk = map(float, coverage)
         
         # Apertura recomendada de llave de tintero (% opening):
         # Mínimo lubricante de 3.0% para evitar desgaste metal-metal de la cuchilla dosificadora
@@ -189,100 +192,125 @@ def calculate_ink_zone_coverage(
     }
 
 
+# CIP3 PPF 3.0, sections 3.2, 3.4, 3.5 and 3.6:
+# https://www.cip4.org/files/cip4/documents/CIP3%20PPF%20Spec%203.0.pdf
+PPF_HEADER = b"%!PS-Adobe-3.0\n%%CIP3-File Version 3.0\n%%Creator: IntelliPrint PPF 3.0\n"
+
+
+def is_current_ppf(path):
+    """Invalidate the legacy files that contained invented ink-zone dictionaries."""
+    try:
+        with open(path, "rb") as stream:
+            return stream.read(len(PPF_HEADER)) == PPF_HEADER
+    except OSError:
+        return False
+
+
+def _ps_string(value):
+    text = str(value)
+    raw = text.encode("ascii") if text.isascii() else b"\xfe\xff" + text.encode("utf-16-be")
+    # Escape every delimiter and non-printable byte, including CR and LF.
+    return "(" + "".join(chr(b) if 32 <= b <= 126 and b not in (40, 41, 92)
+                         else "\\%03o" % b for b in raw) + ")"
+
+
+def _render_ppf_preview(page):
+    """Render line art above 300 dpi in bounded tiles, then area-average to ~50.8 dpi."""
+    rect = page.rect
+    width = math.ceil(rect.width * 50.8 / 72)
+    height = math.ceil(rect.height * 50.8 / 72)
+    if width * height > MAX_RENDER_PIXELS or max(width, height) > MAX_RENDER_EDGE:
+        raise ValueError("El pliego excede el tamaño admitido para exportar PPF.")
+    # Six samples per preview pixel: >=304.8 dpi, without one huge native raster.
+    sx, sy = width * 6 / rect.width, height * 6 / rect.height
+    preview = Image.new("CMYK", (width, height))
+    for y in range(0, height, 256):
+        for x in range(0, width, 256):
+            x1, y1 = min(x + 256, width), min(y + 256, height)
+            clip = pymupdf.Rect(x * 6 / sx, y * 6 / sy, x1 * 6 / sx, y1 * 6 / sy)
+            pix = page.get_pixmap(matrix=pymupdf.Matrix(sx, sy), clip=clip,
+                                  colorspace=pymupdf.csCMYK, alpha=False, annots=False)
+            tile = Image.frombytes("CMYK", (pix.width, pix.height), pix.samples)
+            tile = tile.crop((x * 6 - pix.x, y * 6 - pix.y,
+                              x1 * 6 - pix.x, y1 * 6 - pix.y))
+            preview.paste(tile.resize((x1 - x, y1 - y), Image.Resampling.BOX), (x, y))
+    return preview
+
+
+def _require_process_colors(pdf_path):
+    """Do not silently flatten extra printing inks into a four-color PPF."""
+    process = {"/Cyan", "/Magenta", "/Yellow", "/Black", "/All", "/None"}
+    with pikepdf.open(pdf_path) as pdf:
+        for _, resources in iter_resources(pdf):
+            for cs in resources.get("/ColorSpace", {}).values():
+                if not isinstance(cs, pikepdf.Array) or len(cs) < 2:
+                    continue
+                names = ([cs[1]] if str(cs[0]) == "/Separation" else
+                         cs[1] if str(cs[0]) == "/DeviceN" else [])
+                if any(str(name) not in process for name in names):
+                    raise ValueError("El PPF CMYK requiere convertir primero las tintas planas a proceso.")
+
+
 def generate_cip3_ppf(
     cip3_data: Dict[str, Any],
     output_ppf_path: str,
     job_id: str,
-    job_title: str = "IntelliPrint_CIP3_Job"
+    job_title: str = "IntelliPrint_CIP3_Job",
+    *,
+    pdf_path: str | Path | None = None,
+    page_number: int = 0,
 ) -> str:
+    """Write one sheet/front with a real composite CMYK preview, as specified by PPF 3.0.
+
+    Console-specific orientation, calibration and import compatibility must be
+    verified on the target press. Zone openings remain estimates in the PDF report.
     """
-    Genera un archivo estándar CIP3 / PPF (Print Production Format v3.0) en formato PostScript ASCII.
-    Compatible con consolas Heidelberg Prinect CP2000, Komori KHS, Manroland Pecom, KBA Densitronic.
-    """
-    sheet = cip3_data["sheet_info"]
-    zones = cip3_data["zones"]
-    num_zones = cip3_data["num_zones"]
-    w_pt = sheet["width_pt"]
-    h_pt = sheet["height_pt"]
-    zone_w_pt = round(w_pt / float(num_zones), 2)
-    
-    date_str = datetime.now().strftime("%a %b %d %H:%M:%S %Y")
-    
-    # Formatear matrices de cobertura por color
-    c_vals = " ".join(f"{z['c_coverage']:.1f}" for z in zones)
-    m_vals = " ".join(f"{z['m_coverage']:.1f}" for z in zones)
-    y_vals = " ".join(f"{z['y_coverage']:.1f}" for z in zones)
-    k_vals = " ".join(f"{z['k_coverage']:.1f}" for z in zones)
-    
-    ppf_content = f"""%!PS-Adobe-3.0
-%%Creator: IntelliPrint Prepress Suite v1.2.0 (Salesianos Urnieta / CIFP Mendizabala / Hezkuntza Saila)
-%%CreationDate: ({date_str})
-%%Title: ({job_title})
-%%LanguageLevel: 2
-%%DocumentData: Clean7Bit
-%%BoundingBox: 0 0 {int(w_pt)} {int(h_pt)}
-%%Pages: 1
-%%EndComments
-
-%%BeginProlog
-%%EndProlog
-
-%%Page: 1 1
-/CIP3Admin 10 dict def
-CIP3Admin begin
-  /CIP3Version (03.00) def
-  /CIP3JobName ({job_id}) def
-  /CIP3JobCode (IP-{job_id[:8].upper()}) def
-  /CIP3SheetName (Pliego_{sheet['width_mm']}x{sheet['height_mm']}_Front) def
-  /CIP3Side (Front) def
-  /CIP3Separations [/Cyan /Magenta /Yellow /Black] def
-end
-
-/CIP3SheetWidth {w_pt:.1f} def
-/CIP3SheetHeight {h_pt:.1f} def
-
-% --- TINTERO CIAN ---
-/CIP3InkZoneProfileCyan 10 dict def
-CIP3InkZoneProfileCyan begin
-  /CIP3ZoneCount {num_zones} def
-  /CIP3ZoneWidth {zone_w_pt:.2f} def
-  /CIP3InkSeparation (Cyan) def
-  /CIP3InkZoneCoverage [ {c_vals} ] def
-end
-
-% --- TINTERO MAGENTA ---
-/CIP3InkZoneProfileMagenta 10 dict def
-CIP3InkZoneProfileMagenta begin
-  /CIP3ZoneCount {num_zones} def
-  /CIP3ZoneWidth {zone_w_pt:.2f} def
-  /CIP3InkSeparation (Magenta) def
-  /CIP3InkZoneCoverage [ {m_vals} ] def
-end
-
-% --- TINTERO AMARILLO ---
-/CIP3InkZoneProfileYellow 10 dict def
-CIP3InkZoneProfileYellow begin
-  /CIP3ZoneCount {num_zones} def
-  /CIP3ZoneWidth {zone_w_pt:.2f} def
-  /CIP3InkSeparation (Yellow) def
-  /CIP3InkZoneCoverage [ {y_vals} ] def
-end
-
-% --- TINTERO NEGRO ---
-/CIP3InkZoneProfileBlack 10 dict def
-CIP3InkZoneProfileBlack begin
-  /CIP3ZoneCount {num_zones} def
-  /CIP3ZoneWidth {zone_w_pt:.2f} def
-  /CIP3InkSeparation (Black) def
-  /CIP3InkZoneCoverage [ {k_vals} ] def
-end
-
-showpage
-%%EOF
+    if pdf_path is None:
+        raise ValueError("La exportación PPF necesita el PDF original del pliego.")
+    _require_process_colors(pdf_path)
+    with pymupdf.open(pdf_path) as doc:
+        if not 0 <= page_number < len(doc):
+            raise ValueError("Página PPF fuera de rango.")
+        page = doc[page_number]
+        w_pt, h_pt = page.rect.width, page.rect.height
+        sheet = cip3_data["sheet_info"]
+        if abs(w_pt - sheet["width_pt"]) > 0.1 or abs(h_pt - sheet["height_pt"]) > 0.1:
+            raise ValueError("El PDF no coincide con las dimensiones del cálculo de cobertura.")
+        preview = _render_ppf_preview(page)
+    width, height = preview.size
+    # Composite CMYK uses 0=no ink, 255=full ink; MuPDF has the same polarity.
+    hex_data = preview.tobytes().hex().upper()
+    payload = ("\n".join(hex_data[i:i + 128] for i in range(0, len(hex_data), 128)) + "\n>").encode("ascii")
+    body = f"""CIP3BeginSheet
+/CIP3AdmJobName {_ps_string(job_title)} def
+/CIP3AdmJobCode {_ps_string(job_id)} def
+/CIP3AdmSheetName (Sheet_1) def
+/CIP3AdmSoftware (IntelliPrint) def
+/CIP3AdmCreationTime ({datetime.now().strftime('D:%Y%m%d%H%M%S')}) def
+/CIP3AdmPrintVolume {max(1, int(cip3_data['run_length']))} def
+/CIP3AdmPSExtent [{w_pt:.8f} {h_pt:.8f}] def
+/CIP3AdmSeparationNames [(Cyan) (Magenta) (Yellow) (Black)] def
+/CIP3TransferFilmCurveData [0 0 1 1] def
+/CIP3TransferPlateCurveData [0 0 1 1] def
+CIP3BeginFront
+CIP3BeginPreviewImage
+/CIP3PreviewImageWidth {width} def
+/CIP3PreviewImageHeight {height} def
+/CIP3PreviewImageBitsPerComp 8 def
+/CIP3PreviewImageComponents 4 def
+/CIP3PreviewImageMatrix [{width} 0 0 {-height} 0 {height}] def
+/CIP3PreviewImageResolution [{width * 72 / w_pt:.8f} {height * 72 / h_pt:.8f}] def
+/CIP3PreviewImageEncoding /ASCIIHexDecode def
+/CIP3PreviewImageCompression /None def
+/CIP3PreviewImageDataSize {len(payload)} def
+CIP3PreviewImage
 """
-    with open(output_ppf_path, "w", encoding="ascii", errors="replace") as f:
-        f.write(ppf_content)
-        
+    with atomic_output(output_ppf_path) as temporary:
+        with open(temporary, "wb") as stream:
+            stream.write(PPF_HEADER)
+            stream.write(body.encode("ascii"))
+            stream.write(payload)
+            stream.write(b"\nCIP3EndPreviewImage\nCIP3EndFront\nCIP3EndSheet\n%%CIP3EndOfFile\n")
     return output_ppf_path
 
 

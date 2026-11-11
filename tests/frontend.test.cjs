@@ -31,6 +31,187 @@ function fakeDocument() {
   };
 }
 
+function deferredResponse() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+test('release status follows the current PDF identity, never the previous green badge', () => {
+  const context = {document:fakeDocument()};
+  vm.createContext(context);
+  const start = html.indexOf('    function renderResults(data) {');
+  const end = html.indexOf("      const tacStatus =", start);
+  vm.runInContext(html.slice(start,end) + '\n    }',context);
+  const badge=context.document.getElementById('badgeRelease');
+  badge.textContent='AUTHORIZED';
+  context.renderResults({job_meta:{job_id:'B',current_sha256:'new'},triple_result:{release:{status:'PENDING_AUTHORIZATION'}}});
+  assert.equal(badge.textContent,'PENDIENTE');
+  context.renderResults({job_meta:{job_id:'B',current_sha256:'new',authorized_sha256:'old'},triple_result:{release:{status:'AUTHORIZED'}}});
+  assert.equal(badge.textContent,'PENDIENTE');
+  context.renderResults({job_meta:{job_id:'B',current_sha256:'new',authorized_sha256:'new'},triple_result:{release:{status:'AUTHORIZED',label:'Verified'}}});
+  assert.equal(badge.textContent,'AUTHORIZED');
+});
+
+for (const name of ['applyCmykImageConversion','applyHairlineFix','applyFontOutlineFix','applyPrinterMarks']) {
+  test(`${name} ignores a late response and releases its button`, async () => {
+    const pending=deferredResponse(), original=inspectorReport('A'), next=inspectorReport('B');
+    const context={currentJobId:'A',currentReport:original,document:fakeDocument(),console,
+      alert:assert.fail,renderResults:assert.fail,fetch:()=>pending.promise};
+    loadFunctions(context,[name]);
+    const btn={innerHTML:'Correct',disabled:false,closest(){ return null; }};
+    const work=context[name](btn);
+    context.currentJobId='B';context.currentReport=next;
+    pending.resolve({ok:true,json:async()=>({status:'success',report:original})});
+    await work;
+    assert.equal(context.currentJobId,'B');
+    assert.equal(context.currentReport,next);
+    assert.equal(btn.disabled,false);
+    assert.equal(btn.innerHTML,'Correct');
+  });
+}
+
+test('deleted selected profiles fall back to an existing radio', async () => {
+  const document=fakeDocument();
+  document.querySelector=()=>({value:'DELETED'});
+  const context={document,console,cachedTargetProfiles:[],fetch:async()=>({json:async()=>({profiles:[{id:'OFFSET_300',name:'Offset'}]})})};
+  loadFunctions(context,['escapeHtml','loadTargetProfiles']);
+  await context.loadTargetProfiles();
+  assert.match(document.getElementById('targetProfilesContainer').innerHTML,/value="OFFSET_300" checked/);
+});
+
+test('inventory uses measured profile criteria and the requested color family', () => {
+  const start=html.indexOf('            const targetDpi =');
+  const end=html.indexOf('            imagesTbody.appendChild(tr);',start);
+  const context={csBadge:'',tr:{},escapeHtml:value=>String(value)};
+  vm.createContext(context);
+  vm.runInContext('function row(data,img) { '+html.slice(start,end)+' return tr.innerHTML; }',context);
+  const image={effective_dpi:400,is_cmyk:true,placed_mm:'20 x 20',colorspace:'CMYK'};
+  const low=context.row({job_summary:{target_dpi:600,required_color_family:'CMYK'}},image);
+  assert.match(low,/insuficiente/);
+  const screen=context.row({job_summary:{target_dpi:96,required_color_family:'RGB'}},{...image,effective_dpi:96,is_cmyk:false,is_rgb:true});
+  assert.doesNotMatch(screen,/Requiere.*CMYK/);
+  assert.match(screen,/Óptima/);
+  assert.match(context.row({job_summary:{target_dpi:96,required_color_family:'RGB'}},image),/sRGB/);
+});
+
+function inspectorReport(jobId, limit=320, profile='OFFSET_300') {
+  return {job_meta:{job_id:jobId,profile_id:profile},
+    job_summary:{max_tac_limit:limit},triple_result:{technical:{status:'FAIL'}},findings:[]};
+}
+
+test('loading a batch job changes its ID and criteria together and uses its TAC limit', async () => {
+  const document=fakeDocument(), pending=deferredResponse(), old=inspectorReport('old',240);
+  const next=inspectorReport('next',320);
+  const calls=[];
+  const context={document,currentJobId:'old',currentReport:old,console,alert:assert.fail,
+    closeBatchHotfolderModal(){},renderResults(){},showTacCorrectionResult(){},
+    fetch:async url=>{
+      calls.push(url);
+      if(url.includes('/api/report/')) return pending.promise;
+      return {ok:true,json:async()=>({status:'success',report:next})};
+    }};
+  loadFunctions(context,['loadBatchJobIntoInspector','getTacLimit','applyTacLimiter']);
+  const loading=context.loadBatchJobIntoInspector('next');
+  assert.equal(context.currentJobId,'old');
+  assert.equal(context.currentReport,old);
+  pending.resolve({ok:true,json:async()=>next});
+  await loading;
+  assert.equal(context.currentJobId,'next');
+  assert.equal(context.currentReport,next);
+  await context.applyTacLimiter({innerHTML:'Limitar'});
+  assert.equal(calls[1],'/api/limit-tac/next?max_tac=320');
+});
+
+test('opening a screen job from the batch does not inherit bleed and crop marks', async () => {
+  const document=fakeDocument();
+  const report=inspectorReport('screen',240,'PANTALLA_RGB');
+  const context={document,currentJobId:'old',currentReport:inspectorReport('old'),console,
+    cachedTargetProfiles:[{id:'PANTALLA_RGB',color_family:'RGB',min_bleed_mm:0}],
+    closeBatchHotfolderModal(){},renderResults(){},alert:assert.fail,
+    fetch:async()=>({ok:true,json:async()=>report})};
+  loadFunctions(context,['loadBatchJobIntoInspector','openBatchFixModal']);
+  await context.loadBatchJobIntoInspector('screen');
+  context.openBatchFixModal();
+  assert.equal(document.getElementById('batchChkMirrorBleed').checked,false);
+  assert.equal(document.getElementById('batchChkMarks').checked,false);
+});
+
+test('late batch responses never replace the most recently selected job', async () => {
+  const b=deferredResponse(),c=deferredResponse(),rendered=[];
+  const context={currentJobId:'old',currentReport:inspectorReport('old'),console,
+    fetch:url=>url.endsWith('/b')?b.promise:c.promise,
+    closeBatchHotfolderModal(){},renderResults:r=>rendered.push(r.job_meta.job_id),alert:assert.fail};
+  loadFunctions(context,['loadBatchJobIntoInspector']);
+  const loadingB=context.loadBatchJobIntoInspector('b');
+  const loadingC=context.loadBatchJobIntoInspector('c');
+  c.resolve({ok:true,json:async()=>inspectorReport('c')});
+  await loadingC;
+  b.resolve({ok:true,json:async()=>inspectorReport('b')});
+  await loadingB;
+  assert.deepEqual(rendered,['c']);
+  assert.equal(context.currentJobId,'c');
+  assert.equal(context.currentReport.job_meta.job_id,'c');
+});
+
+test('failed or mismatched batch reports preserve the previous active job', async () => {
+  for(const response of [{ok:false},{ok:true,json:async()=>inspectorReport('other')},
+                         {ok:true,json:async()=>({triple_result:{}})}]) {
+    const old=inspectorReport('old');let alerts=0;
+    const context={currentJobId:'old',currentReport:old,console:{error(){}},
+      fetch:async()=>response,closeBatchHotfolderModal:assert.fail,renderResults:assert.fail,
+      alert(){alerts++;}};
+    loadFunctions(context,['loadBatchJobIntoInspector']);
+    await context.loadBatchJobIntoInspector('next');
+    assert.equal(context.currentJobId,'old');assert.equal(context.currentReport,old);
+    assert.equal(alerts,1);
+  }
+});
+
+test('the workshop refreshes the main report and retains verified remaining errors', async () => {
+  const document=fakeDocument(), corrected=inspectorReport('job',240),rendered=[];
+  corrected.findings=[{rule_id:'MAX_INK_COVERAGE',severity:'ERROR'}];
+  document.getElementById('tab-comparison').classList.contains=()=>true;
+  document.getElementById('batchResultArea').scrollIntoView=()=>{};
+  const context={document,currentJobId:'job',currentReport:inspectorReport('job'),console,
+    URLSearchParams,setTimeout:fn=>fn(),renderResults:r=>rendered.push(r),
+    fetch:async()=>({ok:true,text:async()=>JSON.stringify({success:true,report:corrected,
+      verdict:'RECHAZADO',errors_count:1,warnings_count:0,pending_errors:corrected.findings})})};
+  loadFunctions(context,['executeBatchFix','escapeHtml']);
+  await context.executeBatchFix({innerHTML:'Aplicar'});
+  assert.equal(rendered.length,1);
+  assert.equal(context.currentReport.job_summary.max_tac_limit,240);
+  assert.equal(context.currentReport.findings[0].rule_id,'MAX_INK_COVERAGE');
+  assert.ok(document.getElementById('batchResultContent').innerHTML.includes('RECHAZADO'));
+  assert.equal(document.getElementById('downloadPdfBtnLabel').textContent,'Descargar PDF corregido');
+});
+
+test('workshop results for a previously active job do not overwrite another report', async () => {
+  const document=fakeDocument(),pending=deferredResponse();
+  const context={document,currentJobId:'old',currentReport:inspectorReport('old'),console,
+    URLSearchParams,fetch:()=>pending.promise,renderResults:assert.fail};
+  loadFunctions(context,['executeBatchFix']);
+  const button={innerHTML:'Aplicar'};
+  const applying=context.executeBatchFix(button);
+  context.currentJobId='new';context.currentReport=inspectorReport('new',240);
+  pending.resolve({ok:true,text:async()=>JSON.stringify({success:true,report:inspectorReport('old')})});
+  await applying;
+  assert.equal(context.currentReport.job_meta.job_id,'new');
+  assert.equal(button.disabled,false);
+});
+
+test('barcode corrections refresh the main report and its current PDF hash', async () => {
+  const document=fakeDocument(), report=inspectorReport('job'),rendered=[];
+  report.job_meta.current_sha256='b'.repeat(64);
+  const context={document,currentJobId:'job',currentReport:inspectorReport('job'),console,
+    renderResults:r=>rendered.push(r),loadBarcodeInspection:async()=>{},alert:assert.fail,
+    fetch:async()=>({ok:true,json:async()=>({status:'success',report})})};
+  loadFunctions(context,['executeFixBarcodes']);
+  await context.executeFixBarcodes();
+  assert.equal(context.currentReport,report);
+  assert.equal(rendered[0].job_meta.current_sha256,'b'.repeat(64));
+});
+
 test('all inline JavaScript parses', () => {
   for (const script of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
     if (!/\bsrc\s*=/.test(script[1])) new vm.Script(script[2]);
@@ -216,4 +397,113 @@ test('omitted mass correction results remain errors', async () => {
   await context.executeBatchFixAll({ innerHTML: 'Corregir' });
   assert.equal(context.batchQueueItems[0].status, 'ERROR');
   assert.equal(context.batchQueueItems[0].errors_count, 3);
+});
+
+const maliciousText = `<img src=x onerror="alert(1)">'&`;
+
+function assertInert(markup) {
+  assert.ok(!markup.includes('<img src=x'), 'Untrusted text must not become an element');
+  assert.ok(markup.includes('&lt;img'), 'Display the literal text, do not silently remove it');
+}
+
+test('the main profile selector escapes names, descriptions and attribute values', async () => {
+  const document = fakeDocument();
+  document.querySelector = () => null;
+  const id = `CUSTOM_" autofocus onfocus="alert(1)`;
+  const context = { document, console, cachedTargetProfiles: [],
+    fetch: async () => ({ json: async () => ({ profiles: [{ id, name: maliciousText,
+      destination: maliciousText, is_custom: true }] }) }) };
+  loadFunctions(context, ['escapeHtml', 'loadTargetProfiles']);
+  await context.loadTargetProfiles();
+  const markup = document.getElementById('targetProfilesContainer').innerHTML;
+  assertInert(markup);
+  assert.ok(!markup.includes('value="' + id + '"'));
+  assert.ok(markup.includes('CUSTOM_&quot; autofocus'));
+});
+
+test('instant PDF inspection escapes the ICC in both messages', async () => {
+  const document = fakeDocument();
+  const context = { document, console, selectedFile: null, FormData: class { append() {} },
+    fileName: {}, filePrompt: document.getElementById('prompt'), fileInfo: document.getElementById('info'),
+    startCheckBtn: {}, fetch: async () => ({ ok: true, json: async () => ({
+      output_intent: { has_output_intent: true, icc_valid: true, friendly_description: maliciousText }, pages: 1 }) }) };
+  loadFunctions(context, ['escapeHtml', 'handleFileSelect']);
+  await context.handleFileSelect({ name: 'safe.pdf', size: 100 });
+  assertInert(document.getElementById('fileDetectedIcc').innerHTML);
+  assertInert(document.getElementById('preserveIccHint').innerHTML);
+});
+
+test('an OutputIntent label without a valid embedded profile never gets a green ICC badge', async () => {
+  const document = fakeDocument();
+  const context = { document, console, selectedFile: null, FormData: class { append() {} },
+    fileName: {}, filePrompt: document.getElementById('prompt'), fileInfo: document.getElementById('info'),
+    startCheckBtn: {}, fetch: async () => ({ ok: true, json: async () => ({
+      output_intent: { has_output_intent: true, icc_valid: false, identifier: 'FOGRA CMYK' }, pages: 1 }) }) };
+  loadFunctions(context, ['escapeHtml', 'handleFileSelect']);
+  await context.handleFileSelect({ name: 'invalid-icc.pdf', size: 100 });
+  const markup = document.getElementById('fileDetectedIcc').innerHTML;
+  assert.ok(markup.includes('Sin ICC válido incrustado'));
+  assert.ok(!markup.includes('bg-emerald'));
+  assert.ok(!document.getElementById('preserveIccHint').innerHTML.includes('Recomendado:'));
+});
+
+test('spot plates escape PDF names and bind literal names without inline JavaScript', () => {
+  const document = fakeDocument();
+  const labels = [];
+  let change, toggled;
+  document.createElement = () => {
+    const label = { querySelector: () => ({ addEventListener: (_, fn) => { change = fn; } }) };
+    labels.push(label); return label;
+  };
+  document.getElementById('sepSpotPlatesList').appendChild = () => {};
+  const context = { document, currentSpotColors: [], disabledSpotColors: new Set(),
+    toggleSpotPlate: (name, checked) => { toggled = [name, checked]; } };
+  loadFunctions(context, ['escapeHtml', 'renderSpotPlates']);
+  context.renderSpotPlates([{ name: maliciousText, type: maliciousText,
+    color_hex: `red;" onmouseover="alert(1)` }]);
+  assertInert(labels[0].innerHTML);
+  assert.ok(!labels[0].innerHTML.includes('onchange='));
+  assert.ok(!labels[0].innerHTML.includes('onmouseover='));
+  assert.ok(labels[0].innerHTML.includes('background-color: #808080;'));
+  change({ target: { checked: false } });
+  assert.deepEqual(toggled, [maliciousText, false]);
+});
+
+test('spell suggestions preserve quoted PDF text without interpolating executable handlers', () => {
+  let click, acted;
+  const card = { querySelectorAll: () => [{ dataset: { spellAction: 'accept' },
+    addEventListener: (_, fn) => { click = fn; } }] };
+  const context = { document: { createElement: () => card },
+    handleSpellAction: (...args) => { acted = args; } };
+  loadFunctions(context, ['escapeHtml', 'createSpellSuggestionCard']);
+  context.createSpellSuggestionCard({ id: 'spell_1', word: maliciousText, suggestion: maliciousText,
+    context: maliciousText, page: 1 });
+  assertInert(card.innerHTML);
+  assert.ok(!card.innerHTML.includes('onclick='));
+  click();
+  assert.deepEqual(acted, ['spell_1', 'accept', maliciousText]);
+});
+
+test('barcode payloads and reasons are text even when they contain HTML', async () => {
+  const document = fakeDocument();
+  const item = { id: 'barcode_1', payload: maliciousText, reasons: [maliciousText], status: 'WARNING',
+    type: 'QR Code', page_index: 0, page_number: 1, rect_pt: [0,0,10,10], dimensions_mm: [10,10],
+    fixable: true, color_analysis: { bar_color_desc: maliciousText, tac_pct: 100 } };
+  const context = { document, console, currentJobId: 'safe', currentBarcodeFindings: [],
+    fetch: async () => ({ ok: true, json: async () => ({ findings: [item], warnings_count: 1 }) }) };
+  loadFunctions(context, ['escapeHtml', 'loadBarcodeInspection']);
+  await context.loadBarcodeInspection();
+  const markup = document.getElementById('bcListContainer').innerHTML;
+  assertInert(markup);
+  assert.ok(!markup.includes('onclick='));
+});
+
+test('safety margin findings escape the actual PDF text and description', () => {
+  const document = fakeDocument();
+  const context = { document, currentSafetyMarginReport: { pages: [{ issues: [{
+    severity: 'CRITICAL', side: 'left', content: maliciousText, description: maliciousText,
+    distance_mm: 1, is_spine_edge: false }] }] } };
+  loadFunctions(context, ['escapeHtml', 'renderSafetyMarginPageIssues']);
+  context.renderSafetyMarginPageIssues(0);
+  assertInert(document.getElementById('smInfractionsList').innerHTML);
 });

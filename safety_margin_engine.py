@@ -20,6 +20,8 @@ Reglas de taller:
 
 from __future__ import annotations
 
+from security_limits import bounded_render_dpi
+
 import io
 import math
 from pathlib import Path
@@ -347,7 +349,7 @@ def render_safety_margin_preview(
     shape.commit()
 
     # Renderizar a imagen JPEG
-    zoom = dpi / 72.0
+    zoom = bounded_render_dpi(temp_page.rect, dpi) / 72.0
     mat = pymupdf.Matrix(zoom, zoom)
     pix = temp_page.get_pixmap(matrix=mat, alpha=False)
     img_bytes = pix.tobytes(output="jpeg")

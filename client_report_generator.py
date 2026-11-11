@@ -1,7 +1,7 @@
 """
 client_report_generator.py
 ==========================
-Generador de Informe Pedagógico para el Cliente y Diseñador (1 página A4).
+Generador de Informe Pedagógico para el Cliente y Diseñador (páginas A4).
 
 Produce una guía visual, comprensible y sin tecnicismos hostiles que el
 taller de imprenta puede remitir al diseñador/cliente explicando exactamente
@@ -10,12 +10,14 @@ qué incidencias se detectaron en su PDF y cómo solucionarlas en InDesign / Ill
 
 from __future__ import annotations
 
-import os
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List
 
 import pymupdf
+
+from report_images import collect_report_image_issues
 
 PAGE_W = 595.3
 PAGE_H = 841.9
@@ -154,14 +156,44 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
     """
     findings = job_data.get("findings", [])
     summary = job_data.get("job_summary", {})
-    meta = job_data.get("job_meta", {})
-
     items = []
+
+    # Resolución: conservar la gravedad del preflight, también si no fue medible.
+    resolution_findings = [
+        f for f in findings
+        if f.get("rule_id") == "PRINT_IMAGE_EFFECTIVE_PPI"
+        and f.get("severity") in ("ERROR", "WARNING")
+    ]
+    low_res_images = summary.get("low_res_images", 0)
+    if resolution_findings or low_res_images > 0:
+        errors = sum(f.get("severity") == "ERROR" for f in resolution_findings)
+        warnings = sum(f.get("severity") == "WARNING" for f in resolution_findings)
+        pages = sorted({
+            f["page"] for f in resolution_findings
+            if isinstance(f.get("page"), int) and f["page"] > 0
+        })
+        pages_text = ", ".join(str(page) for page in pages[:4]) or "sin indicar"
+        if len(pages) > 4:
+            pages_text += f" y {len(pages) - 4} más"
+        target_dpi = summary.get("target_dpi", 300)
+        counts = f"{errors} {'error' if errors == 1 else 'errores'} y {warnings} {'aviso' if warnings == 1 else 'avisos'}"
+        if not resolution_findings:
+            counts = f"{low_res_images} imágenes por debajo de {target_dpi} ppp"
+        items.append({
+            "category": "resolution",
+            "icon": "RESOLUCIÓN",
+            "severity": "CRÍTICO" if errors else "AVISO",
+            "title": "Resolución de Imágenes Insuficiente o No Verificable",
+            "problem": f"{counts}. Págs.: {pages_text}. Riesgo de pixelado o nitidez sin verificar.",
+            "solution": [
+                f"En InDesign / Illustrator: revisa los vínculos y usa originales con al menos {target_dpi} ppp al tamaño final.",
+                "Reduce el tamaño colocado o sustituye la imagen; aumentar los ppp por remuestreo no recupera detalle."
+            ]
+        })
 
     # 1. Sangrado (Bleed)
     has_bleed_err = any(f.get("rule_id") == "BLEED_GEOMETRY_3MM" for f in findings)
-    bleed_mm = summary.get("bleed_detected_mm", 0.0)
-    if has_bleed_err or (bleed_mm < 2.5 and not meta.get("has_mirror_bleed")):
+    if has_bleed_err or summary.get("bleed_status") == "FAIL":
         items.append({
             "category": "bleed",
             "icon": "SANGRADO",
@@ -178,7 +210,7 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
     # 2. Modo de color RGB
     has_rgb_err = any(f.get("rule_id") == "SOURCE_COLOR_DIAGNOSTIC" for f in findings)
     non_cmyk_imgs = summary.get("non_cmyk_images", 0)
-    if (has_rgb_err or non_cmyk_imgs > 0) and not meta.get("has_cmyk_converted"):
+    if has_rgb_err or (non_cmyk_imgs > 0 and summary.get("required_color_family", "CMYK") == "CMYK"):
         items.append({
             "category": "rgb",
             "icon": "COLOR",
@@ -193,7 +225,7 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
 
     # 3. Tipografías no incrustadas
     has_font_err = any(f.get("rule_id") == "USED_FONTS_EMBEDDED" for f in findings)
-    if has_font_err and not meta.get("has_fonts_outlined"):
+    if has_font_err:
         items.append({
             "category": "fonts",
             "icon": "FUENTES",
@@ -211,7 +243,7 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
         f.get("rule_id") in ("BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "RICH_BLACK_SMALL_TEXT", "WHITE_OVERPRINT")
         for f in findings
     )
-    if has_black_err and not meta.get("has_overprint_fixed"):
+    if has_black_err:
         items.append({
             "category": "black",
             "icon": "NEGRO",
@@ -229,7 +261,7 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
         f.get("rule_id") in ("HAIRLINE_WIDTH", "HAIRLINE_STROKE", "HAIRLINE_DETECTED")
         for f in findings
     )
-    if has_hairline_err and not meta.get("has_hairline_fixed"):
+    if has_hairline_err:
         items.append({
             "category": "hairlines",
             "icon": "TRAZOS",
@@ -242,8 +274,8 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
         })
 
     # 6. Tintas planas / Pantone sin descomponer
-    has_spots = any(f.get("rule_id") == "SPOT_COLOR_FOUND" for f in findings)
-    if has_spots and not meta.get("has_spot_converted"):
+    has_spots = any(f.get("rule_id") in ("SPOT_COLOR_FOUND", "SPOT_COLOR_NOT_ALLOWED") for f in findings)
+    if has_spots:
         items.append({
             "category": "spots",
             "icon": "TINTAS",
@@ -257,7 +289,7 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
 
     # 7. Cobertura de tinta excesiva (TAC > 300%)
     has_tac_err = any(f.get("rule_id") == "MAX_INK_COVERAGE" for f in findings)
-    if has_tac_err and not meta.get("has_tac_limited"):
+    if has_tac_err:
         items.append({
             "category": "tac",
             "icon": "TINTA",
@@ -269,12 +301,242 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
             ]
         })
 
+    if summary.get("required_color_family") == "RGB":
+        for item in items:
+            if item["category"] == "rgb":
+                item["title"] = "Imágenes CMYK en un documento para pantalla (RGB)"
+                item["problem"] = "El destino exige RGB. Las imágenes CMYK pueden mostrar colores apagados en pantallas y navegadores."
+                item["solution"] = [
+                    "En Photoshop: convierte las imágenes al perfil sRGB y actualiza los vínculos en el documento.",
+                    "Exporta el PDF con el perfil RGB acordado para pantalla y vuelve a verificarlo."
+                ]
+
+    rules_by_category = {
+        "resolution": {"PRINT_IMAGE_EFFECTIVE_PPI"},
+        "bleed": {"BLEED_GEOMETRY_3MM"},
+        "rgb": {"SOURCE_COLOR_DIAGNOSTIC"},
+        "fonts": {"USED_FONTS_EMBEDDED"},
+        "black": {"BLACK_TEXT_KNOCKOUT", "BLACK_TEXT_KNOCKOUT_100", "RICH_BLACK_SMALL_TEXT", "WHITE_OVERPRINT"},
+        "hairlines": {"HAIRLINE_WIDTH", "HAIRLINE_STROKE", "HAIRLINE_DETECTED"},
+        "spots": {"SPOT_COLOR_FOUND", "SPOT_COLOR_NOT_ALLOWED"},
+        "tac": {"MAX_INK_COVERAGE"},
+    }
+    handled = set().union(*rules_by_category.values())
+    for item in items:
+        current = [f for f in findings if f.get("rule_id") in rules_by_category[item["category"]]]
+        if current:
+            item["severity"] = ("CRÍTICO" if any(f.get("severity") == "ERROR" for f in current)
+                                else "AVISO" if any(f.get("severity") == "WARNING" for f in current) else "INFO")
+            pages = sorted({f["page"] for f in current if isinstance(f.get("page"), int) and f["page"] > 0})
+            item["detail"] = f"Incidencias: {len(current)}. Páginas: {', '.join(map(str, pages)) or 'sin indicar'}."
+    # Las reglas sin guía específica también deben aparecer en la ficha.
+    other_rules = {}
+    for finding in findings:
+        if finding.get("rule_id") not in handled and finding.get("severity") in ("ERROR", "WARNING"):
+            other_rules.setdefault(finding.get("rule_id"), []).append(finding)
+    for rule_id, current in other_rules.items():
+        messages = list(dict.fromkeys(f.get("message") or f.get("title") or "Revisión técnica pendiente." for f in current))
+        items.append({
+            "category": rule_id or "other",
+            "icon": "REVISIÓN",
+            "severity": "CRÍTICO" if any(f.get("severity") == "ERROR" for f in current) else "AVISO",
+            "title": current[0].get("title") or "Incidencia técnica pendiente",
+            "problem": "\n".join(messages),
+            "solution": ["Revisa esta incidencia en el documento de origen y vuelve a exportar el PDF con el perfil acordado con el taller."],
+        })
+
+    severity_order = {"CRÍTICO": 0, "AVISO": 1, "INFO": 2}
+    items.sort(key=lambda it: (severity_order[it["severity"]], it["category"] != "resolution"))
     return items
 
 
-def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path: str | Path):
+def _resolved_pedagogical_items(job_data):
+    """Keep the initial diagnosis separate from issues still found in the PDF."""
+    original = job_data.get("original_analysis")
+    if not isinstance(original, dict):
+        return []
+    # A color conversion can change an image's title (RGB -> CMYK) without
+    # repairing its resolution. Compare rule/page counts rather than titles.
+    remaining = Counter((f.get("rule_id"), f.get("page"))
+                        for f in job_data.get("findings", [])
+                        if f.get("severity") in ("ERROR", "WARNING"))
+    no_longer_found = []
+    for finding in original.get("findings", []):
+        if finding.get("severity") not in ("ERROR", "WARNING"):
+            continue
+        key = (finding.get("rule_id"), finding.get("page"))
+        if remaining[key]:
+            remaining[key] -= 1
+        else:
+            no_longer_found.append(finding)
+    history = {"findings": no_longer_found, "job_summary": {
+        "target_dpi": original.get("job_summary", {}).get("target_dpi", 300),
+        "required_color_family": original.get("job_summary", {}).get("required_color_family", "CMYK"),
+        "non_cmyk_images": sum(f.get("rule_id") == "SOURCE_COLOR_DIAGNOSTIC" for f in no_longer_found),
+    }}
+    items = _extract_pedagogical_items(history)
+    for item in items:
+        item["status"] = "resolved"
+        item["solution"] = [
+            "Presente en el análisis inicial y ausente en la última verificación del PDF corregido.",
+            "Comprueba visualmente el resultado antes de autorizar la impresión."
+        ]
+        if item["category"] == "black":
+            item["solution"].append(
+                "Si el texto se ha trazado, revisa su color en las separaciones: pasar a curvas no corrige por sí solo el negro compuesto."
+            )
+    return items
+
+
+def _wrap_lines(text, width, fontsize, fontname="helv"):
+    lines = []
+    for paragraph in str(text).splitlines() or [""]:
+        line = ""
+        for word in paragraph.split():
+            candidate = f"{line} {word}" if line else word
+            if pymupdf.get_text_length(candidate, fontname=fontname, fontsize=fontsize) <= width:
+                line = candidate
+                continue
+            if line:
+                lines.append(line)
+                line = ""
+            for char in word:
+                if line and pymupdf.get_text_length(line + char, fontname=fontname, fontsize=fontsize) > width:
+                    lines.append(line)
+                    line = ""
+                line += char
+        lines.append(line)
+    return lines
+
+
+def _item_layout(item):
+    lines = []
+    title_lines = _wrap_lines(item["title"], CONTENT_W - 74, 8.5)
+    y = 15.0
+    for title in title_lines:
+        lines.append((62, y, title, 8.5, "navy"))
+        y += 11
+    y += 3
+    if item.get("detail"):
+        for line in _wrap_lines(item["detail"], CONTENT_W - 20, 7):
+            lines.append((10, y, line, 7, "slate"))
+            y += 9.5
+    prefix = "Diagnóstico inicial: " if item.get("status") == "resolved" else "Por qué afecta a la tirada: "
+    for line in _wrap_lines(prefix + item["problem"], CONTENT_W - 20, 7):
+        lines.append((10, y, line, 7, "slate_dark"))
+        y += 9.5
+    y += 3
+    label = ("Resultado de la corrección y comprobación:" if item.get("status") == "resolved"
+             else "Cómo corregirlo en tu programa de maquetación (InDesign / Illustrator):")
+    lines.append((10, y, label, 7, "blue"))
+    y += 12
+    for step in item["solution"]:
+        for line in _wrap_lines(f"> {step}", CONTENT_W - 36, 6.8):
+            lines.append((18, y, line, 6.8, "slate_dark"))
+            y += 9.5
+        y += 1.5
+    return max(105, y + 1), lines
+
+
+def _draw_item(page, item, y, height, lines, p):
+    resolved = item.get("status") == "resolved"
+    tone = "green" if resolved else "red" if item["severity"] == "CRÍTICO" else "amber"
+    page.draw_rect(pymupdf.Rect(MARGIN_X, y, PAGE_W - MARGIN_X, y + height),
+                   fill=p[f"{tone}_bg"], color=p[f"{tone}_border"], width=0.8, radius=0.04)
+    page.draw_rect(pymupdf.Rect(MARGIN_X + 8, y + 6, MARGIN_X + 56, y + 19),
+                   fill=p[tone], radius=0.08)
+    page.insert_text(pymupdf.Point(MARGIN_X + 12, y + 15), "REVISADO" if resolved else item["severity"],
+                     fontsize=6.5, fontname="helv", color=(1, 1, 1))
+    for x, offset, text, size, color in lines:
+        page.insert_text(pymupdf.Point(MARGIN_X + x, y + offset), text,
+                         fontsize=size, fontname="helv", color=p[color])
+
+
+def _draw_section_heading(page, title, y, p):
+    page.insert_text(pymupdf.Point(MARGIN_X, y + 12), title, fontsize=9.2, fontname="helv", color=p["navy"])
+    page.draw_line(pymupdf.Point(MARGIN_X, y + 16), pymupdf.Point(PAGE_W - MARGIN_X, y + 16),
+                   color=p["navy"], width=0.8)
+
+
+def _item_parts(item, max_height):
+    """Continue exceptionally long findings instead of clipping their text."""
+    height, lines = _item_layout(item)
+    if height <= max_height:
+        return [(item, height, lines)]
+    body = [line for line in lines if line[0] != 62]
+    parts = []
+    while body:
+        part = dict(item)
+        if parts:
+            part["title"] += " (continuación)"
+        title_lines = _wrap_lines(part["title"], CONTENT_W - 74, 8.5)
+        chunk = [(62, 15 + i * 11, text, 8.5, "navy") for i, text in enumerate(title_lines)]
+        start_y = chunk[-1][1] + 14
+        original_y = body[0][1]
+        taken = 0
+        for x, offset, text, size, color in body:
+            relative_y = start_y + offset - original_y
+            if relative_y + 10 > max_height and taken:
+                break
+            chunk.append((x, relative_y, text, size, color))
+            taken += 1
+        parts.append((part, max(105, chunk[-1][1] + 10), chunk))
+        body = body[taken:]
+    return parts
+
+
+def _draw_image_issue(page, entry, y, p, source):
+    """Identify each painted image, including multiple placements of one XObject."""
+    dpi = entry.get("effective_dpi")
+    dpi_text = f"{dpi:g}" if isinstance(dpi, (int, float)) and dpi > 0 else "N/D"
+    target = entry.get("target_dpi", 300)
+    target_text = f"{target:g}" if isinstance(target, (int, float)) else str(target or "N/D")
+    index = entry.get("index")
+    page_label = entry.get("page") or "sin indicar"
+    label = f"Pág. {page_label} · Imagen {index if index is not None else 'sin identificar'}"
+    issue_lines = _wrap_lines(" · ".join(entry.get("issues", [])), CONTENT_W - 124, 7.2)
+    height = max(78, 58 + len(issue_lines) * 9.5 + 8)
+    tone = "red" if entry.get("severity") == "ERROR" else "amber"
+    page.draw_rect(pymupdf.Rect(MARGIN_X, y, PAGE_W - MARGIN_X, y + height),
+                   fill=p[f"{tone}_bg"], color=p[f"{tone}_border"], width=0.7, radius=0.04)
+    preview = pymupdf.Rect(MARGIN_X + 8, y + 8, MARGIN_X + 96, y + height - 8)
+    page.draw_rect(preview, fill=(1, 1, 1), color=p["border"], width=0.5)
+    thumbnail = False
+    if source is not None and entry.get("bbox"):
+        try:
+            source_page = source[int(entry["page"]) - 1]
+            clip = (pymupdf.Rect(entry["bbox"]) * source_page.rotation_matrix) & source_page.rect
+            if not clip.is_empty and not clip.is_infinite:
+                scale = min(2, 176 / clip.width, 124 / clip.height)
+                pixmap = source_page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), clip=clip, alpha=False)
+                page.insert_image(preview, stream=pixmap.tobytes("png"), keep_proportion=True)
+                thumbnail = True
+        except (ValueError, IndexError, TypeError, RuntimeError):
+            pass
+    if not thumbnail:
+        page.insert_text(pymupdf.Point(preview.x0 + 5, preview.y0 + 24),
+                         "Ver imagen en", fontsize=7, fontname="helv", color=p["slate"])
+        page.insert_text(pymupdf.Point(preview.x0 + 5, preview.y0 + 35),
+                         f"la página {page_label}", fontsize=7, fontname="helv", color=p["slate"])
+    x = MARGIN_X + 108
+    page.insert_text(pymupdf.Point(x, y + 16), label, fontsize=9, fontname="hebo", color=p["navy"])
+    page.insert_text(pymupdf.Point(x, y + 30),
+                     f"Resolución: {dpi_text} ppp   |   Mínimo del perfil: {target_text} ppp",
+                     fontsize=7.5, fontname="helv", color=p["slate_dark"])
+    color = entry.get("colorspace") or "sin identificar"
+    dimensions = (f"{entry['width_px']} x {entry['height_px']} px"
+                  if entry.get("width_px") and entry.get("height_px") else "tamaño no disponible")
+    page.insert_text(pymupdf.Point(x, y + 43), f"Color: {color}   |   {dimensions}",
+                     fontsize=7.2, fontname="helv", color=p["slate"])
+    for line_index, line in enumerate(issue_lines):
+        page.insert_text(pymupdf.Point(x, y + 58 + line_index * 9.5), line,
+                         fontsize=7.2, fontname="helv", color=p[tone])
+    return height
+
+
+def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path: str | Path, pdf_path=None):
     """
-    Genera el PDF del Informe Pedagógico para el Cliente (exactamente 1 página A4).
+    Genera la guía A4 completa, con incidencias actuales e historial separados.
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(exist_ok=True, parents=True)
@@ -321,6 +583,7 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
     )
 
     items = _extract_pedagogical_items(job_data)
+    resolved_items = _resolved_pedagogical_items(job_data)
     has_critical = any(it["severity"] == "CRÍTICO" for it in items)
     has_issues = len(items) > 0
 
@@ -335,7 +598,7 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
         badge_border = p["green_border"]
         badge_text_col = p["green"]
         badge_title = "LISTO PARA IMPRESIÓN"
-        badge_sub = "Cumple especificaciones de taller"
+        badge_sub = "Sin incidencias pendientes en la verificación"
     elif has_critical:
         badge_bg = p["red_bg"]
         badge_border = p["red_border"]
@@ -373,10 +636,17 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
 
     # 3. Sección pedagógica: "¿Qué hemos detectado y cómo solucionarlo?"
     y_sec = y_card + card_h + 10.0
+    if job_data.get("original_analysis_unavailable"):
+        notice = "Historial inicial no disponible: se muestra únicamente la verificación del PDF actual."
+        page.insert_text(pymupdf.Point(MARGIN_X + 4, y_sec + 10), notice,
+                         fontsize=7, fontname="helv", color=p["amber"])
+        y_sec += 20
 
     page.insert_text(
         pymupdf.Point(MARGIN_X, y_sec + 12),
-        "GUÍA DE AJUSTES EN INDESIGN / ILLUSTRATOR" if has_issues else "VERIFICACIÓN DE CALIDAD EN EL DOCUMENTO",
+        ("INCIDENCIAS PENDIENTES EN EL PDF ACTUAL" if has_issues else
+         "CORREGIDOS / YA NO DETECTADOS EN EL PDF ACTUAL" if resolved_items else
+         "VERIFICACIÓN DE CALIDAD EN EL DOCUMENTO"),
         fontsize=9.2,
         fontname="helv",
         color=p["navy"],
@@ -391,7 +661,7 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
     y_content = y_sec + 22.0
     max_issues_y = 630.0  # Límite vertical antes del bloque de opciones
 
-    if not has_issues:
+    if not has_issues and not resolved_items:
         # Estado perfecto: mostrar 4 tarjetas verdes de conformidad
         checks = [
             ("Sangrado y Geometría ISO", "El documento dispone de cajas de página y sangrado correcto (+3 mm) para un corte limpio en guillotina."),
@@ -427,82 +697,62 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
             cur_y += box_h + gap
 
     else:
-        # Limitar a máximo 4 ítems prioritarios para garantizar que quepa en 1 página con aire
-        display_items = items[:4]
-        available_h = max_issues_y - y_content
-        item_h = min(105.0, (available_h - (len(display_items) - 1) * 8.0) / len(display_items))
-        gap = 8.0
+        sections = []
+        if items:
+            sections.append(("INCIDENCIAS PENDIENTES EN EL PDF ACTUAL", items))
+        if resolved_items:
+            sections.append(("CORREGIDOS / YA NO DETECTADOS EN EL PDF ACTUAL", resolved_items))
         cur_y = y_content
+        for section_index, (heading, section_items) in enumerate(sections):
+            cards_on_page = 0
+            if section_index:
+                _draw_footer(page, p, job_id)
+                page = doc.new_page(width=PAGE_W, height=PAGE_H)
+                _draw_header(page, assets_dir, p)
+                _draw_section_heading(page, heading, HEADER_H + 12, p)
+                cur_y = HEADER_H + 34
+            for item in section_items:
+                for part, height, lines in _item_parts(item, max_issues_y - y_content):
+                    if cards_on_page >= 4 or cur_y + height > max_issues_y:
+                        _draw_footer(page, p, job_id)
+                        page = doc.new_page(width=PAGE_W, height=PAGE_H)
+                        _draw_header(page, assets_dir, p)
+                        _draw_section_heading(page, heading + " (continuación)", HEADER_H + 12, p)
+                        cur_y = HEADER_H + 34
+                        cards_on_page = 0
+                    _draw_item(page, part, cur_y, height, lines, p)
+                    cur_y += height + 8
+                    cards_on_page += 1
 
-        for it in display_items:
-            is_crit = it["severity"] == "CRÍTICO"
-            bg_col = p["red_bg"] if is_crit else p["amber_bg"]
-            bord_col = p["red_border"] if is_crit else p["amber_border"]
-            badge_col = p["red"] if is_crit else p["amber"]
-
-            page.draw_rect(
-                pymupdf.Rect(MARGIN_X, cur_y, PAGE_W - MARGIN_X, cur_y + item_h),
-                fill=bg_col,
-                color=bord_col,
-                width=0.8,
-                radius=0.04,
-            )
-
-            # Píldora de severidad
-            pill_w = 48.0
-            page.draw_rect(
-                pymupdf.Rect(MARGIN_X + 8, cur_y + 6, MARGIN_X + 8 + pill_w, cur_y + 19),
-                fill=badge_col,
-                radius=0.08,
-            )
-            page.insert_text(
-                pymupdf.Point(MARGIN_X + 12, cur_y + 15),
-                it["severity"],
-                fontsize=6.5,
-                fontname="helv",
-                color=(1, 1, 1),
-            )
-
-            # Título del problema
-            page.insert_text(
-                pymupdf.Point(MARGIN_X + 62, cur_y + 15),
-                it["title"][:58],
-                fontsize=8.5,
-                fontname="helv",
-                color=p["navy"],
-            )
-
-            # Explicación del porqué (¿Qué ocurre?)
-            page.insert_text(
-                pymupdf.Point(MARGIN_X + 10, cur_y + 30),
-                f"Por qué afecta a la tirada: {it['problem'][:135]}",
-                fontsize=7.0,
-                fontname="helv",
-                color=p["slate_dark"],
-            )
-
-            # Solución paso a paso en InDesign/Illustrator
-            sol_y = cur_y + 44
-            page.insert_text(
-                pymupdf.Point(MARGIN_X + 10, sol_y),
-                "Cómo corregirlo en tu programa de maquetación (InDesign / Illustrator):",
-                fontsize=7.0,
-                fontname="helv",
-                color=p["blue"],
-            )
-
-            step_y = sol_y + 12
-            for step in it["solution"][:2]:  # 2 pasos clave
-                page.insert_text(
-                    pymupdf.Point(MARGIN_X + 18, step_y),
-                    f"> {step[:118]}",
-                    fontsize=6.8,
-                    fontname="helv",
-                    color=p["slate_dark"],
-                )
-                step_y += 11
-
-            cur_y += item_h + gap
+    image_issues = collect_report_image_issues(job_data)
+    if image_issues:
+        source = None
+        source_path = pdf_path or meta.get("last_fixed_pdf_path") or meta.get("batch_fixed_pdf_path") or meta.get("pdf_path")
+        if source_path:
+            try:
+                source = pymupdf.open(source_path)
+            except (OSError, ValueError, RuntimeError):
+                pass
+        try:
+            _draw_footer(page, p, job_id)
+            page = doc.new_page(width=PAGE_W, height=PAGE_H)
+            _draw_header(page, assets_dir, p)
+            _draw_section_heading(page, "IMÁGENES QUE REQUIEREN AJUSTES", HEADER_H + 12, p)
+            image_y = HEADER_H + 34
+            for entry in image_issues:
+                line_count = len(_wrap_lines(" · ".join(entry.get("issues", [])), CONTENT_W - 124, 7.2))
+                height = max(78, 58 + line_count * 9.5 + 8)
+                if image_y + height > max_issues_y:
+                    _draw_footer(page, p, job_id)
+                    page = doc.new_page(width=PAGE_W, height=PAGE_H)
+                    _draw_header(page, assets_dir, p)
+                    _draw_section_heading(page, "IMÁGENES QUE REQUIEREN AJUSTES (continuación)", HEADER_H + 12, p)
+                    image_y = HEADER_H + 34
+                _draw_image_issue(page, entry, image_y, p, source)
+                image_y += height + 8
+        finally:
+            if source is not None:
+                source.close()
 
     # 4. Bloque inferior: "¿Cómo proceder? Dos opciones sencillas" (Y: 642 a 792 pt)
     y_opt = 642.0
@@ -593,7 +843,11 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
 
     # 5. Pie de página
     _draw_footer(page, p, job_id)
+    for number, report_page in enumerate(doc, 1):
+        report_page.insert_text(pymupdf.Point(PAGE_W - MARGIN_X - 54, HEADER_H - 4),
+                                f"Guía {number} / {len(doc)}", fontsize=6.5, fontname="helv",
+                                color=(0.78, 0.85, 0.92))
 
-    doc.save(str(output_path))
+    doc.save(str(output_path), deflate=True, garbage=4)
     doc.close()
 
