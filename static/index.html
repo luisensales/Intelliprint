@@ -5647,8 +5647,7 @@
 
       const gutterRow = document.getElementById('impGutterRow');
       if (gutterRow) {
-        if (mode === 'booklet') gutterRow.classList.add('opacity-40', 'pointer-events-none');
-        else gutterRow.classList.remove('opacity-40', 'pointer-events-none');
+        gutterRow.classList.remove('opacity-40', 'pointer-events-none');
       }
 
       const overlay = document.getElementById('impLoadingOverlay');
@@ -5680,7 +5679,11 @@
 
           if (badgePoses) {
             if (mode === 'booklet') {
-              badgePoses.textContent = `${plan.sheets_needed} pliegos (${plan.padded_pages} pág)`;
+              if (plan.grid && plan.grid.total_poses > 2) {
+                badgePoses.textContent = `${plan.grid.total_poses} poses · ${plan.copies_per_sheet || 2} ej./pliego (${plan.sheets_needed} pliegos)`;
+              } else {
+                badgePoses.textContent = `${plan.sheets_needed} pliegos (${plan.padded_pages} pág)`;
+              }
             } else {
               badgePoses.textContent = `${plan.grid.total_poses} poses`;
             }

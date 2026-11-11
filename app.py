@@ -102,7 +102,7 @@ from security_limits import (
     RequestLimitsMiddleware, ResourceLimitError, MAX_FILE_BYTES, MAX_BATCH_BYTES,
     MAX_BATCH_FILES, MAX_PREVIEW_DPI, validate_job_id, contained_job_path,
     validate_pdf_resources, bounded_render_dpi,
-    pdf_processing_slot,
+    pdf_processing_slot, release_pdf_memory,
 )
 
 
@@ -2322,13 +2322,16 @@ def render_comparison_endpoint(
         page_obj = doc[p_idx]
         pix = page_obj.get_pixmap(dpi=bounded_render_dpi(page_obj.rect, dpi))
         img_bytes = pix.tobytes("jpeg")
+        del pix
         doc.close()
+        release_pdf_memory()
         return Response(
             content=img_bytes,
             media_type="image/jpeg",
             headers={"X-Has-Fixes": "1" if has_fixed else "0"}
         )
     except Exception as e:
+        release_pdf_memory()
         raise HTTPException(status_code=500, detail=f"Error renderizando página para comparación: {e}")
 
 
@@ -2423,6 +2426,7 @@ def batch_fix_endpoint(
                     stats["black_100_knockout"] = 0
                     stats["varnish_overprint"] = stats.get("varnish_overprint", 0) + stats.get("varnish_knockout", 0)
                     stats["varnish_knockout"] = 0
+                release_pdf_memory()
 
             # 2. Corrector de Hairlines (< 0.25 pt)
             if hairlines:
@@ -2442,6 +2446,7 @@ def batch_fix_endpoint(
                         and "hairline" not in (f.get("title") or "").lower()
                         and "línea fina" not in (f.get("title") or "").lower()
                     ]
+                release_pdf_memory()
 
             # 3. Trazado de tipografías a curvas
             if fonts:
@@ -2482,6 +2487,7 @@ def batch_fix_endpoint(
                             and "incrustada" not in (f.get("title") or "").lower()
                             and "fuente" not in (f.get("title") or "").lower()
                         ]
+                    release_pdf_memory()
 
             # 4. Normalización de Cajas de Página y Sangrado 3 mm
             if geometry:
@@ -2501,6 +2507,7 @@ def batch_fix_endpoint(
                         and "sangrado" not in (f.get("title") or "").lower()
                         and "bleed" not in (f.get("title") or "").lower()
                     ]
+                release_pdf_memory()
 
             # 4b. Sangrado Sintético por Reflejo perimetral de píxeles (Mirror Bleed)
             if mirror_bleed and profile["min_bleed_mm"] > 0:
@@ -2526,6 +2533,7 @@ def batch_fix_endpoint(
                         and "sangrado" not in (f.get("title") or "").lower()
                         and "bleed" not in (f.get("title") or "").lower()
                     ]
+                release_pdf_memory()
 
             # 4c. Conversión de imágenes RGB a CMYK (ISO Coated v2 / FOGRA39)
             if cmyk_images and profile["color_family"] == "CMYK":
@@ -2656,8 +2664,7 @@ def batch_fix_endpoint(
                         tmp.unlink(missing_ok=True)
                     except Exception:
                         pass
-            import gc
-            gc.collect()
+            release_pdf_memory()
 
         # Registrar en job_meta de manera acumulativa
         job_meta = job_data.setdefault("job_meta", {}) or {}

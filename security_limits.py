@@ -1,5 +1,7 @@
 """Limits for untrusted requests, PDF geometry and server-side rendering."""
 
+import ctypes
+import gc
 import math
 import asyncio
 import re
@@ -11,6 +13,27 @@ from pathlib import Path
 
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
+
+try:
+    _LIBC = ctypes.CDLL("libc.so.6")
+except Exception:
+    _LIBC = None
+
+
+def release_pdf_memory() -> None:
+    """Evict MuPDF's internal C store cache, collect cyclic garbage, and trim glibc heap arenas."""
+    try:
+        import pymupdf
+        pymupdf.TOOLS.store_shrink(100)
+    except Exception:
+        pass
+    gc.collect()
+    if _LIBC is not None:
+        try:
+            _LIBC.malloc_trim(0)
+        except Exception:
+            pass
+
 
 MAX_FILE_BYTES = 25 * 1024 * 1024
 MAX_BATCH_BYTES = 50 * 1024 * 1024
@@ -39,6 +62,7 @@ def pdf_processing_slot():
         yield
     finally:
         if acquired:
+            release_pdf_memory()
             PDF_PROCESSING_SLOT.release()
 
 
@@ -227,6 +251,7 @@ class RequestLimitsMiddleware:
             if body is not None:
                 body.close()
             if acquired:
+                release_pdf_memory()
                 _owns_pdf_slot.reset(slot_token)
                 self.active.release()
             if admitted:

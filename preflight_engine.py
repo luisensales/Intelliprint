@@ -7,7 +7,7 @@ import pikepdf
 from decimal import Decimal
 from pathlib import Path
 from pdf_utils import iter_resources
-from security_limits import validate_pdf_resources
+from security_limits import validate_pdf_resources, release_pdf_memory
 from pdf_graphics import (GraphicsState, resolve_color_space, new_graphics_state,
                           form_initial_state, effective_font_size, painting_components, visible_text)
 from icc_manager import detect_pdf_output_intent, apply_icc_to_pdf
@@ -768,6 +768,11 @@ class IntelliPrintEngine:
                         "message": f"La fuente '{font_name}' no está incrustada en el PDF. Puede sustituirse o corromperse al imprimir."
                     })
 
+        # Run Spellchecker and release MuPDF document before opening pikepdf / measuring TAC
+        spell_suggestions = self.spellchecker.check_pdf_text(doc)
+        doc.close()
+        release_pdf_memory()
+
         # OutputIntent & Document Color
         output_intent_info = {"has_output_intent": False, "identifier": "No declarado"}
         overprint_data = {
@@ -798,11 +803,14 @@ class IntelliPrintEngine:
                     cmds = list(pikepdf.parse_content_stream(p_page))
                     scan_content_stream(cmds, p_page.resources, p_idx, overprint_data,
                                         new_graphics_state(p_page))
+                    del cmds
         except Exception as exc:
             graphics_verified = False
             findings.append({"page": 1, "rule_id": "GRAPHICS_NOT_VERIFIED", "severity": "ERROR",
                              "category": "PDF", "title": "Comprobación gráfica incompleta",
                              "message": str(exc)})
+        finally:
+            release_pdf_memory()
 
         if not allow_spot_colors:
             for spot in spot_colors_detected:
@@ -823,6 +831,8 @@ class IntelliPrintEngine:
                 findings.append({"page": 1, "rule_id": "TAC_NOT_MEASURED", "severity": "WARNING",
                                  "category": "Color", "title": "TAC no medido",
                                  "message": "No se pudo estimar la cobertura. Requiere verificacion en el RIP."})
+            finally:
+                release_pdf_memory()
 
         # Check Output Intent requirements
         if req_family == "CMYK":
@@ -860,13 +870,9 @@ class IntelliPrintEngine:
                 finding_dict["can_autofix"] = True
             findings.append(finding_dict)
 
-        # Run Spellchecker
         rules_evaluated["HAIRLINE_DETECTED"] = (
             "FAIL" if overprint_data["hairlines_count"] else
             "PASS" if graphics_verified else "NOT_VERIFIED")
-        spell_suggestions = self.spellchecker.check_pdf_text(doc)
-
-        doc.close()
 
         # Compute Technical Result
         has_errors = any(f["severity"] == "ERROR" for f in findings)

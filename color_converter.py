@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 from pdf_utils import atomic_output, copy_pdf
+from security_limits import release_pdf_memory
 import tempfile
 import traceback
 from pathlib import Path
@@ -133,22 +134,27 @@ def convert_rgb_images_to_cmyk(
     # Recopilar todos los xrefs de imágenes RGB del documento
     mupdf_doc = pymupdf.open(str(pdf_path))
     rgb_xrefs: set[int] = set()
+    seen_xrefs: set[int] = set()
 
     for page_index in range(len(mupdf_doc)):
         page = mupdf_doc[page_index]
         for img_tuple in page.get_images(full=True):
             xref = img_tuple[0]
+            if xref in seen_xrefs:
+                continue
+            seen_xrefs.add(xref)
             img_info = mupdf_doc.extract_image(xref)
             cs = img_info.get("colorspace", 0)
+            del img_info
             if cs == 3:   # RGB
                 rgb_xrefs.add(xref)
             else:
                 result["images_skipped"] += 1
 
     mupdf_doc.close()
+    release_pdf_memory()
 
     if not rgb_xrefs:
-        import shutil
         copy_pdf(pdf_path, output_path)
         result["success"] = not result["errors"]
         return result
@@ -169,6 +175,7 @@ def convert_rgb_images_to_cmyk(
 
             raw_bytes = img_info.get("image")
             if not raw_bytes:
+                del img_info
                 result["images_skipped"] += 1
                 continue
 
@@ -193,8 +200,7 @@ def convert_rgb_images_to_cmyk(
                     pass
 
             result["images_converted"] += 1
-            import gc
-            gc.collect()
+            release_pdf_memory()
 
         except Exception as e:
             err_msg = f"xref {xref}: {e}"

@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import io
 from pdf_utils import atomic_output, preserve_output_intents
-from security_limits import bounded_render_dpi, MAX_IMPOSITION_POSES
+from security_limits import bounded_render_dpi, MAX_IMPOSITION_POSES, release_pdf_memory
 import math
 from datetime import datetime
 from pathlib import Path
@@ -208,12 +208,14 @@ def calculate_imposition_plan(
         )
 
     # =========================================================================
-    # 1. PLAN MODO CUADERNILLO (BOOKLET SADDLE-STITCH)
+    # 1. PLAN MODO CUADERNILLO (BOOKLET SADDLE-STITCH, 1 O 2 EJEMPLARES/PLIEGO)
     # =========================================================================
     if mode == "booklet":
         target_orient = orientation.lower() if orientation else "auto"
         if target_orient not in ("landscape", "portrait", "auto"):
             target_orient = "auto"
+
+        allow_double = not (user_cols == 1 or user_rows == 1)
 
         options = {}
         for s_orient in ("landscape", "portrait"):
@@ -222,45 +224,46 @@ def calculate_imposition_plan(
             avail_w = s_w - 2 * sheet_margin_mm
             avail_h = s_h - 2 * sheet_margin_mm
 
-            fits_side = (trim_w_mm * 2 <= avail_w and trim_h_mm <= avail_h)
-            fits_rot = (trim_h_mm <= avail_w and trim_w_mm * 2 <= avail_h)
+            # Spread normal (rot=False): 2 páginas lado a lado (2*trim_w × trim_h), lomo vertical
+            fits_side_1 = (trim_w_mm * 2 <= avail_w and trim_h_mm <= avail_h)
+            fits_side_2 = allow_double and fits_side_1 and (trim_h_mm * 2 + gy_mm <= avail_h)
 
-            if s_orient == "landscape":
-                if fits_side:
-                    rot = False
-                    cols, rows = 2, 1
-                    fits = True
-                elif fits_rot:
-                    rot = True
-                    cols, rows = 1, 2
-                    fits = True
-                else:
-                    rot = False
-                    cols, rows = 2, 1
-                    fits = False
-            else:  # portrait
-                if fits_rot:
-                    rot = True
-                    cols, rows = 1, 2
-                    fits = True
-                elif fits_side:
-                    rot = False
-                    cols, rows = 2, 1
-                    fits = True
-                else:
-                    rot = True
-                    cols, rows = 1, 2
-                    fits = False
+            # Spread rotado 90° (rot=True): 2 páginas apiladas (trim_h × 2*trim_w), lomo horizontal
+            fits_rot_1 = (trim_h_mm <= avail_w and trim_w_mm * 2 <= avail_h)
+            fits_rot_2 = allow_double and fits_rot_1 and (trim_h_mm * 2 + gx_mm <= avail_w)
 
-            eff = round(((trim_w_mm * 2 * trim_h_mm) / (s_w * s_h)) * 100, 1)
+            candidates = []
+            if fits_side_2:
+                candidates.append({"rot": False, "cols": 2, "rows": 2, "copies": 2, "poses": 4, "gx": 0.0, "gy": gy_mm, "fits": True, "pref": 1 if s_orient == "landscape" else 0})
+            elif fits_side_1:
+                candidates.append({"rot": False, "cols": 2, "rows": 1, "copies": 1, "poses": 2, "gx": 0.0, "gy": 0.0, "fits": True, "pref": 1 if s_orient == "landscape" else 0})
+
+            if fits_rot_2:
+                candidates.append({"rot": True, "cols": 2, "rows": 2, "copies": 2, "poses": 4, "gx": gx_mm, "gy": 0.0, "fits": True, "pref": 1 if s_orient == "portrait" else 0})
+            elif fits_rot_1:
+                candidates.append({"rot": True, "cols": 1, "rows": 2, "copies": 1, "poses": 2, "gx": 0.0, "gy": 0.0, "fits": True, "pref": 1 if s_orient == "portrait" else 0})
+
+            if candidates:
+                best_cand = max(candidates, key=lambda c: (c["poses"], c["pref"]))
+            else:
+                if s_orient == "landscape":
+                    best_cand = {"rot": False, "cols": 2, "rows": 1, "copies": 1, "poses": 2, "gx": 0.0, "gy": 0.0, "fits": False, "pref": 1}
+                else:
+                    best_cand = {"rot": True, "cols": 1, "rows": 2, "copies": 1, "poses": 2, "gx": 0.0, "gy": 0.0, "fits": False, "pref": 1}
+
+            eff = round(((trim_w_mm * trim_h_mm * best_cand["poses"]) / (s_w * s_h)) * 100, 1)
             options[s_orient] = {
                 "sheet_w_mm": s_w,
                 "sheet_h_mm": s_h,
-                "rotated_90": rot,
-                "cols": cols,
-                "rows": rows,
+                "rotated_90": best_cand["rot"],
+                "cols": best_cand["cols"],
+                "rows": best_cand["rows"],
+                "copies": best_cand["copies"],
+                "poses": best_cand["poses"],
+                "gx": best_cand["gx"],
+                "gy": best_cand["gy"],
                 "eff": eff,
-                "fits": fits
+                "fits": best_cand["fits"],
             }
 
         if target_orient == "portrait":
@@ -272,6 +275,8 @@ def calculate_imposition_plan(
                 chosen_orient = "landscape"
             elif options["portrait"]["fits"] and not options["landscape"]["fits"]:
                 chosen_orient = "portrait"
+            elif options["portrait"]["poses"] > options["landscape"]["poses"]:
+                chosen_orient = "portrait"
             else:
                 chosen_orient = "landscape"
 
@@ -281,6 +286,10 @@ def calculate_imposition_plan(
         rot_90 = opt["rotated_90"]
         grid_cols = opt["cols"]
         grid_rows = opt["rows"]
+        copies_per_sheet = opt["copies"]
+        total_poses = opt["poses"]
+        eff_gx = opt["gx"]
+        eff_gy = opt["gy"]
         eff = opt["eff"]
         fits_normal = opt["fits"]
 
@@ -300,14 +309,15 @@ def calculate_imposition_plan(
             "original_pages": total_doc_pages,
             "padded_pages": padded_pages,
             "sheets_needed": sheets_needed,
-            "pages_per_sheet_side": 2,
+            "copies_per_sheet": copies_per_sheet,
+            "pages_per_sheet_side": total_poses,
             "pose_size_mm": [trim_w_mm, trim_h_mm],
             "pose_with_bleed_mm": [pose_base_w, pose_base_h],
-            "grid": {"cols": grid_cols, "rows": grid_rows, "total_poses": 2},
+            "grid": {"cols": grid_cols, "rows": grid_rows, "total_poses": total_poses},
             "rotated_90": rot_90,
-            "gap_mm": 0.0,
-            "gap_x_mm": 0.0,
-            "gap_y_mm": 0.0,
+            "gap_mm": max(eff_gx, eff_gy),
+            "gap_x_mm": eff_gx,
+            "gap_y_mm": eff_gy,
             "bleed_mm": bleed_mm,
             "source_bleed_mm": source_bleed_mm,
             "pdf_state": pdf_state,
@@ -670,31 +680,36 @@ def generate_imposed_pdf(
         total_p = plan["original_pages"]
         padded_p = plan["padded_pages"]
         sheets_needed = plan["sheets_needed"]
+        copies = plan.get("copies_per_sheet", 1)
         rot = plan.get("rotated_90", False)
         rot_val = 90 if rot else 0
 
         # En cuadernillo siempre usamos TrimBox (tamaño neto de la página)
         trim_w_pt = plan["pose_size_mm"][0] * PT_PER_MM
         trim_h_pt = plan["pose_size_mm"][1] * PT_PER_MM
+        gx_pt = plan.get("gap_x_mm", 0.0) * PT_PER_MM
+        gy_pt = plan.get("gap_y_mm", 0.0) * PT_PER_MM
 
         if rot:
             pw_pt = trim_h_pt
             ph_pt = trim_w_pt
-            total_w_pt = pw_pt
-            total_h_pt = ph_pt * 2
-            x_start = (sheet_w_pt - total_w_pt) / 2.0
-            y_start = (sheet_h_pt - total_h_pt) / 2.0
-            cols = 1
+            cols = 2 if copies == 2 else 1
             rows = 2
+            gap_x_pt = gx_pt if copies == 2 else 0.0
+            gap_y_pt = 0.0
         else:
             pw_pt = trim_w_pt
             ph_pt = trim_h_pt
-            total_w_pt = pw_pt * 2
-            total_h_pt = ph_pt
-            x_start = (sheet_w_pt - total_w_pt) / 2.0
-            y_start = (sheet_h_pt - total_h_pt) / 2.0
             cols = 2
-            rows = 1
+            rows = 2 if copies == 2 else 1
+            gap_x_pt = 0.0
+            gap_y_pt = gy_pt if copies == 2 else 0.0
+
+        total_w_pt = cols * pw_pt + (cols - 1) * gap_x_pt
+        total_h_pt = rows * ph_pt + (rows - 1) * gap_y_pt
+        x_start = (sheet_w_pt - total_w_pt) / 2.0
+        y_start = (sheet_h_pt - total_h_pt) / 2.0
+        copies_label = " · Doble producción (2 ej./pliego)" if copies == 2 else ""
 
         for k in range(sheets_needed):
             p_front_left_idx  = (padded_p - 1) - (2 * k)
@@ -702,17 +717,20 @@ def generate_imposed_pdf(
 
             sheet_front = out_doc.new_page(width=sheet_w_pt, height=sheet_h_pt)
 
-            if rot:
-                rect_fl = pymupdf.Rect(x_start, y_start, x_start + pw_pt, y_start + ph_pt)
-                rect_fr = pymupdf.Rect(x_start, y_start + ph_pt, x_start + pw_pt, y_start + 2 * ph_pt)
-            else:
-                rect_fl = pymupdf.Rect(x_start, y_start, x_start + pw_pt, y_start + ph_pt)
-                rect_fr = pymupdf.Rect(x_start + pw_pt, y_start, x_start + 2 * pw_pt, y_start + ph_pt)
+            for copy_idx in range(copies):
+                if rot:
+                    cx = x_start + copy_idx * (pw_pt + gap_x_pt)
+                    rect_fl = pymupdf.Rect(cx, y_start, cx + pw_pt, y_start + ph_pt)
+                    rect_fr = pymupdf.Rect(cx, y_start + ph_pt, cx + pw_pt, y_start + 2 * ph_pt)
+                else:
+                    ry = y_start + copy_idx * (ph_pt + gap_y_pt)
+                    rect_fl = pymupdf.Rect(x_start, ry, x_start + pw_pt, ry + ph_pt)
+                    rect_fr = pymupdf.Rect(x_start + pw_pt, ry, x_start + 2 * pw_pt, ry + ph_pt)
 
-            if p_front_left_idx < total_p:
-                _place_pose(sheet_front, src_doc, p_front_left_idx, rect_fl, rot_val, page_boxes[p_front_left_idx], trim_only=True)
-            if p_front_right_idx < total_p:
-                _place_pose(sheet_front, src_doc, p_front_right_idx, rect_fr, rot_val, page_boxes[p_front_right_idx], trim_only=True)
+                if p_front_left_idx < total_p:
+                    _place_pose(sheet_front, src_doc, p_front_left_idx, rect_fl, rot_val, page_boxes[p_front_left_idx], trim_only=True)
+                if p_front_right_idx < total_p:
+                    _place_pose(sheet_front, src_doc, p_front_right_idx, rect_fr, rot_val, page_boxes[p_front_right_idx], trim_only=True)
 
             _decorate_sheet(
                 sheet=sheet_front,
@@ -725,13 +743,16 @@ def generate_imposed_pdf(
                 pw_pt=pw_pt,
                 ph_pt=ph_pt,
                 gap_pt=0.0,
+                gap_x_pt=gap_x_pt,
+                gap_y_pt=gap_y_pt,
                 source_bleed_mm=0.0,  # cuadernillo: marks en borde del TrimBox
                 add_marks=add_marks,
                 add_reg_crosses=add_reg_crosses,
                 add_color_bar=add_color_bar,
                 add_slug=add_slug,
-                slug_text=f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · Cuadernillo · Pliego {k+1}/{sheets_needed} [Cara A] · Páginas [{p_front_left_idx+1} + {p_front_right_idx+1}]",
+                slug_text=f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · Cuadernillo{copies_label} · Pliego {k+1}/{sheets_needed} [Cara A] · Páginas [{p_front_left_idx+1} + {p_front_right_idx+1}]",
                 is_booklet=True,
+                booklet_rot=rot,
                 job_id=job_id,
                 base_url=base_url,
             )
@@ -742,17 +763,20 @@ def generate_imposed_pdf(
 
             sheet_back = out_doc.new_page(width=sheet_w_pt, height=sheet_h_pt)
 
-            if rot:
-                rect_bl = pymupdf.Rect(x_start, y_start, x_start + pw_pt, y_start + ph_pt)
-                rect_br = pymupdf.Rect(x_start, y_start + ph_pt, x_start + pw_pt, y_start + 2 * ph_pt)
-            else:
-                rect_bl = pymupdf.Rect(x_start, y_start, x_start + pw_pt, y_start + ph_pt)
-                rect_br = pymupdf.Rect(x_start + pw_pt, y_start, x_start + 2 * pw_pt, y_start + ph_pt)
+            for copy_idx in range(copies):
+                if rot:
+                    cx = x_start + copy_idx * (pw_pt + gap_x_pt)
+                    rect_bl = pymupdf.Rect(cx, y_start, cx + pw_pt, y_start + ph_pt)
+                    rect_br = pymupdf.Rect(cx, y_start + ph_pt, cx + pw_pt, y_start + 2 * ph_pt)
+                else:
+                    ry = y_start + copy_idx * (ph_pt + gap_y_pt)
+                    rect_bl = pymupdf.Rect(x_start, ry, x_start + pw_pt, ry + ph_pt)
+                    rect_br = pymupdf.Rect(x_start + pw_pt, ry, x_start + 2 * pw_pt, ry + ph_pt)
 
-            if p_back_left_idx < total_p:
-                _place_pose(sheet_back, src_doc, p_back_left_idx, rect_bl, rot_val, page_boxes[p_back_left_idx], trim_only=True)
-            if p_back_right_idx < total_p:
-                _place_pose(sheet_back, src_doc, p_back_right_idx, rect_br, rot_val, page_boxes[p_back_right_idx], trim_only=True)
+                if p_back_left_idx < total_p:
+                    _place_pose(sheet_back, src_doc, p_back_left_idx, rect_bl, rot_val, page_boxes[p_back_left_idx], trim_only=True)
+                if p_back_right_idx < total_p:
+                    _place_pose(sheet_back, src_doc, p_back_right_idx, rect_br, rot_val, page_boxes[p_back_right_idx], trim_only=True)
 
             _decorate_sheet(
                 sheet=sheet_back,
@@ -765,13 +789,16 @@ def generate_imposed_pdf(
                 pw_pt=pw_pt,
                 ph_pt=ph_pt,
                 gap_pt=0.0,
+                gap_x_pt=gap_x_pt,
+                gap_y_pt=gap_y_pt,
                 source_bleed_mm=0.0,
                 add_marks=add_marks,
                 add_reg_crosses=add_reg_crosses,
                 add_color_bar=add_color_bar,
                 add_slug=add_slug,
-                slug_text=f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · Cuadernillo · Pliego {k+1}/{sheets_needed} [Cara B] · Páginas [{p_back_left_idx+1} + {p_back_right_idx+1}]",
+                slug_text=f"IntelliPrint-SalesianosUrnieta-CIFPMendizabalaLHII · Cuadernillo{copies_label} · Pliego {k+1}/{sheets_needed} [Cara B] · Páginas [{p_back_left_idx+1} + {p_back_right_idx+1}]",
                 is_booklet=True,
+                booklet_rot=rot,
                 job_id=job_id,
                 base_url=base_url,
             )
@@ -891,6 +918,7 @@ def generate_imposed_pdf(
         out_doc.close()
         src_doc.close()
         preserve_output_intents(pdf_path, temporary)
+    release_pdf_memory()
 
 
     result = dict(plan)
@@ -919,6 +947,7 @@ def _decorate_sheet(
     add_slug: bool = True,
     slug_text: str = "",
     is_booklet: bool = False,
+    booklet_rot: bool = False,
     job_id: Optional[str] = None,
     base_url: str = "",
     gap_x_pt: Optional[float] = None,
@@ -990,63 +1019,67 @@ def _decorate_sheet(
             _draw_mark_line(pymupdf.Point(x_right_mark, yp), pymupdf.Point(x_right_mark + mark_len, yp))
 
         # C) MARCAS INTERNAS VERTICALES (en cada calle horizontal entre filas)
-        for r in range(1, rows):
-            y_prev_bottom = y_cuts[r-1][1]  # línea de corte inferior de la fila anterior
-            y_curr_top    = y_cuts[r][0]    # línea de corte superior de la fila actual
-            gutter_h = y_curr_top - y_prev_bottom
+        # En cuadernillo con lomo horizontal (booklet_rot=True), la unión entre filas es pliegue, no corte.
+        if not (is_booklet and booklet_rot):
+            for r in range(1, rows):
+                y_prev_bottom = y_cuts[r-1][1]  # línea de corte inferior de la fila anterior
+                y_curr_top    = y_cuts[r][0]    # línea de corte superior de la fila actual
+                gutter_h = y_curr_top - y_prev_bottom
 
-            inner_len = min(mark_len, max(2.0 * PT_PER_MM, (gutter_h - 2 * mark_offset) / 2))
+                inner_len = min(mark_len, max(2.0 * PT_PER_MM, (gutter_h - 2 * mark_offset) / 2))
 
-            for xp in all_x:
-                if gutter_h >= 2 * mark_offset + 2.0:
-                    _draw_mark_line(
-                        pymupdf.Point(xp, y_prev_bottom + mark_offset),
-                        pymupdf.Point(xp, y_prev_bottom + mark_offset + inner_len)
-                    )
-                    _draw_mark_line(
-                        pymupdf.Point(xp, y_curr_top - mark_offset),
-                        pymupdf.Point(xp, y_curr_top - mark_offset - inner_len)
-                    )
-                else:
-                    y_mid = (y_prev_bottom + y_curr_top) / 2
-                    _draw_mark_line(
-                        pymupdf.Point(xp, y_mid - 2.0 * PT_PER_MM),
-                        pymupdf.Point(xp, y_mid + 2.0 * PT_PER_MM)
-                    )
+                for xp in all_x:
+                    if gutter_h >= 2 * mark_offset + 2.0:
+                        _draw_mark_line(
+                            pymupdf.Point(xp, y_prev_bottom + mark_offset),
+                            pymupdf.Point(xp, y_prev_bottom + mark_offset + inner_len)
+                        )
+                        _draw_mark_line(
+                            pymupdf.Point(xp, y_curr_top - mark_offset),
+                            pymupdf.Point(xp, y_curr_top - mark_offset - inner_len)
+                        )
+                    else:
+                        y_mid = (y_prev_bottom + y_curr_top) / 2
+                        _draw_mark_line(
+                            pymupdf.Point(xp, y_mid - 2.0 * PT_PER_MM),
+                            pymupdf.Point(xp, y_mid + 2.0 * PT_PER_MM)
+                        )
 
         # D) MARCAS INTERNAS HORIZONTALES (en cada calle vertical entre columnas)
-        for c in range(1, cols):
-            x_prev_right = x_cuts[c-1][1]   # línea de corte derecha de la columna anterior
-            x_curr_left  = x_cuts[c][0]     # línea de corte izquierda de la columna actual
-            gutter_w = x_curr_left - x_prev_right
+        # En cuadernillo con lomo vertical (booklet_rot=False), la unión entre columnas es pliegue, no corte.
+        if not (is_booklet and not booklet_rot):
+            for c in range(1, cols):
+                x_prev_right = x_cuts[c-1][1]   # línea de corte derecha de la columna anterior
+                x_curr_left  = x_cuts[c][0]     # línea de corte izquierda de la columna actual
+                gutter_w = x_curr_left - x_prev_right
 
-            inner_len = min(mark_len, max(2.0 * PT_PER_MM, (gutter_w - 2 * mark_offset) / 2))
+                inner_len = min(mark_len, max(2.0 * PT_PER_MM, (gutter_w - 2 * mark_offset) / 2))
 
-            for yp in all_y:
-                if gutter_w >= 2 * mark_offset + 2.0:
-                    _draw_mark_line(
-                        pymupdf.Point(x_prev_right + mark_offset, yp),
-                        pymupdf.Point(x_prev_right + mark_offset + inner_len, yp)
-                    )
-                    _draw_mark_line(
-                        pymupdf.Point(x_curr_left - mark_offset, yp),
-                        pymupdf.Point(x_curr_left - mark_offset - inner_len, yp)
-                    )
-                else:
-                    x_mid = (x_prev_right + x_curr_left) / 2
-                    _draw_mark_line(
-                        pymupdf.Point(x_mid - 2.0 * PT_PER_MM, yp),
-                        pymupdf.Point(x_mid + 2.0 * PT_PER_MM, yp)
-                    )
+                for yp in all_y:
+                    if gutter_w >= 2 * mark_offset + 2.0:
+                        _draw_mark_line(
+                            pymupdf.Point(x_prev_right + mark_offset, yp),
+                            pymupdf.Point(x_prev_right + mark_offset + inner_len, yp)
+                        )
+                        _draw_mark_line(
+                            pymupdf.Point(x_curr_left - mark_offset, yp),
+                            pymupdf.Point(x_curr_left - mark_offset - inner_len, yp)
+                        )
+                    else:
+                        x_mid = (x_prev_right + x_curr_left) / 2
+                        _draw_mark_line(
+                            pymupdf.Point(x_mid - 2.0 * PT_PER_MM, yp),
+                            pymupdf.Point(x_mid + 2.0 * PT_PER_MM, yp)
+                        )
 
         # Marca de plegado (fold mark) en cuadernillo
-        if is_booklet and cols == 2:
+        if is_booklet and not booklet_rot and cols == 2:
             x_spine = x_start + pw_pt
             y_top_mark = y_min_grid + top - mark_offset
             y_bot_mark = y_max_grid - bottom + mark_offset
             _draw_mark_line(pymupdf.Point(x_spine, y_top_mark), pymupdf.Point(x_spine, y_top_mark - mark_len))
             _draw_mark_line(pymupdf.Point(x_spine, y_bot_mark), pymupdf.Point(x_spine, y_bot_mark + mark_len))
-        elif is_booklet and rows == 2:
+        elif is_booklet and booklet_rot and rows == 2:
             y_spine = y_start + ph_pt
             x_left_mark = x_min_grid + left - mark_offset
             x_right_mark = x_max_grid - right + mark_offset
@@ -1167,7 +1200,9 @@ def render_imposition_preview_image(
         mat = pymupdf.Matrix(zoom, zoom)
         pix = page0.get_pixmap(matrix=mat, alpha=False)
         img_bytes = pix.tobytes(output="jpeg")
+        del pix
         doc.close()
+        release_pdf_memory()
         return img_bytes
     finally:
         if temp_out.exists():

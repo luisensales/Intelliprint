@@ -10,6 +10,7 @@ import pikepdf
 import pymupdf
 
 from pdf_utils import atomic_output, copy_pdf
+from security_limits import release_pdf_memory
 
 
 def _peak(samples):
@@ -44,6 +45,7 @@ def measure_pdf_tac(pdf_path):
             pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), colorspace=pymupdf.csCMYK, alpha=False)
             peak = max(peak, _peak(np.frombuffer(pix.samples_mv, dtype=np.uint8).reshape(pix.height, pix.width, 4)))
             del pix
+    release_pdf_memory()
     return {"measured": True, "peak_percent": round(peak, 2),
             "method": "native_cmyk_images_and_composite_up_to_72dpi", "estimated": True}
 
@@ -101,13 +103,14 @@ def limit_pdf_tac(pdf_path, output_path, max_tac_percent=300.0):
                         errors.append(f"Imagen {xref}: {exc}")
                     finally:
                         pix = None
-                        gc.collect()
+                        release_pdf_memory()
             if errors:
                 raise ValueError("; ".join(errors))
             if clamped:
                 pdf.save(temporary)
             else:
                 shutil.copyfile(pdf_path, temporary)
+    release_pdf_memory()
     return {"success": True, "status": "success", "images_inspected": inspected,
             "images_clamped": clamped, "peak_tac_before": round(peak, 2),
             "target_max_tac": max_tac_percent, "errors": []}

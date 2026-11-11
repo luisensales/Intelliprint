@@ -81,6 +81,27 @@ class GeometryAndPpfTests(PdfFixture):
                 for drawing in artwork:
                     self.assertAlmostEqual(sorted((drawing['rect'].width, drawing['rect'].height))[1], 200, delta=.02)
 
+    def test_booklet_double_production_fits_four_poses_on_sra3(self):
+        pt_per_mm = 72.0 / 25.4
+        with pymupdf.open() as doc:
+            for idx in range(4):
+                page = doc.new_page(width=150 * pt_per_mm, height=210 * pt_per_mm)
+                page.draw_rect(page.rect, fill=(0.9, 0.4, 0.0), width=0)
+            doc.save(self.source)
+        res = generate_imposed_pdf(
+            self.source, self.output, sheet_size='SRA3', orientation='landscape',
+            mode='booklet', gap_x_mm=4.0, gap_y_mm=0.0,
+            add_marks=False, add_reg_crosses=False, add_color_bar=False, add_slug=False,
+        )
+        self.assertEqual(res['copies_per_sheet'], 2)
+        self.assertEqual(res['grid'], {'cols': 2, 'rows': 2, 'total_poses': 4})
+        self.assertAlmostEqual(res['efficiency_percent'], 87.5, delta=0.1)
+        with pymupdf.open(self.output) as doc:
+            self.assertEqual(len(doc), 2)
+            for page in doc:
+                artwork = [d for d in page.get_drawings() if d['fill'] and d['rect'].width * d['rect'].height > 1000]
+                self.assertEqual(len(artwork), 4)
+
     def test_mixed_page_sizes_are_rejected_before_writing(self):
         with pymupdf.open() as doc:
             doc.new_page(width=200, height=200).insert_text((20, 20), 'A')

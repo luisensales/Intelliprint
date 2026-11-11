@@ -16,7 +16,7 @@ from typing import Optional
 import numpy as np
 import pikepdf
 import pymupdf
-from security_limits import bounded_render_dpi
+from security_limits import bounded_render_dpi, release_pdf_memory
 from PIL import Image, ImageCms
 
 ICC_DIR = Path(__file__).parent / "icc_profiles"
@@ -35,8 +35,6 @@ def apply_substrate_simulation(
     2. Ganancia de punto (TVI - oscurecimiento de medios tonos por absorción capilar de fibras).
     3. Simulación de tinta negra (Dmax reducida en papeles porosos, evitando negros irreales de monitor).
     """
-    arr = np.array(img_rgb, dtype=np.float32) / 255.0
-
     if paper_type == "newsprint":
         # Papel prensa: pasta mecánica con lignina, tono ahuesado/grisáceo, alta ganancia de punto
         paper_white = np.array([0.915, 0.885, 0.825], dtype=np.float32)
@@ -58,13 +56,19 @@ def apply_substrate_simulation(
         black_floor = np.array([0.06, 0.06, 0.06], dtype=np.float32) if simulate_black else np.array([0.03, 0.03, 0.03], dtype=np.float32)
         gamma = 1.00  # TVI Curva A (~14% compensado en perfil)
 
-    # Aplicar curva de ganancia de punto a la imagen (en medios tonos)
+    # Precomputar LUT de 256 entradas por canal (evita alojar cientos de MB en float32)
+    x = np.arange(256, dtype=np.float32) / 255.0
     if gamma != 1.0:
-        arr = np.power(arr, gamma)
+        x = np.power(x, gamma)
+    lut = np.clip(
+        (black_floor[None, :] + x[:, None] * (paper_white - black_floor)[None, :]) * 255.0,
+        0, 255,
+    ).astype(np.uint8)
 
-    # Interpolar entre cota de negro y blanco de papel
-    result = black_floor + arr * (paper_white - black_floor)
-    result = np.clip(result * 255.0, 0, 255).astype(np.uint8)
+    arr_u8 = np.asarray(img_rgb, dtype=np.uint8)
+    result = np.empty_like(arr_u8)
+    for ch in range(3):
+        result[:, :, ch] = lut[arr_u8[:, :, ch], ch]
     return Image.fromarray(result)
 
 
@@ -172,6 +176,8 @@ def render_page_separation(
     # Canales: 0=Cyan, 1=Magenta, 2=Yellow, 3=Black (valores 0..255)
     raw = np.frombuffer(pix.samples, dtype=np.uint8).reshape((h, w, num_channels))
     arr = raw[:, :, :4].copy()
+    del raw, pix
+    release_pdf_memory()
 
     # Si se pide visualización de plancha individual en escala de grises (película RIP)
     active_channels = [c for c, active in enumerate([show_c, show_m, show_y, show_k]) if active]
@@ -179,9 +185,12 @@ def render_page_separation(
         ch_idx = active_channels[0]
         # Invertir: 0 tinta = 255 (blanco de papel), 255 tinta = 0 (negro de película)
         ch_data = 255 - arr[:, :, ch_idx]
+        del arr
         img_gray = Image.fromarray(ch_data, "L")
         buf = io.BytesIO()
         img_gray.save(buf, format="JPEG", quality=85)
+        del img_gray, ch_data
+        release_pdf_memory()
         return buf.getvalue()
 
     # Modo simulación de color compuesto
@@ -195,6 +204,7 @@ def render_page_separation(
         arr[:, :, 3] = 0
 
     cmyk_img = Image.fromarray(arr, "CMYK")
+    del arr
 
     # Conversión colorimétrica CMYK -> RGB con perfiles ICC
     intent = ImageCms.Intent.ABSOLUTE_COLORIMETRIC if simulate_paper else ImageCms.Intent.RELATIVE_COLORIMETRIC
@@ -209,6 +219,8 @@ def render_page_separation(
     except Exception:
         # Fallback a conversión básica PIL si falla el transform ICC
         rgb_img = cmyk_img.convert("RGB")
+    finally:
+        del cmyk_img
 
     # Soft Proofing: Simulación física de papel y tinta si está activada
     if simulate_paper:
@@ -220,5 +232,7 @@ def render_page_separation(
 
     buf = io.BytesIO()
     rgb_img.save(buf, format="JPEG", quality=85)
+    del rgb_img
+    release_pdf_memory()
     return buf.getvalue()
 
