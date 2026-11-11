@@ -82,6 +82,23 @@ class CertificateFindingsTests(unittest.TestCase):
         self.assertNotIn("[ERROR]", text)
         self.assertEqual(report["findings"], [])
 
+    def test_recurring_errors_across_multiple_pages_are_grouped(self):
+        findings = [
+            {
+                "page": i,
+                "rule_id": "BLEED_GEOMETRY_3MM",
+                "severity": "ERROR",
+                "title": "Sangrado insuficiente",
+                "message": f"La página {i} no tiene sangrado de 3 mm.",
+            }
+            for i in range(1, 31)
+        ]
+        report = self.report(findings)
+        text = self.render_text(report)
+        self.assertIn("30 incidencias en 30 págs (Págs 1-30)", text)
+        self.assertIn("Sangrado insuficiente", text)
+        self.assertEqual(text.count("[ERROR]"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

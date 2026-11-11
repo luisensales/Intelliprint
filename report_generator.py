@@ -28,6 +28,56 @@ def _palette():
     }
 
 
+def _format_page_ranges(pages: list) -> str:
+    if not pages:
+        return "General"
+    sorted_pages = sorted(set(p for p in pages if p is not None))
+    if not sorted_pages:
+        return "General"
+    if len(sorted_pages) == 1:
+        return f"Pág {sorted_pages[0]}"
+    ranges = []
+    start = sorted_pages[0]
+    end = start
+    for p in sorted_pages[1:]:
+        if p == end + 1:
+            end = p
+        else:
+            ranges.append(f"{start}" if start == end else f"{start}-{end}")
+            start = p
+            end = p
+    ranges.append(f"{start}" if start == end else f"{start}-{end}")
+    return f"Págs {', '.join(ranges)}"
+
+
+def _group_findings_for_report(findings: list) -> list:
+    groups = []
+    seen = {}
+    for f in findings:
+        rule_key = f.get("rule_id") or f.get("title", "")
+        sev = f.get("severity", "ERROR")
+        key = (rule_key, sev)
+        if key not in seen:
+            g = {
+                "rule_id": f.get("rule_id", ""),
+                "severity": sev,
+                "title": f.get("title", ""),
+                "message": f.get("message", ""),
+                "image_index": f.get("image_index"),
+                "items": [f],
+                "pages": [f["page"]] if f.get("page") is not None else []
+            }
+            seen[key] = g
+            groups.append(g)
+        else:
+            g = seen[key]
+            g["items"].append(f)
+            p = f.get("page")
+            if p is not None and p not in g["pages"]:
+                g["pages"].append(p)
+    return groups
+
+
 def _draw_header(page, assets_dir, p):
     """Dibuja la cabecera azul marino con logos en la página dada."""
     page.draw_rect(pymupdf.Rect(0, 0, PAGE_W, HEADER_H), fill=p["navy"])
@@ -268,8 +318,9 @@ def generate_preflight_certificate_pdf(job_data, output_path):
         y += 45
     else:
         pages_list = [page]  # lista de páginas para numerar al final
+        grouped_findings = _group_findings_for_report(findings)
 
-        for f in findings:
+        for g in grouped_findings:
             # Si no cabe el siguiente finding, crear nueva página
             if y + FINDINGS_ROW_H > BOTTOM_LIMIT:
                 # Footer en la página actual (número provisional, se actualiza al final)
@@ -289,7 +340,7 @@ def generate_preflight_certificate_pdf(job_data, output_path):
                                color=p["navy"], width=0.6)
                 y += 28
 
-            is_err   = f.get("severity") == "ERROR"
+            is_err   = g.get("severity") == "ERROR"
             b_col    = p["red"] if is_err else p["amber"]
             fill_col = (0.99, 0.95, 0.95) if is_err else (0.99, 0.98, 0.94)
             badge    = "[ERROR]" if is_err else "[AVISO]"
@@ -297,14 +348,24 @@ def generate_preflight_certificate_pdf(job_data, output_path):
             page.draw_rect(pymupdf.Rect(MARGIN_X, y, PAGE_W - MARGIN_X, y + FINDINGS_ROW_H - 4),
                            fill=fill_col, color=b_col, width=0.5)
 
-            image_ref = f" · Imagen {f['image_index']}" if f.get("image_index") is not None else ""
-            raw_title = f"{badge} Pág {f.get('page', 1)}{image_ref}: {f.get('title', '')}"
+            items_count = len(g["items"])
+            pages_count = len(g["pages"])
+
+            if items_count == 1:
+                f0 = g["items"][0]
+                image_ref = f" · Imagen {f0['image_index']}" if f0.get("image_index") is not None else ""
+                raw_title = f"{badge} Pág {f0.get('page', 1)}{image_ref}: {f0.get('title', '')}"
+                raw_msg = f0.get("message", "")
+            else:
+                pages_str = _format_page_ranges(g["pages"])
+                raw_title = f"{badge} {items_count} incidencias en {pages_count} págs ({pages_str}): {g.get('title', '')}"
+                raw_msg = f"Detectadas {items_count} incidencias en {pages_str}. {g.get('message', '')}"
+
             # Reemplazar símbolos matemáticos no compatibles con Helvetica en PyMuPDF
             clean_title = raw_title.replace("≥", ">=").replace("≤", "<=")
             if len(clean_title) > 88: clean_title = clean_title[:85] + "..."
             page.insert_text(pymupdf.Point(42, y + 14), clean_title, fontsize=8, fontname="helv", color=b_col)
 
-            raw_msg = f.get("message", "")
             clean_msg = raw_msg.replace("≥", ">=").replace("≤", "<=")
             if len(clean_msg) > 100: clean_msg = clean_msg[:97] + "..."
             page.insert_text(pymupdf.Point(42, y + 28), clean_msg, fontsize=7, fontname="helv", color=p["slate"])

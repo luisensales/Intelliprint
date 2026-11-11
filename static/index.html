@@ -3122,6 +3122,59 @@
       return card;
     }
 
+    function formatPageRanges(pages) {
+      if (!pages || pages.length === 0) return 'General';
+      const sorted = [...new Set(pages.filter(p => p != null))].sort((a, b) => a - b);
+      if (sorted.length === 0) return 'General';
+      if (sorted.length === 1) return `Pág. ${sorted[0]}`;
+      const ranges = [];
+      let start = sorted[0], end = start;
+      for (let i = 1; i < sorted.length; i++) {
+        const cur = sorted[i];
+        if (cur === end + 1) {
+          end = cur;
+        } else {
+          ranges.push(start === end ? `${start}` : `${start}-${end}`);
+          start = cur;
+          end = cur;
+        }
+      }
+      ranges.push(start === end ? `${start}` : `${start}-${end}`);
+      return `Págs. ${ranges.join(', ')}`;
+    }
+
+    function groupFindings(findings) {
+      const groups = [];
+      const map = new Map();
+      findings.forEach((f, idx) => {
+        const ruleKey = f.rule_id || `${f.category || ''}:${f.title || ''}`;
+        const key = `${ruleKey}__${f.severity || 'ERROR'}`;
+        if (!map.has(key)) {
+          const g = {
+            key,
+            rule_id: f.rule_id || '',
+            category: f.category || '',
+            severity: f.severity || 'ERROR',
+            title: f.title || 'Incidencia de preimpresión',
+            findings: [{ finding: f, index: idx }],
+            pages: (f.page != null) ? [f.page] : [],
+          };
+          map.set(key, g);
+          groups.push(g);
+        } else {
+          const g = map.get(key);
+          g.findings.push({ finding: f, index: idx });
+          if (f.page != null && !g.pages.includes(f.page)) {
+            g.pages.push(f.page);
+          }
+        }
+      });
+      groups.forEach(g => {
+        g.pages.sort((a, b) => a - b);
+      });
+      return groups;
+    }
+
     // Render Results
     function renderResults(data) {
       if (typeof closeIssueViewer === 'function') closeIssueViewer(false);
@@ -3202,16 +3255,22 @@
       if (data.findings.length === 0) {
         findingsList.innerHTML = '<div class="p-4 bg-emerald-50 text-emerald-800 rounded-lg text-xs font-medium">✅ El documento supera todos los requisitos obligatorios y avisos del perfil.</div>';
       } else {
-          data.findings.forEach((f, findingIndex) => {
+        const grouped = groupFindings(data.findings);
+        grouped.forEach((g) => {
+          const isGrouped = g.findings.length > 1;
+          const firstItem = g.findings[0];
+          const f = firstItem.finding;
+          const findingIndex = firstItem.index;
+
           const div = document.createElement('div');
-          const isErr = f.severity === 'ERROR';
-          const is100KO = (f.rule_id === 'BLACK_TEXT_KNOCKOUT_100') || (f.rule_id === 'BLACK_TEXT_KNOCKOUT');
-          const isHairline = (f.rule_id === 'HAIRLINE_DETECTED');
-          const isIccMissing = (f.rule_id === 'DOCUMENT_OUTPUT_ICC');
-          const isBleedMissing = (f.rule_id === 'BLEED_GEOMETRY_3MM');
-          const isFontMissing = (f.rule_id === 'USED_FONTS_EMBEDDED');
-          const isRgbImage = (data.job_summary.required_color_family !== 'RGB') && ((f.rule_id === 'SOURCE_COLOR_DIAGNOSTIC') || (f.category === 'Color' && f.title.toLowerCase().includes('rgb')));
-          const isTacExcess = f.rule_id === 'MAX_INK_COVERAGE';
+          const isErr = g.severity === 'ERROR';
+          const is100KO = (g.rule_id === 'BLACK_TEXT_KNOCKOUT_100') || (g.rule_id === 'BLACK_TEXT_KNOCKOUT');
+          const isHairline = (g.rule_id === 'HAIRLINE_DETECTED');
+          const isIccMissing = (g.rule_id === 'DOCUMENT_OUTPUT_ICC');
+          const isBleedMissing = (g.rule_id === 'BLEED_GEOMETRY_3MM');
+          const isFontMissing = (g.rule_id === 'USED_FONTS_EMBEDDED');
+          const isRgbImage = (data.job_summary.required_color_family !== 'RGB') && ((g.rule_id === 'SOURCE_COLOR_DIAGNOSTIC') || (g.category === 'Color' && g.title.toLowerCase().includes('rgb')));
+          const isTacExcess = g.rule_id === 'MAX_INK_COVERAGE';
 
           let cardStyle = '';
           let iconHtml = '';
@@ -3270,7 +3329,7 @@
             actionHtml = `
               <div class="mt-2.5 pt-2 border-t border-purple-200 flex items-center justify-between gap-2 flex-wrap">
                 <span class="text-[11px] text-purple-800 font-medium"><i class="fa-solid fa-shapes text-purple-600 mr-1"></i>Curvado vectorial de imprenta:</span>
-                <button onclick="applyFontOutlineFix(this, ${f.page})" class="btn-fix-font flex items-center gap-1.5 px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer">
+                <button onclick="applyFontOutlineFix(this, ${isGrouped ? 'null' : (f.page != null ? f.page : 'null')})" class="btn-fix-font flex items-center gap-1.5 px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer">
                   <i class="fa-solid fa-wand-magic-sparkles text-purple-200"></i> Trazar textos a curvas
                 </button>
               </div>
@@ -3299,25 +3358,76 @@
             iconHtml = '<i class="fa-solid fa-triangle-exclamation text-amber-600 text-sm"></i>';
           }
 
+          let pageBadgeHtml = '';
+          let countBadgeHtml = '';
+          let messageHtml = '';
+          let pageNavHtml = '';
+
+          if (!isGrouped) {
+            pageBadgeHtml = f.page != null ? `<span class="text-[10px] px-1.5 py-0.2 rounded bg-white/80 border border-slate-300 font-mono text-slate-700">Pág ${f.page}</span>` : '';
+            messageHtml = `<p class="mt-0.5 text-slate-700">${escapeHtml(f.message)}</p>`;
+          } else {
+            const pageStr = formatPageRanges(g.pages);
+            countBadgeHtml = `<span class="text-[10px] bg-slate-900 text-white px-2 py-0.5 rounded font-bold tracking-wide">${g.findings.length} errores en ${g.pages.length} págs</span>`;
+            pageBadgeHtml = `<span class="text-[10px] px-1.5 py-0.2 rounded bg-white/90 border border-slate-300 font-mono font-bold text-slate-800" title="Páginas afectadas: ${g.pages.join(', ')}">${pageStr}</span>`;
+
+            let summaryText = '';
+            if (isBleedMissing) {
+              summaryText = `Se han detectado ${g.findings.length} errores de sangrado correspondientes a ${g.pages.length} páginas distintas (${pageStr}). El perfil exige 3 mm perimetrales de sangrado.`;
+            } else if (isRgbImage) {
+              summaryText = `Se han detectado ${g.findings.length} imágenes en espacio RGB correspondientes a ${g.pages.length} páginas (${pageStr}). Deben convertirse a CMYK con el perfil de salida correspondiente.`;
+            } else if (g.rule_id === 'PRINT_IMAGE_EFFECTIVE_PPI') {
+              summaryText = `Se han detectado ${g.findings.length} imágenes con resolución inferior a la exigida por el perfil en ${g.pages.length} páginas (${pageStr}).`;
+            } else if (isFontMissing) {
+              summaryText = `Se han detectado ${g.findings.length} fuentes no incrustadas correspondientes a ${g.pages.length} páginas (${pageStr}).`;
+            } else if (isHairline) {
+              summaryText = `Se han detectado ${g.findings.length} filetes con grosor inferior a 0,25 pt en ${g.pages.length} páginas (${pageStr}).`;
+            } else if (is100KO) {
+              summaryText = `Se han detectado ${g.findings.length} textos de negro puro (100% K) en calado en ${g.pages.length} páginas (${pageStr}).`;
+            } else {
+              summaryText = `Se han detectado ${g.findings.length} errores correspondientes a ${g.pages.length} páginas (${pageStr}).`;
+            }
+
+            messageHtml = `<p class="mt-0.5 text-slate-700">${summaryText}</p>`;
+
+            if (g.pages.length > 1) {
+              const pills = g.findings.slice(0, 12).map(item => {
+                const p = item.finding.page;
+                return `<button type="button" onclick="openIssueViewer(${item.index})" class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-white/90 hover:bg-blue-100 hover:text-blue-800 border border-slate-300 text-slate-700 transition" title="Ver en visor: Pág. ${p}">Pág ${p}</button>`;
+              });
+              if (g.findings.length > 12) {
+                pills.push(`<span class="text-[10px] text-slate-500 font-medium self-center">+${g.findings.length - 12} más</span>`);
+              }
+              pageNavHtml = `
+                <div class="mt-1.5 pt-1.5 border-t border-slate-200/60 flex items-center gap-1 flex-wrap">
+                  <span class="text-[10px] text-slate-600 font-semibold mr-1"><i class="fa-solid fa-arrow-up-right-from-square text-[9px] mr-0.5"></i>Ir a:</span>
+                  ${pills.join('')}
+                </div>
+              `;
+            }
+          }
+
           div.className = `p-3 rounded-lg border text-xs flex items-start gap-3 ${cardStyle}`;
-          div.dataset.ruleId = f.rule_id || '';
+          div.dataset.ruleId = g.rule_id || '';
           div.innerHTML = `
             <div class="mt-0.5">${iconHtml}</div>
             <div class="flex-1">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="font-bold">${escapeHtml(f.title)}</span>
+                <span class="font-bold">${escapeHtml(g.title)}</span>
                 ${badgeHtml}
-                <span class="text-[10px] px-1.5 py-0.2 rounded bg-white/80 border border-slate-300 font-mono text-slate-700">Pág ${f.page}</span>
+                ${countBadgeHtml}
+                ${pageBadgeHtml}
               </div>
-              <p class="mt-0.5 text-slate-700">${escapeHtml(f.message)}</p>
+              ${messageHtml}
+              ${pageNavHtml}
               ${actionHtml}
             </div>
           `;
           const inspectButton = document.createElement('button');
           inspectButton.type = 'button';
           inspectButton.className = 'shrink-0 px-2.5 py-1.5 rounded-lg bg-white border border-blue-200 text-blue-700 font-semibold hover:bg-blue-50';
-          inspectButton.textContent = 'Ver en PDF';
-          inspectButton.setAttribute('aria-label', `Ver en PDF: ${f.title || 'incidencia'}`);
+          inspectButton.textContent = isGrouped ? (f.page != null ? `Ver en PDF (Pág ${f.page})` : 'Ver en PDF') : 'Ver en PDF';
+          inspectButton.setAttribute('aria-label', `Ver en PDF: ${g.title || 'incidencia'}`);
           inspectButton.addEventListener('click', () => openIssueViewer(findingIndex));
           div.appendChild(inspectButton);
           findingsList.appendChild(div);

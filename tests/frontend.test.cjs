@@ -507,3 +507,27 @@ test('safety margin findings escape the actual PDF text and description', () => 
   context.renderSafetyMarginPageIssues(0);
   assertInert(document.getElementById('smInfractionsList').innerHTML);
 });
+
+test('groupFindings consolidates 30 bleed errors across 30 pages into 1 group and formats ranges', () => {
+  const context = {};
+  loadFunctions(context, ['formatPageRanges', 'groupFindings']);
+  assert.equal(context.formatPageRanges([1, 2, 3, 4, 5]), 'Págs. 1-5');
+  assert.equal(context.formatPageRanges([1, 2, 3, 5, 7, 8]), 'Págs. 1-3, 5, 7-8');
+  assert.equal(context.formatPageRanges([4]), 'Pág. 4');
+
+  const findings = [];
+  for (let i = 1; i <= 30; i++) {
+    findings.push({
+      page: i,
+      rule_id: 'BLEED_GEOMETRY_3MM',
+      severity: 'ERROR',
+      title: 'Sangrado insuficiente',
+      message: `La página ${i} no tiene sangrado.`
+    });
+  }
+  const grouped = context.groupFindings(findings);
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0].findings.length, 30);
+  assert.equal(grouped[0].pages.length, 30);
+  assert.equal(context.formatPageRanges(grouped[0].pages), 'Págs. 1-30');
+});
