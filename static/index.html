@@ -136,19 +136,29 @@
           </a>
         </div>
 
-        <!-- Institutional Logos: Salesianos, Mendizabala, Dept. Educación -->
-        <div id="headerInstitutionalLogos" class="institutional-logos-pill shrink-0 flex items-center gap-3 sm:gap-4 bg-white pl-4 pr-6 sm:pr-8 py-1.5 rounded-xl shadow-xs border border-slate-200">
-          <a href="https://salesianosurnieta.com/" target="_blank" rel="noopener noreferrer" class="hover:opacity-75 transition-opacity inline-flex items-center" title="CPIFP Salesianos Urnieta LHIPI (Abrir web oficial)">
-            <img src="/asset/logo-salesianos.svg" alt="Salesianos Urnieta" class="h-6 sm:h-7 w-auto max-w-[110px] object-contain shrink-0">
-          </a>
-          <div class="h-5 sm:h-6 w-px bg-slate-200 shrink-0"></div>
-          <a href="https://www.mendizabala.eus/" target="_blank" rel="noopener noreferrer" class="hover:opacity-75 transition-opacity inline-flex items-center" title="CIFP Mendizabala LHII (mendizabala.eus)">
-            <img src="/asset/logo-mendizabala.png" alt="CIFP Mendizabala LHII" class="h-6 sm:h-7 w-auto max-w-[110px] object-contain shrink-0">
-          </a>
-          <div class="h-5 sm:h-6 w-px bg-slate-200 shrink-0"></div>
-          <a href="https://www.euskadi.eus/gobierno-vasco/departamento-educacion/" target="_blank" rel="noopener noreferrer" class="hover:opacity-75 transition-opacity inline-flex items-center" title="Departamento de Educación · Eusko Jaurlaritza (euskadi.eus)">
-            <img src="/asset/logo-dept-educacion-1.svg" alt="Departamento de Educación · Eusko Jaurlaritza" class="h-7 sm:h-8 w-auto max-w-[145px] object-contain shrink-0">
-          </a>
+        <!-- Right Side: Institutional Logos & User Session -->
+        <div class="flex items-center gap-3 shrink-0 flex-wrap justify-end">
+          <!-- Institutional Logos: Salesianos, Mendizabala, Dept. Educación -->
+          <div id="headerInstitutionalLogos" class="institutional-logos-pill shrink-0 flex items-center gap-3 sm:gap-4 bg-white pl-4 pr-6 sm:pr-8 py-1.5 rounded-xl shadow-xs border border-slate-200">
+            <a href="https://salesianosurnieta.com/" target="_blank" rel="noopener noreferrer" class="hover:opacity-75 transition-opacity inline-flex items-center" title="CPIFP Salesianos Urnieta LHIPI (Abrir web oficial)">
+              <img src="/asset/logo-salesianos.svg" alt="Salesianos Urnieta" class="h-6 sm:h-7 w-auto max-w-[110px] object-contain shrink-0">
+            </a>
+            <div class="h-5 sm:h-6 w-px bg-slate-200 shrink-0"></div>
+            <a href="https://www.mendizabala.eus/" target="_blank" rel="noopener noreferrer" class="hover:opacity-75 transition-opacity inline-flex items-center" title="CIFP Mendizabala LHII (mendizabala.eus)">
+              <img src="/asset/logo-mendizabala.png" alt="CIFP Mendizabala LHII" class="h-6 sm:h-7 w-auto max-w-[110px] object-contain shrink-0">
+            </a>
+            <div class="h-5 sm:h-6 w-px bg-slate-200 shrink-0"></div>
+            <a href="https://www.euskadi.eus/gobierno-vasco/departamento-educacion/" target="_blank" rel="noopener noreferrer" class="hover:opacity-75 transition-opacity inline-flex items-center" title="Departamento de Educación · Eusko Jaurlaritza (euskadi.eus)">
+              <img src="/asset/logo-dept-educacion-1.svg" alt="Departamento de Educación · Eusko Jaurlaritza" class="h-7 sm:h-8 w-auto max-w-[145px] object-contain shrink-0">
+            </a>
+          </div>
+
+          <!-- Sección de Usuario / Sesión RBAC -->
+          <div id="authUserBadge" class="shrink-0 flex items-center">
+            <button onclick="openAuthModal()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-xs border border-blue-500/30 transition cursor-pointer" title="Iniciar sesión con tu cuenta de taller (Diseñador, CTP, Responsable o Docente)">
+              <i class="fa-solid fa-user-lock text-blue-200"></i> <span>Acceso Taller</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -188,12 +198,6 @@
           <button onclick="toggleFullScreen()" class="hidden md:inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition cursor-pointer" title="Pantalla Completa / Kiosko Táctil para Pupitre de Máquina">
             <i class="fa-solid fa-expand"></i> <span class="hidden lg:inline text-xs">Pantalla Completa</span>
           </button>
-          <!-- Sección de Usuario / Sesión RBAC -->
-          <div id="authUserBadge" class="flex items-center gap-1.5 ml-1">
-            <button onclick="openAuthModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer" title="Iniciar sesión con tu cuenta de taller (Diseñador, CTP, Responsable o Docente)">
-              <i class="fa-solid fa-user-lock text-blue-200"></i> <span>Acceso Taller</span>
-            </button>
-          </div>
         </div>
       </div>
 
@@ -9416,7 +9420,7 @@
         if (currentAuthUser.role === 'docente') roleBg = 'bg-emerald-600';
 
         container.innerHTML = `
-          <div class="flex items-center gap-1.5 bg-slate-800 border border-slate-700 px-2.5 py-1 rounded-lg text-xs">
+          <div class="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 px-3 py-1.5 rounded-xl text-xs shadow-xs">
             <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
             <span class="font-bold text-white">${escapeHtml(currentAuthUser.full_name.split(' ')[0])}</span>
             <span class="px-1.5 py-0.2 rounded text-[9px] font-black uppercase text-white ${roleBg}">${escapeHtml(roleLabel)}</span>
@@ -9427,7 +9431,7 @@
         `;
       } else {
         container.innerHTML = `
-          <button onclick="openAuthModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer" title="Iniciar sesión con tu cuenta de taller (Diseñador, CTP, Responsable o Docente)">
+          <button onclick="openAuthModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-xs border border-blue-400/30 transition cursor-pointer" title="Iniciar sesión con tu cuenta de taller (Diseñador, CTP, Responsable o Docente)">
             <i class="fa-solid fa-user-lock text-blue-200"></i> <span>Acceso Taller</span>
           </button>
         `;
