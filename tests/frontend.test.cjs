@@ -563,3 +563,25 @@ test('renderTimeline updates active version, undo/redo buttons and approved stat
   assert.equal(document.getElementById('btnRedoVersion').disabled, true);
   assert.equal(document.getElementById('btnDownloadApprovedPdf').href, '/api/download-approved/job123');
 });
+
+test('renderResults updates expiration TTL notice and production package link', () => {
+  const context = {
+    document: fakeDocument(),
+    getTacLimit: () => 300,
+    closeIssueViewer: () => {},
+    loadJobHistory: () => {}
+  };
+  vm.createContext(context);
+  const start = html.indexOf('    function renderResults(data) {');
+  const end = html.indexOf('      // Hide signed panel for new analysis until signed', start);
+  vm.runInContext(html.slice(start, end) + '\n    }', context);
+
+  context.renderResults({
+    job_meta: { job_id: 'job_test_77', filename: 'catalogo.pdf', profile_id: 'OFFSET_300', current_sha256: 'f'.repeat(64) },
+    triple_result: { release: { status: 'PENDING' } },
+    expiration_info: { ttl_hours: 24, remaining_human: '21 h 40 min', is_expiring_soon: false }
+  });
+
+  assert.equal(context.document.getElementById('resJobTtlText').textContent, 'Retención 24 h (Caduca en 21 h 40 min)');
+  assert.equal(context.document.getElementById('btnProductionPackage').href, '/api/production-package/job_test_77');
+});

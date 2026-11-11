@@ -167,6 +167,10 @@
           <button onclick="openProfileManagerModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 hover:text-white text-xs font-semibold rounded-lg border border-indigo-700/60 shadow-xs transition cursor-pointer" title="Editor de Perfiles de Preflight Personalizados (Crear, Editar, Exportar JSON)">
             <i class="fa-solid fa-sliders text-indigo-300"></i> <span>Perfiles Preflight</span>
           </button>
+          <button onclick="openJobsManagementModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition cursor-pointer" title="Gestión de Trabajos (Búsqueda, Filtros, Caducidad 24h y Paquetes de Producción)">
+            <i class="fa-solid fa-folder-open text-cyan-400"></i> <span>Gestión de Trabajos</span>
+            <span id="jobsCountBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">0</span>
+          </button>
         </div>
 
         <div class="flex items-center gap-1.5">
@@ -352,6 +356,10 @@
               <span class="text-slate-500 font-mono">SHA-256: <span id="resFileHash"></span></span>
               <span class="text-slate-300">·</span>
               <span id="resDetectedIccBadge"></span>
+              <span class="text-slate-300">·</span>
+              <span id="resJobTtlBadge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200" title="Conservación persistente garantizada durante 24 horas desde la última actividad">
+                <i class="fa-regular fa-clock text-indigo-500"></i> <span id="resJobTtlText">Retención 24 h</span>
+              </span>
             </div>
           </div>
 
@@ -365,6 +373,9 @@
             </a>
             <a id="downloadCertBtn" href="#" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition">
               <i class="fa-solid fa-file-shield text-amber-400"></i> Ficha Técnica
+            </a>
+            <a id="btnProductionPackage" href="#" target="_blank" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-slate-900 to-indigo-950 hover:from-slate-800 hover:to-indigo-900 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Descargar paquete ZIP completo: PDF final, ficha técnica, informes, imposición, CIP3 y manifiesto">
+              <i class="fa-solid fa-box-archive text-amber-400"></i> <span>Paquete Producción (.zip)</span>
             </a>
             <button onclick="resetToNewAnalysis()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer" title="Cerrar este reporte y analizar otro PDF desde el principio">
               <i class="fa-solid fa-arrow-left"></i> Nuevo PDF
@@ -2885,6 +2896,84 @@
     </div>
   </div>
 
+  <!-- ======================================================================
+       MODAL: GESTIÓN DE TRABAJOS, CADUCIDAD Y PAQUETES DE PRODUCCIÓN
+  ====================================================================== -->
+  <div id="jobsManagementModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="jobsModalTitle">
+    <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeJobsManagementModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-5xl w-full border border-slate-200 overflow-hidden animate-fade-in flex flex-col max-h-[92vh]">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-3.5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center border border-cyan-400/30">
+            <i class="fa-solid fa-folder-open text-sm"></i>
+          </div>
+          <div>
+            <h3 id="jobsModalTitle" class="text-sm font-bold flex items-center gap-2">
+              Gestión de Trabajos y Conservación Persistente
+              <span class="text-[10px] bg-cyan-600 text-white px-2 py-0.5 rounded-full font-bold">24 Horas</span>
+            </h3>
+            <p class="text-xs text-slate-300 font-normal">Recupera cualquier trabajo activo, consulta su caducidad y descarga el paquete completo de producción.</p>
+          </div>
+        </div>
+        <button onclick="closeJobsManagementModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Barra de Recuperación Directa por ID -->
+      <div class="px-6 py-2.5 bg-indigo-50/70 border-b border-indigo-100 flex items-center justify-between gap-3 flex-wrap text-xs">
+        <div class="flex items-center gap-2 flex-1 min-w-[280px]">
+          <span class="font-bold text-indigo-900 shrink-0"><i class="fa-solid fa-key text-indigo-600 mr-1"></i> Recuperación Directa:</span>
+          <input type="text" data-id="recoverJobIdInput" placeholder="Introduce el ID de trabajo (ej. cdf56e44)..." class="flex-1 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs text-slate-800 font-mono focus:ring-2 focus:ring-indigo-500 outline-none">
+          <button onclick="recoverJobFromInput()" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition shadow-xs cursor-pointer shrink-0">
+            <i class="fa-solid fa-arrow-rotate-right mr-1"></i> Recuperar
+          </button>
+        </div>
+        <span class="text-[11px] text-indigo-700 font-medium hidden sm:inline">
+          <i class="fa-solid fa-shield-halved text-emerald-600 mr-1"></i> Persistencia activa entre reinicios
+        </span>
+      </div>
+
+      <!-- Barra de Búsqueda y Filtros -->
+      <div class="px-6 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap text-xs">
+        <div class="flex items-center gap-2 flex-1 min-w-[240px]">
+          <div class="relative w-full">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400"></i>
+            <input type="text" data-id="jobSearchInput" oninput="debounceFilterJobs()" placeholder="Buscar por nombre de archivo, ID, perfil, operador..." class="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-1.5 text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-bold text-slate-600">Estado:</span>
+          <select data-id="jobStatusFilter" onchange="fetchAndRenderJobsList()" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none">
+            <option value="all">Todos los trabajos</option>
+            <option value="approved">Aprobados / Autorizados</option>
+            <option value="rejected">Rechazados</option>
+            <option value="pending">Pendientes de visto bueno</option>
+            <option value="errors">Con incidencias técnicas</option>
+          </select>
+          <button onclick="fetchAndRenderJobsList()" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold transition shadow-xs cursor-pointer" title="Actualizar lista">
+            <i class="fa-solid fa-rotate mr-1"></i> Refrescar
+          </button>
+        </div>
+      </div>
+
+      <!-- Lista de Trabajos -->
+      <div class="p-6 overflow-y-auto flex-1 bg-slate-100/50 space-y-3" id="jobsListContainer">
+        <div class="text-center py-10 text-slate-400">
+          <i class="fa-solid fa-spinner fa-spin text-2xl mb-2 text-indigo-500"></i>
+          <p>Cargando lista de trabajos gestionados...</p>
+        </div>
+      </div>
+
+      <!-- Footer Info -->
+      <div class="px-6 py-2.5 bg-slate-100 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 flex-wrap gap-2">
+        <span><i class="fa-solid fa-circle-info text-cyan-600 mr-1"></i> Retención garantizada de 24 horas por trabajo desde su última modificación.</span>
+        <span id="jobsSummaryFooter" class="font-bold text-slate-700">0 trabajos</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Footer -->
   <footer class="bg-white border-t border-slate-200 py-6 mt-auto">
     <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
@@ -3376,6 +3465,27 @@
       const downloadClientBtn = document.getElementById('downloadClientReportBtn');
       if (downloadClientBtn && currentJobId) {
         downloadClientBtn.href = `/api/download-client-report/${currentJobId}`;
+      }
+
+      // Aviso de caducidad 24 horas y almacenamiento persistente
+      const expBadge = document.getElementById('resJobTtlBadge');
+      const expText = document.getElementById('resJobTtlText');
+      const exp = data.expiration_info || {};
+      if (expBadge && expText) {
+        const remHuman = exp.remaining_human || '24 h';
+        expText.textContent = `Retención 24 h (Caduca en ${remHuman})`;
+        if (exp.is_expiring_soon) {
+          expBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800 border border-red-300 animate-pulse';
+          expBadge.title = 'ATENCIÓN: Este trabajo caducará pronto. Descarga el paquete de producción para conservarlo permanentemente.';
+        } else {
+          expBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200';
+          expBadge.title = 'Conservación persistente garantizada durante 24 horas desde la última actividad.';
+        }
+      }
+
+      const btnPkg = document.getElementById('btnProductionPackage');
+      if (btnPkg && currentJobId) {
+        btnPkg.href = `/api/production-package/${currentJobId}`;
       }
 
       // Hide signed panel for new analysis until signed
@@ -8390,6 +8500,158 @@
         }
       }
     });
+
+    // =========================================================================
+    // GESTIÓN DE TRABAJOS, RETENCIÓN 24 HORAS Y PAQUETE DE PRODUCCIÓN
+    // =========================================================================
+
+    let debounceTimerJobs = null;
+
+    function openJobsManagementModal() {
+      const modal = document.getElementById('jobsManagementModal');
+      if (modal) modal.classList.remove('hidden');
+      fetchAndRenderJobsList();
+    }
+
+    function closeJobsManagementModal() {
+      const modal = document.getElementById('jobsManagementModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function debounceFilterJobs() {
+      clearTimeout(debounceTimerJobs);
+      debounceTimerJobs = setTimeout(fetchAndRenderJobsList, 300);
+    }
+
+    async function fetchAndRenderJobsList() {
+      const container = document.getElementById('jobsListContainer');
+      const searchInput = document.querySelector('[data-id="jobSearchInput"]');
+      const statusSelect = document.querySelector('[data-id="jobStatusFilter"]');
+      const footer = document.getElementById('jobsSummaryFooter');
+      const countBadge = document.getElementById('jobsCountBadge');
+
+      const q = searchInput ? searchInput.value.trim() : '';
+      const status = statusSelect ? statusSelect.value : 'all';
+
+      try {
+        const resp = await fetch(`/api/jobs?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}&limit=100`);
+        if (!resp.ok) throw new Error('Error al cargar la lista de trabajos');
+        const data = await resp.json();
+
+        if (footer) footer.textContent = `${data.total} trabajo(s) encontrado(s)`;
+        if (countBadge) {
+          countBadge.textContent = data.total;
+          if (data.total > 0) countBadge.classList.remove('hidden');
+          else countBadge.classList.add('hidden');
+        }
+
+        if (!data.jobs || data.jobs.length === 0) {
+          container.innerHTML = `
+            <div class="text-center py-12 bg-white rounded-xl border border-slate-200 p-6">
+              <i class="fa-solid fa-folder-open text-3xl text-slate-300 mb-2"></i>
+              <p class="font-bold text-slate-700">No se encontraron trabajos con los filtros actuales</p>
+              <p class="text-xs text-slate-400 mt-1">Los trabajos nuevos se almacenan de forma persistente durante 24 horas.</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = data.jobs.map(job => {
+          const exp = job.expiration || {};
+          const isExpSoon = exp.is_expiring_soon;
+          const expClass = isExpSoon
+            ? 'bg-red-50 text-red-700 border-red-200 animate-pulse'
+            : (exp.remaining_seconds < 21600 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200');
+
+          const statusBadge = job.is_approved
+            ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200"><i class="fa-solid fa-stamp mr-1"></i>APROBADO</span>'
+            : (job.release_status === 'REJECTED'
+              ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200"><i class="fa-solid fa-ban mr-1"></i>RECHAZADO</span>'
+              : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 border border-slate-300"><i class="fa-solid fa-clock mr-1"></i>PENDIENTE</span>');
+
+          const isCurrentActive = job.job_id === currentJobId;
+
+          return `
+            <div class="bg-white rounded-xl border ${isCurrentActive ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-slate-200'} p-4 shadow-xs hover:border-slate-300 transition flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div class="space-y-1.5 flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <h4 class="font-bold text-slate-900 text-sm truncate" title="${escapeHtml(job.filename)}">${escapeHtml(job.filename)}</h4>
+                  ${statusBadge}
+                  ${isCurrentActive ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300"><i class="fa-solid fa-arrow-pointer mr-1"></i>ACTUAL</span>' : ''}
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-500 font-mono flex-wrap">
+                  <span>ID: <strong class="text-slate-800">${job.job_id}</strong></span>
+                  <button onclick="copyJobIdToClipboard('${job.job_id}')" class="text-indigo-600 hover:text-indigo-800 text-[11px] font-sans" title="Copiar ID"><i class="fa-regular fa-copy"></i></button>
+                  <span class="text-slate-300">·</span>
+                  <span class="font-sans text-slate-600"><i class="fa-solid fa-sliders text-indigo-500 mr-1"></i>${escapeHtml(job.profile_name)}</span>
+                  <span class="text-slate-300">·</span>
+                  <span class="font-sans text-slate-600"><i class="fa-solid fa-file text-slate-400 mr-1"></i>${job.page_count} pág(s)</span>
+                  ${job.operator ? `<span class="text-slate-300">·</span><span class="font-sans text-slate-600"><i class="fa-solid fa-user-check text-emerald-600 mr-1"></i>${escapeHtml(job.operator)}</span>` : ''}
+                </div>
+                <div class="flex items-center gap-2 text-xs flex-wrap">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border ${expClass}">
+                    <i class="fa-regular fa-clock"></i> Caduca en: ${exp.remaining_human || '24 h'}
+                  </span>
+                  ${isExpSoon ? '<span class="text-[11px] font-bold text-red-600">¡Caduca pronto! Descarga el paquete de producción.</span>' : ''}
+                  ${job.versions_count > 1 ? `<span class="text-[11px] text-slate-500"><i class="fa-solid fa-code-branch text-purple-600 mr-1"></i>${job.versions_count} versiones</span>` : ''}
+                  ${job.has_imposed_pdf ? '<span class="text-[11px] text-teal-600 font-semibold"><i class="fa-solid fa-table-cells mr-1"></i>Imposición lista</span>' : ''}
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="flex items-center gap-2 shrink-0 flex-wrap">
+                <button onclick="recoverJobById('${job.job_id}')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs flex items-center gap-1.5 transition cursor-pointer" title="Cargar y visualizar este trabajo en la pantalla principal">
+                  <i class="fa-solid fa-folder-open"></i> <span>Cargar</span>
+                </button>
+                <a href="/api/production-package/${job.job_id}" target="_blank" class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-900 bg-amber-300 hover:bg-amber-400 shadow-xs flex items-center gap-1.5 transition cursor-pointer" title="Descargar paquete de producción completo en ZIP">
+                  <i class="fa-solid fa-box-archive"></i> <span>Paquete ZIP</span>
+                </a>
+                <a href="/api/download-pdf/${job.job_id}" target="_blank" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 flex items-center gap-1 transition" title="Descargar PDF">
+                  <i class="fa-solid fa-file-pdf text-red-600"></i>
+                </a>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        container.innerHTML = `<div class="p-6 text-center text-red-600 bg-red-50 rounded-xl border border-red-200"><p class="font-bold">Error al listar trabajos</p><p class="text-xs mt-1">${escapeHtml(err.message)}</p></div>`;
+      }
+    }
+
+    async function recoverJobFromInput() {
+      const input = document.querySelector('[data-id="recoverJobIdInput"]');
+      if (!input || !input.value.trim()) {
+        alert('Por favor introduce un identificador de trabajo válido.');
+        return;
+      }
+      recoverJobById(input.value.trim());
+    }
+
+    async function recoverJobById(jobId) {
+      if (!jobId) return;
+      try {
+        const resp = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/load`);
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          throw new Error(errData.detail || 'No se pudo recuperar el trabajo.');
+        }
+        const data = await resp.json();
+        closeJobsManagementModal();
+        renderResults(data);
+        const resultsEl = document.getElementById('resultsSection');
+        if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth' });
+      } catch (err) {
+        alert(`Error al recuperar el trabajo: ${err.message}`);
+      }
+    }
+
+    function copyJobIdToClipboard(jobId) {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(jobId).then(() => {
+          alert(`ID de trabajo copiado al portapapeles: ${jobId}`);
+        }).catch(() => {});
+      }
+    }
 
     // Inicializar tema al cargar DOM
     document.addEventListener('DOMContentLoaded', initKioskTheme);

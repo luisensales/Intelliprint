@@ -108,6 +108,14 @@ from version_history import (
     VersionHistoryError,
     VersionQuotaError,
 )
+from job_manager import (
+    JOB_TTL_HOURS,
+    JobManagerError,
+    calculate_job_expiration,
+    list_managed_jobs,
+    get_job_data_for_recovery,
+    build_production_package,
+)
 
 from security_limits import (
     RequestLimitsMiddleware, ResourceLimitError, MAX_FILE_BYTES, MAX_BATCH_BYTES,
@@ -158,18 +166,21 @@ def imposition_options(body):
 
 
 BASE_DIR = Path(__file__).parent
-UPLOAD_DIR = BASE_DIR / "uploads"
-JOBS_DIR = BASE_DIR / "jobs"
+PERSISTENT_DATA_DIR = os.environ.get("INTELLIPRINT_DATA_DIR") or os.environ.get("RENDER_DISK_PATH")
+DATA_DIR = Path(PERSISTENT_DATA_DIR) if PERSISTENT_DATA_DIR else BASE_DIR
+UPLOAD_DIR = DATA_DIR / "uploads"
+JOBS_DIR = DATA_DIR / "jobs"
 STATIC_DIR = BASE_DIR / "static"
 ASSETS_DIR = BASE_DIR / "assets"
 DIDACTIC_SCENARIOS_DIR = BASE_DIR / "didactic_scenarios"
-WORKSHEETS_DIR = BASE_DIR / "worksheets"
+WORKSHEETS_DIR = DATA_DIR / "worksheets"
 
-UPLOAD_DIR.mkdir(exist_ok=True)
-JOBS_DIR.mkdir(exist_ok=True)
-STATIC_DIR.mkdir(exist_ok=True)
-ASSETS_DIR.mkdir(exist_ok=True)
-DIDACTIC_SCENARIOS_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+JOBS_DIR.mkdir(parents=True, exist_ok=True)
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+DIDACTIC_SCENARIOS_DIR.mkdir(parents=True, exist_ok=True)
+WORKSHEETS_DIR.mkdir(parents=True, exist_ok=True)
 
 def rehydrate_didactic_job(job_id: str, scenario_id: str) -> Optional[dict]:
     """
@@ -500,6 +511,11 @@ def check_pdf(
     except Exception as exc:
         print(f"[check_pdf] Aviso versión: {exc}")
 
+    try:
+        report["expiration_info"] = calculate_job_expiration(report, ttl_hours=JOB_TTL_HOURS)
+    except Exception as exc:
+        print(f"[check_pdf] Aviso caducidad: {exc}")
+
     # Persist Job JSON
     job_json_path = get_job_json_path(job_id)
     with open(job_json_path, "w", encoding="utf-8") as f:
@@ -731,6 +747,61 @@ def cleanup_now():
         "errors": result["errors"],
         "remaining_jobs": len(list(JOBS_DIR.glob("*.json")))
     }
+
+
+# =============================================================================
+# GESTIÓN DE TRABAJOS, CADUCIDAD Y PAQUETE COMPLETO DE PRODUCCIÓN
+# =============================================================================
+
+@app.get("/api/jobs")
+def list_jobs_endpoint(
+    q: Optional[str] = Query(None, description="Búsqueda por texto (nombre, ID, perfil, operador)"),
+    status: Optional[str] = Query("all", description="Filtro de estado: all, approved, rejected, pending, errors"),
+    limit: int = Query(50, ge=1, le=200, description="Límite de resultados"),
+):
+    """Búsqueda y listado filtrado de trabajos almacenados con estado de caducidad."""
+    return list_managed_jobs(JOBS_DIR, query=q, status_filter=status, limit=limit, ttl_hours=JOB_TTL_HOURS)
+
+
+@app.get("/api/jobs/{job_id}/expiration")
+def get_job_expiration_endpoint(job_id: str):
+    """Devuelve los datos de caducidad y tiempo restante de retención (24 h)."""
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+    return calculate_job_expiration(job_data, manifest_path=job_json_path, ttl_hours=JOB_TTL_HOURS)
+
+
+@app.get("/api/jobs/{job_id}/load")
+def load_job_endpoint(job_id: str):
+    """Recupera y rehidrata completamente un trabajo para su carga inmediata en la interfaz."""
+    safe_id = safe_job_id(job_id)
+    try:
+        return get_job_data_for_recovery(safe_id, JOBS_DIR, ttl_hours=JOB_TTL_HOURS)
+    except JobManagerError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/jobs/{job_id}/production-package")
+@app.get("/api/production-package/{job_id}")
+def download_production_package_endpoint(job_id: str):
+    """Descarga el paquete completo de producción (.zip) con PDF final, certificados, informes, CIP3 e historial."""
+    safe_id = safe_job_id(job_id)
+    try:
+        zip_bytes, zip_filename = build_production_package(safe_id, JOBS_DIR, upload_dir=UPLOAD_DIR, engine=engine)
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
+        )
+    except JobManagerError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error generando el paquete de producción: {exc}") from exc
+
 
 
 def get_latest_cumulative_pdf(job_meta: dict) -> Optional[str]:
