@@ -46,7 +46,13 @@ STANDARD_SHEET_SIZES_MM: Dict[str, Tuple[float, float]] = {
     "B2": (500.0, 700.0),      # Formato B2 Offset
     "A3": (297.0, 420.0),
     "A4": (210.0, 297.0),
-    "B3": (350.0, 500.0),      # Medio pliego offset pequeño formato
+    "B3": (350.0, 500.0),      # Medio pliego offset pequeño formato (50 × 35 cm)
+    "500X350": (350.0, 500.0), # Formato 500 × 350 mm
+    "350X500": (350.0, 500.0),
+    "50X35": (350.0, 500.0),   # Alias 50 × 35 cm
+    "35X50": (350.0, 500.0),
+    "OFFSET_50X35": (350.0, 500.0),
+    "OFFSET_B3": (350.0, 500.0),
     "SRA4": (225.0, 320.0),
 }
 

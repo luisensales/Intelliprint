@@ -121,6 +121,19 @@ MACHINE_PROFILES = {
         "recommended_profile": "DIGITAL_200",
         "waste_setup_sheets": 15,    # Puesta a punto digital mínima
         "waste_percentage": 0.03,    # 3% de merma
+        "cip3_zones": 16,
+    },
+    "offset_b3": {
+        "id": "offset_b3",
+        "name": "Prensa Offset B3 / Pequeño Formato (50 × 35 cm)",
+        "type": "offset",
+        "standard_sheet": "B3",
+        "sheet_dimensions_mm": (350.0, 500.0),
+        "min_gripper_margin_mm": 10.0,
+        "recommended_profile": "OFFSET_300",
+        "waste_setup_sheets": 70,    # Puesta a punto de tinteros y registro offset medio formato
+        "waste_percentage": 0.04,    # 4% de merma de tirada
+        "cip3_zones": 16,            # 16 zonas estándar para ancho 50 cm
     },
     "offset_b2": {
         "id": "offset_b2",
@@ -132,6 +145,7 @@ MACHINE_PROFILES = {
         "recommended_profile": "OFFSET_300",
         "waste_setup_sheets": 120,   # Puesta a punto de tinteros y registro offset
         "waste_percentage": 0.05,    # 5% de merma de tirada
+        "cip3_zones": 24,            # 24 zonas para ancho 70 cm
     },
     "offset_b1": {
         "id": "offset_b1",
@@ -143,6 +157,7 @@ MACHINE_PROFILES = {
         "recommended_profile": "OFFSET_300",
         "waste_setup_sheets": 200,
         "waste_percentage": 0.05,
+        "cip3_zones": 32,            # 32 zonas para ancho 100 cm
     },
     "plotter_roll": {
         "id": "plotter_roll",
@@ -154,6 +169,7 @@ MACHINE_PROFILES = {
         "recommended_profile": "GRAN_FORMATO",
         "waste_setup_sheets": 2,
         "waste_percentage": 0.02,
+        "cip3_zones": 16,
     },
 }
 
@@ -273,7 +289,10 @@ def propose_production_recipe(
     Calcula y propone la receta completa de producción conectando Preflight, Imposición y Taller.
     """
     product = PRODUCT_RECIPES.get(product_id) or PRODUCT_RECIPES["catalogo_grapado"]
-    machine = MACHINE_PROFILES.get(machine_id) or MACHINE_PROFILES["digital_sra3"]
+    if machine_id in ("offset_b3", "offset_50x35", "offset_35x50", "b3", "offset_500x350"):
+        machine = MACHINE_PROFILES["offset_b3"]
+    else:
+        machine = MACHINE_PROFILES.get(machine_id) or MACHINE_PROFILES["digital_sra3"]
     paper = PAPER_SUBSTRATES.get(paper_id) or PAPER_SUBSTRATES["estucado_mate"]
     finishings = finishings or []
 
@@ -372,6 +391,10 @@ def propose_production_recipe(
                 "densitometer": True,
                 "slug": True,
             },
+        },
+        "cip3_recommendation": {
+            "zones": machine.get("cip3_zones", 16),
+            "description": f"{machine.get('cip3_zones', 16)} zonas clave de tinta (ancho {sheet_w:.0f} mm)",
         },
         "material_calculation": {
             "page_count": pages,
@@ -542,8 +565,8 @@ def generate_job_ticket_pdf(
     page.insert_text(pymupdf.Point(45, y_t), "Perfil Preflight:", fontsize=8.5, color=c_slate, fontname="hebo")
     page.insert_text(pymupdf.Point(145, y_t), f"{order_recipe.get('recommended_profile_id')} ({pap.get('icc_standard', 'ISO 12647')})", fontsize=8.5, color=c_navy, fontname="helv")
 
-    page.insert_text(pymupdf.Point(340, y_t), "Pinza de Máquina:", fontsize=8.5, color=c_slate, fontname="hebo")
-    page.insert_text(pymupdf.Point(435, y_t), f"{mach.get('min_gripper_margin_mm', 10.0)} mm perimetral", fontsize=8.5, color=c_navy, fontname="helv")
+    page.insert_text(pymupdf.Point(340, y_t), "Pinza / CIP3:", fontsize=8.5, color=c_slate, fontname="hebo")
+    page.insert_text(pymupdf.Point(435, y_t), f"Pinza {mach.get('min_gripper_margin_mm', 10.0):.0f} mm · {mach.get('cip3_zones', 16)} zonas CIP3", fontsize=8.5, color=c_navy, fontname="helv")
 
     y += 105
 

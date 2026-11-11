@@ -113,6 +113,45 @@ class ProductionOrderTests(unittest.TestCase):
             self.assertIn("IMPRESIÓN (PRENSA)", text)
             self.assertIn("ACABADOS", text)
 
+    def test_offset_50x35_machine_calculations(self):
+        # 1. Proponer receta con offset_b3
+        recipe = production_order.propose_production_recipe(
+            product_id="catalogo_grapado",
+            machine_id="offset_b3",
+            paper_id="estucado_brillo",
+            quantity=1000,
+            finishings=["grapado"],
+            page_count=16,
+        )
+        self.assertEqual(recipe["machine"]["id"], "offset_b3")
+        self.assertEqual(recipe["imposition"]["sheet_size"], "B3")
+        self.assertEqual(recipe["imposition"]["sheet_margin_mm"], 10.0)
+        self.assertEqual(recipe["material_calculation"]["setup_waste_sheets"], 70)
+        self.assertEqual(recipe["cip3_recommendation"]["zones"], 16)
+
+        # 2. Comprobar alias offset_50x35
+        recipe_alias = production_order.propose_production_recipe(
+            product_id="flyer_volante",
+            machine_id="offset_50x35",
+            paper_id="offset_uncoated",
+            quantity=5000,
+            page_count=2,
+            trim_width_mm=148.0,
+            trim_height_mm=210.0,
+        )
+        self.assertEqual(recipe_alias["machine"]["id"], "offset_b3")
+        self.assertEqual(recipe_alias["imposition"]["sheet_size"], "B3")
+        self.assertEqual(recipe_alias["material_calculation"]["setup_waste_sheets"], 70)
+
+        # 3. Comprobar pliegos en job ticket
+        output_pdf = self.jobs_dir / "job_ticket_offset_b3.pdf"
+        production_order.generate_job_ticket_pdf(recipe, {"job_meta": {"job_id": "test_b3", "filename": "Doc.pdf"}}, output_pdf)
+        self.assertTrue(output_pdf.exists())
+        with pymupdf.open(str(output_pdf)) as doc:
+            text = doc[0].get_text()
+            self.assertIn("50 × 35 cm", text)
+            self.assertIn("16 zonas CIP3", text)
+
     def test_api_endpoints_integration(self):
         orig_jobs = app.JOBS_DIR
         app.JOBS_DIR = self.jobs_dir
