@@ -32,6 +32,8 @@ Thumbs.db
 .tmp.driveupload/
 *.log
 ~$*
+~WRL*
+*.tmp
 *.docx
 !Manual_de_Usuario_IntelliPrint.docx
 !Manual_de_Usuario_IntelliPrint.pdf

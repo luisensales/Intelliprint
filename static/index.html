@@ -174,6 +174,9 @@
           <button onclick="openProductionOrderModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer" title="Orden de Producción: Conectar producto, máquina, papel y acabados con preflight e imposición">
             <i class="fa-solid fa-clipboard-list"></i> <span>Orden de Producción</span>
           </button>
+          <button onclick="openGwgValidationModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer" title="Certificación GWG / PDF/X: Validación pericial con evidencia técnica e impacto en taller">
+            <i class="fa-solid fa-certificate text-emerald-200"></i> <span>Validación GWG</span>
+          </button>
         </div>
 
         <div class="flex items-center gap-1.5">
@@ -382,6 +385,9 @@
             </a>
             <button onclick="openProductionOrderModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Configurar orden de trabajo y receta para este PDF">
               <i class="fa-solid fa-clipboard-check text-amber-100"></i> <span>Orden de Trabajo</span>
+            </button>
+            <button onclick="openGwgValidationModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Auditar contra estándar GWG 2015 / ISO PDF/X y descargar certificado oficial de conformidad">
+              <i class="fa-solid fa-certificate text-emerald-200"></i> <span>Certificado GWG</span>
             </button>
             <button onclick="resetToNewAnalysis()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer" title="Cerrar este reporte y analizar otro PDF desde el principio">
               <i class="fa-solid fa-arrow-left"></i> Nuevo PDF
@@ -3112,6 +3118,70 @@
             <i class="fa-solid fa-wand-magic-sparkles text-amber-200"></i> Aplicar Receta y Generar Hoja de Ruta
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       MODAL: VALIDACIÓN DE PRODUCCIÓN CON EVIDENCIA (GWG 2015 / ISO 15930)
+  ====================================================================== -->
+  <div id="gwgValidationModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="gwgModalTitle">
+    <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeGwgValidationModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-5xl w-full border border-slate-200 overflow-hidden animate-fade-in flex flex-col max-h-[92vh]">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-3.5 bg-gradient-to-r from-emerald-700 via-teal-800 to-slate-900 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-emerald-400/20 text-emerald-200 flex items-center justify-center border border-emerald-300/30">
+            <i class="fa-solid fa-certificate text-sm"></i>
+          </div>
+          <div>
+            <h3 id="gwgModalTitle" class="text-sm font-bold flex items-center gap-2">
+              Validación de Producción con Evidencia (Ghent PDF Output Suite / PDF/X)
+              <span class="text-[10px] bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full font-bold">Auditoría Pericial ISO</span>
+            </h3>
+            <p class="text-xs text-emerald-100 font-normal">Auditoría técnica de conformidad con evidencias exactas por objeto, consecuencias físicas en prensa y dictamen pericial de taller.</p>
+          </div>
+        </div>
+        <button onclick="closeGwgValidationModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Selector de Norma -->
+      <div class="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div class="flex items-center gap-3 flex-1 min-w-[280px]">
+          <label class="text-xs font-bold text-slate-700 whitespace-nowrap">Estándar de Producción:</label>
+          <select data-id="gwgStandardSelect" onchange="runGwgValidation()" class="w-full max-w-md rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none">
+            <option value="gwg_2015_sheetfed" selected>GWG 2015 - Sheetfed Offset (Comercial Pliego / PDF/X-4)</option>
+            <option value="pdfx_4_2010">ISO 15930-7:2010 (PDF/X-4 Estándar Moderno)</option>
+            <option value="pdfx_1a_2001">ISO 15930-1:2001 (PDF/X-1a Estricto CMYK)</option>
+            <option value="gwg_newspaper">GWG 2015 - Newspaper (Prensa Rotativa / WAN-IFRA)</option>
+            <option value="gwg_packaging">GWG 2015 - Packaging (Estuches, Cajas y Troquel)</option>
+          </select>
+        </div>
+        <button onclick="runGwgValidation()" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold shadow-xs transition flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-arrows-rotate text-emerald-400"></i> Re-auditar PDF
+        </button>
+      </div>
+
+      <!-- Content Area -->
+      <div id="gwgReportContent" class="p-6 overflow-y-auto space-y-4 flex-1">
+        <div class="text-center py-12 text-slate-400">
+          <i class="fa-solid fa-spinner fa-spin text-3xl mb-2 text-emerald-500"></i>
+          <p class="text-sm font-medium">Ejecutando auditoría pericial con evidencias...</p>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-between px-6 py-3 bg-slate-50 border-t border-slate-200 shrink-0">
+        <div class="flex items-center gap-2">
+          <a id="gwgBtnDownloadCertificate" href="#" target="_blank" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer">
+            <i class="fa-solid fa-file-pdf text-emerald-200"></i> Descargar Certificado Oficial PDF
+          </a>
+        </div>
+        <button onclick="closeGwgValidationModal()" class="px-4 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-semibold transition cursor-pointer">
+          Cerrar
+        </button>
       </div>
     </div>
   </div>
@@ -9016,6 +9086,168 @@
           btnApply.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-amber-200"></i> Aplicar Receta y Generar Hoja de Ruta';
         }
       }
+    }
+
+    // =========================================================================
+    // VALIDACIÓN DE PRODUCCIÓN CON EVIDENCIA (GWG 2015 / ISO 15930 PDF/X)
+    // =========================================================================
+
+    function openGwgValidationModal() {
+      if (!currentJobId) {
+        alert('Debes subir y analizar un PDF primero antes de certificar contra la norma GWG.');
+        return;
+      }
+      const modal = document.getElementById('gwgValidationModal');
+      if (modal) modal.classList.remove('hidden');
+      runGwgValidation();
+    }
+
+    function closeGwgValidationModal() {
+      const modal = document.getElementById('gwgValidationModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function runGwgValidation() {
+      if (!currentJobId) return;
+      const container = document.getElementById('gwgReportContent');
+      if (!container) return;
+
+      container.innerHTML = `
+        <div class="text-center py-12 text-slate-400">
+          <i class="fa-solid fa-spinner fa-spin text-3xl mb-2 text-emerald-500"></i>
+          <p class="text-sm font-medium">Ejecutando auditoría pericial con evidencias...</p>
+        </div>
+      `;
+
+      const stdSelect = document.querySelector('[data-id="gwgStandardSelect"]');
+      const standardId = stdSelect ? stdSelect.value : 'gwg_2015_sheetfed';
+
+      try {
+        const resp = await fetch(`/api/validation/verify/${currentJobId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ standard_id: standardId })
+        });
+
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+
+        const report = await resp.json();
+        renderGwgReport(report);
+      } catch (err) {
+        container.innerHTML = `
+          <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs">
+            <p class="font-bold">Error al ejecutar la validación GWG:</p>
+            <p>${escapeHtml(err.message)}</p>
+          </div>
+        `;
+      }
+    }
+
+    function renderGwgReport(report) {
+      const container = document.getElementById('gwgReportContent');
+      if (!container) return;
+
+      const btnCert = document.getElementById('gwgBtnDownloadCertificate');
+      if (btnCert && report.certificate_url) {
+        btnCert.href = report.certificate_url;
+      }
+
+      const std = report.standard || {};
+      const stats = report.stats || {};
+      const verdict = report.overall_verdict || 'EVALUADO';
+      const color = report.verdict_color || 'green';
+
+      let bgBadge = 'bg-emerald-50 border-emerald-200 text-emerald-800';
+      let tagBg = 'bg-emerald-600 text-white';
+      if (color === 'amber') {
+        bgBadge = 'bg-amber-50 border-amber-200 text-amber-800';
+        tagBg = 'bg-amber-600 text-white';
+      } else if (color === 'red') {
+        bgBadge = 'bg-red-50 border-red-200 text-red-800';
+        tagBg = 'bg-red-600 text-white';
+      }
+
+      const checksHtml = (report.checks || []).map((chk) => {
+        let statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">✓ CONFORME</span>';
+        if (chk.status === 'WARNING') {
+          statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">⚠ ADVERTENCIA</span>';
+        } else if (chk.status === 'FAIL') {
+          statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-300">✕ ERROR CRÍTICO</span>';
+        }
+
+        const ev = chk.evidence || {};
+        return `
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-2.5">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">${escapeHtml(chk.category)}</span>
+                <h4 class="text-xs font-bold text-slate-800">${escapeHtml(chk.title)}</h4>
+              </div>
+              <div>${statusBadge}</div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+              <div>
+                <span class="font-bold text-slate-700 block">Criterio de la Norma:</span>
+                <p class="text-slate-600">${escapeHtml(chk.standard_criterion)}</p>
+              </div>
+              <div>
+                <span class="font-bold text-slate-700 block">Evidencia Medida:</span>
+                <p class="text-slate-900 font-medium">${escapeHtml(ev.summary || 'Sin incidencias')}</p>
+                ${ev.details ? `<p class="text-[10px] text-slate-500 font-mono mt-0.5">${escapeHtml(ev.details)}</p>` : ''}
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 text-slate-600">
+              <div>
+                <span class="font-bold text-amber-800"><i class="fa-solid fa-triangle-exclamation text-amber-600"></i> Impacto en Taller:</span>
+                <span>${escapeHtml(chk.workshop_impact || 'Apto para plancha.')}</span>
+              </div>
+              <div class="text-right">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">${escapeHtml(chk.action_required || 'Ninguna')}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML = `
+        <!-- Dictamen Banner -->
+        <div class="p-4 rounded-xl border ${bgBadge} flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-extrabold uppercase tracking-wide ${tagBg}">${escapeHtml(verdict)}</span>
+              <span class="text-xs font-bold">${escapeHtml(std.name || '')}</span>
+            </div>
+            <p class="text-xs opacity-90">${escapeHtml(report.verdict_summary || '')}</p>
+          </div>
+          <div class="flex items-center gap-4 bg-white/70 px-4 py-2 rounded-lg border border-slate-200/50 shadow-2xs">
+            <div class="text-center">
+              <div class="text-xl font-black text-slate-800">${report.score_percent}%</div>
+              <div class="text-[10px] font-bold text-slate-500 uppercase">Calidad ISO</div>
+            </div>
+            <div class="h-8 w-px bg-slate-200"></div>
+            <div class="text-[11px] font-semibold space-y-0.5 text-slate-700">
+              <div class="text-emerald-700"><i class="fa-solid fa-circle-check"></i> ${stats.passed || 0} conformes</div>
+              <div class="text-amber-700"><i class="fa-solid fa-triangle-exclamation"></i> ${stats.warnings || 0} avisos</div>
+              <div class="text-red-700"><i class="fa-solid fa-circle-xmark"></i> ${stats.errors || 0} errores</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Matriz de Evidencias -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <i class="fa-solid fa-list-check text-emerald-600"></i> Matriz de Evidencias Técnicas (${report.checks?.length || 0} comprobaciones)
+            </h4>
+            <span class="text-[10px] text-slate-500 font-mono">Fichero: ${escapeHtml((report.pdf_filename || '').slice(0, 30))}</span>
+          </div>
+          ${checksHtml}
+        </div>
+      `;
     }
 
     // Inicializar tema al cargar DOM

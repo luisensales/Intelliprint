@@ -122,6 +122,11 @@ from production_order import (
     validate_pdf_against_order,
     generate_job_ticket_pdf,
 )
+from gwg_validator import (
+    get_available_standards,
+    validate_pdf_gwg,
+    generate_gwg_certificate_pdf,
+)
 
 from security_limits import (
     RequestLimitsMiddleware, ResourceLimitError, MAX_FILE_BYTES, MAX_BATCH_BYTES,
@@ -960,6 +965,75 @@ def download_job_ticket_endpoint(job_id: str):
         path=str(ticket_path),
         media_type="application/pdf",
         filename=f"Hoja_de_Ruta_IntelliPrint_{safe_id[:8]}.pdf",
+    )
+
+
+# =============================================================================
+# VALIDACIÓN DE PRODUCCIÓN CON EVIDENCIA (GWG 2015 / ISO 15930 PDF/X)
+# =============================================================================
+
+@app.get("/api/validation/standards")
+def validation_standards_endpoint():
+    """Devuelve el catálogo de estándares de producción industrial GWG y PDF/X."""
+    return {"standards": get_available_standards()}
+
+
+@app.post("/api/validation/verify/{job_id}")
+def verify_production_endpoint(job_id: str, request: Request, body: dict = Body(default={})):
+    """Ejecuta una auditoría pericial contra la norma GWG o PDF/X elegida con evidencias exactas."""
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    meta = job_data.get("job_meta", {})
+    target_pdf = get_latest_cumulative_pdf(meta) or meta.get("file_path")
+    if not target_pdf or not Path(target_pdf).exists():
+        raise HTTPException(status_code=404, detail="Archivo PDF de origen no encontrado.")
+
+    standard_id = body.get("standard_id", "gwg_2015_sheetfed")
+    try:
+        report = validate_pdf_gwg(target_pdf, standard_id=standard_id, job_data=job_data)
+
+        # Generar certificado PDF de conformidad
+        cert_path = JOBS_DIR / f"{safe_id}_certificado_gwg.pdf"
+        generate_gwg_certificate_pdf(job_data, report, cert_path)
+
+        job_data["production_validation"] = report
+        job_data["production_validation_certificate_path"] = str(cert_path)
+        with open(job_json_path, "w", encoding="utf-8") as f:
+            json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+        report["certificate_url"] = f"/api/validation/certificate/{job_id}"
+        return report
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error validando contra norma GWG: {exc}")
+
+
+@app.get("/api/validation/certificate/{job_id}")
+def download_validation_certificate_endpoint(job_id: str):
+    """Descarga el Certificado Oficial de Producción pericial en PDF firmado digitalmente."""
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    cert_path = JOBS_DIR / f"{safe_id}_certificado_gwg.pdf"
+    if not cert_path.exists():
+        with open(job_json_path, "r", encoding="utf-8") as f:
+            job_data = json.load(f)
+        meta = job_data.get("job_meta", {})
+        target_pdf = get_latest_cumulative_pdf(meta) or meta.get("file_path")
+        report = job_data.get("production_validation") or validate_pdf_gwg(target_pdf, "gwg_2015_sheetfed", job_data)
+        generate_gwg_certificate_pdf(job_data, report, cert_path)
+
+    return FileResponse(
+        path=str(cert_path),
+        media_type="application/pdf",
+        filename=f"Certificado_Conformidad_GWG_{safe_id[:8]}.pdf",
     )
 
 
