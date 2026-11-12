@@ -451,7 +451,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         try:
              dpi = int(sys.argv[2])
-        except:
+        except Exception:
              pass
              
     if pdf_path and pdf_path.strip() != "":

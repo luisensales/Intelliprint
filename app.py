@@ -1280,7 +1280,7 @@ def fp_teacher_overview_endpoint(request: Request, group_id: Optional[int] = Non
         "submissions": fp_list_submissions(group_id=group_id),
         "evolution": fp_student_evolution(group_id=group_id),
         "scenarios": [
-            {"id": s["id"], "title": s["title"], "level": s["level"], "module": s["module"]}
+            {"id": s["id"], "title": s["title"], "level": s["level"], "difficulty": s["level"], "module": s["module"]}
             for s in SCENARIOS_CATALOG
         ],
         "db_status": get_db_status(),
@@ -4815,6 +4815,23 @@ def load_didactic_scenario_endpoint(scenario_id: str):
         "scenario_title": scenario["title"]
     }
     update_pdf_identity(report, file_path, original_sha256=pdf_sha256)
+    capture_original_analysis(report)
+    try:
+        vdir = JOBS_DIR / f"{job_id}_versions"
+        if vdir.exists():
+            shutil.rmtree(vdir, ignore_errors=True)
+        capture_version(
+            report,
+            file_path,
+            JOBS_DIR,
+            label="PDF original recibido",
+            notes=f"Reto didáctico FP: {scenario['title']}",
+            author="Laboratorio FP",
+            tags=["original", "didactico"],
+        )
+    except Exception:
+        pass
+    report["expiration_info"] = calculate_job_expiration(report, ttl_hours=JOB_TTL_HOURS)
 
     job_json_path = get_job_json_path(job_id)
     with open(job_json_path, "w", encoding="utf-8") as f:
@@ -4899,7 +4916,7 @@ def evaluate_quiz_endpoint(request: Request, payload: dict):
             score_pct = round(float(results.get("score", 0.0)) * 10.0, 1)
             fp_record_quiz_attempt(
                 student_id=auth_user["id"],
-                topic=payload.get("topic") or "Cuestionario Técnico FP",
+                topic=payload.get("topic") or payload.get("profile") or "Cuestionario Técnico FP",
                 score_pct=score_pct,
                 correct_count=int(results.get("correct_answers", 0)),
                 total_count=int(results.get("total_questions", 0)),

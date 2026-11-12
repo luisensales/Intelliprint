@@ -64,6 +64,26 @@ class FPClassroomAndRegistrationTests(unittest.TestCase):
             self.assertEqual(status["backend"], "sqlite")
             self.assertFalse(status["persistent"])
 
+    def test_forensic_comparison_recognizes_app_flags_and_production_validation(self):
+        comp = fp_classroom.build_submission_comparison({
+            "job_meta": {
+                "filename": "practica_real.pdf",
+                "has_cmyk_converted": True,
+                "has_bleed_fixed": True,
+                "has_icc_fixed": True,
+            },
+            "original_analysis": {
+                "job_summary": {"page_count": 2},
+                "findings": [{"severity": "error", "category": "Color", "message": "RGB detectado"}],
+            },
+            "job_summary": {"page_count": 2},
+            "findings": [],
+            "production_validation": {"overall_verdict": "CERTIFICADO PARA PRODUCCIÓN"},
+        })
+        self.assertEqual(comp["decisions"]["fixes_count"], 3)
+        self.assertTrue(comp["decisions"]["used_gwg_validation"])
+        self.assertEqual(comp["decisions"]["gwg_status"], "CERTIFICADO PARA PRODUCCIÓN")
+
     def test_email_registration_roles_invite_codes_and_single_session(self):
         with patch.dict(os.environ, {"INTELLIPRINT_DOCENTE_CODE": "DOC-2026"}, clear=False):
             # 1. Estudiante se activa al instante
@@ -228,12 +248,29 @@ class FPClassroomAndRegistrationTests(unittest.TestCase):
         r_grade = teacher_client.post(f"/api/fp/teacher/submissions/{submission['id']}/grade", json={
             "rubric_scores": {"diagnostico": 9.0, "decisiones": 9.5, "resultado_final": 10.0, "taller_teoria": 8.5},
             "teacher_feedback": "Excelente resolución de sangrado y conversión CMYK.",
+            "status": "REVIEWED",
+        })
+        self.assertEqual(r_grade.status_code, 200)
+        reviewed = r_grade.json()["submission"]
+        self.assertEqual(reviewed["status"], "REVIEWED")
+
+        r_grade = teacher_client.post(f"/api/fp/teacher/submissions/{submission['id']}/grade", json={
+            "rubric_scores": {"diagnostico": 9.0, "decisiones": 9.5, "resultado_final": 10.0, "taller_teoria": 8.5},
+            "teacher_feedback": "Excelente resolución de sangrado y conversión CMYK.",
             "status": "GRADED",
         })
         self.assertEqual(r_grade.status_code, 200)
         graded = r_grade.json()["submission"]
         self.assertEqual(graded["status"], "GRADED")
         self.assertAlmostEqual(graded["final_grade"], 9.35, places=2)
+
+        # Dashboard alumno devuelve cuestionarios enriquecidos con profile y level
+        r_dash = student_client.get("/api/fp/student/dashboard")
+        self.assertEqual(r_dash.status_code, 200)
+        quiz_attempts = r_dash.json()["dashboard"]["quiz_attempts"]
+        self.assertEqual(len(quiz_attempts), 1)
+        self.assertEqual(quiz_attempts[0]["profile"], "OFFSET_300")
+        self.assertTrue(bool(quiz_attempts[0]["level"]))
 
         # Evolución, CSV y Acta PDF A4
         r_ov = teacher_client.get(f"/api/fp/teacher/overview?group_id={group['id']}")

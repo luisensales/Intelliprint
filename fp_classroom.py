@@ -19,11 +19,13 @@ import json
 from pathlib import Path
 import secrets
 import string
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 import pymupdf
 
-from auth_manager import get_db_connection, init_auth_db
+from auth_manager import get_db_cache_key, get_db_connection, init_auth_db
+
+_INITIALIZED_FP_KEYS: Set[str] = set()
 
 
 # ---------------------------------------------------------------------------
@@ -99,9 +101,12 @@ DEFAULT_RUBRICS = [
 # INICIALIZACIÓN DE TABLAS
 # ---------------------------------------------------------------------------
 
-def init_fp_db(db_path: Optional[Path] = None) -> None:
+def init_fp_db(db_path: Optional[Path] = None, force: bool = False) -> None:
     """Inicializa tablas del Panel Docente FP e inserta rúbricas por defecto."""
-    init_auth_db(db_path)
+    cache_key = get_db_cache_key(db_path)
+    if not force and cache_key and cache_key in _INITIALIZED_FP_KEYS:
+        return
+    init_auth_db(db_path, force=force)
     with get_db_connection(db_path) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS fp_groups (
@@ -203,6 +208,10 @@ def init_fp_db(db_path: Optional[Path] = None) -> None:
                 """, (rb["title"], rb["description"], json.dumps(rb["criteria"], ensure_ascii=False), now_iso))
             conn.commit()
 
+    final_key = get_db_cache_key(db_path)
+    if final_key:
+        _INITIALIZED_FP_KEYS.add(final_key)
+
 
 # ---------------------------------------------------------------------------
 # ANÁLISIS COMPARATIVO FORENSE (INICIAL -> DECISIONES -> FINAL)
@@ -260,23 +269,40 @@ def _collect_decisions_timeline(job_data: Dict[str, Any]) -> Dict[str, Any]:
 
     flag_labels = {
         "has_icc_fix": "Conversión / Incrustación de Perfil ICC",
+        "has_icc_fixed": "Conversión / Incrustación de Perfil ICC",
         "has_cmyk_images": "Conversión de imágenes RGB a CMYK",
+        "has_cmyk_converted": "Conversión de imágenes RGB a CMYK",
         "has_tac_fix": "Reducción de Cobertura Total de Tinta (TAC)",
+        "has_tac_limited": "Reducción de Cobertura Total de Tinta (TAC)",
         "has_overprint_fix": "Corrección de Sobreimpresión / Knockout",
+        "has_overprint_fixed": "Corrección de Sobreimpresión / Knockout",
+        "has_varnish_overprint": "Sobreimpresión de Barniz Reserva / Troquel",
         "has_bleed_fix": "Generación / Ajuste de Sangrado y Cajas PDF",
+        "has_bleed_fixed": "Generación / Ajuste de Sangrado y Cajas PDF",
+        "has_mirror_bleed": "Generación de Sangrado por Espejo (Mirror Bleed)",
         "has_outline_fix": "Trazado de Fuentes a Curvas / Incrustación",
+        "has_fonts_outlined": "Trazado de Fuentes a Curvas / Incrustación",
         "has_hairline_fix": "Engrosamiento de Líneas Finas (Hairlines)",
+        "has_hairline_fixed": "Engrosamiento de Líneas Finas (Hairlines)",
         "has_spot_fix": "Conversión de Tintas Planas (Spot -> CMYK)",
+        "has_spot_converted": "Conversión de Tintas Planas (Spot -> CMYK)",
         "has_barcode_fix": "Optimización de Código de Barras (100% K)",
+        "has_barcode_fixed": "Optimización de Código de Barras (100% K)",
         "has_marks_fix": "Marcas de Corte / Tira de Control",
+        "has_printer_marks": "Marcas de Corte / Tira de Control",
     }
     inferred_actions: List[str] = []
     for k, label in flag_labels.items():
-        if meta.get(k):
+        if meta.get(k) and label not in inferred_actions:
             inferred_actions.append(label)
 
     versions = job_data.get("version_history_summary") or []
-    gwg = job_data.get("gwg_validation_report") or meta.get("gwg_validation_report")
+    gwg = (
+        job_data.get("production_validation")
+        or job_data.get("gwg_validation_report")
+        or meta.get("production_validation")
+        or meta.get("gwg_validation_report")
+    )
     prod_order = job_data.get("production_order") or meta.get("production_order")
     client_approval = job_data.get("client_approval_record") or job_data.get("client_approval")
 
@@ -302,8 +328,13 @@ def _collect_decisions_timeline(job_data: Dict[str, Any]) -> Dict[str, Any]:
 
     if prod_order:
         steps.append({"type": "order", "action": "Orden de Producción / Imposición configurada", "timestamp": "", "detail": ""})
+    gwg_verdict = (
+        (gwg.get("overall_verdict") or gwg.get("overall_status") or gwg.get("status"))
+        if isinstance(gwg, dict)
+        else None
+    )
     if gwg:
-        gwg_status = gwg.get("overall_status") or gwg.get("status") or "EJECUTADA"
+        gwg_status = gwg_verdict or "EJECUTADA"
         steps.append({"type": "gwg", "action": f"Validación Pericial GWG ({gwg_status})", "timestamp": "", "detail": ""})
     if client_approval:
         steps.append({"type": "client", "action": "Enlace de Visto Bueno de Cliente generado", "timestamp": "", "detail": ""})
@@ -314,7 +345,7 @@ def _collect_decisions_timeline(job_data: Dict[str, Any]) -> Dict[str, Any]:
         "batch_steps_count": len(batch_steps),
         "versions_count": len(versions),
         "used_gwg_validation": bool(gwg),
-        "gwg_status": (gwg.get("overall_status") or gwg.get("status")) if isinstance(gwg, dict) else None,
+        "gwg_status": gwg_verdict,
         "used_production_order": bool(prod_order),
         "used_client_approval": bool(client_approval),
     }
@@ -793,7 +824,7 @@ def grade_submission(
     computed = _compute_weighted_grade(rubric_scores, criteria)
     grade_val = round(float(final_grade), 2) if final_grade is not None else computed
     grade_val = max(0.0, min(10.0, grade_val))
-    norm_status = status if status in ("GRADED", "NEEDS_REVISION", "SUBMITTED") else "GRADED"
+    norm_status = status if status in ("GRADED", "NEEDS_REVISION", "REVIEWED", "SUBMITTED") else "GRADED"
     now_iso = datetime.now(timezone.utc).isoformat()
 
     with get_db_connection(db_path) as conn:
@@ -881,12 +912,25 @@ def list_student_dashboard(student_id: int, db_path: Optional[Path] = None) -> D
             SELECT * FROM fp_quiz_attempts WHERE student_id = ? ORDER BY id DESC LIMIT 20
         """, (student_id,)).fetchall()
 
+    enriched_quizzes: List[Dict[str, Any]] = []
+    for q in quizzes:
+        item = dict(q)
+        try:
+            details = json.loads(item.get("details_json") or "{}")
+            if not isinstance(details, dict):
+                details = {}
+        except Exception:
+            details = {}
+        item["profile"] = item.get("topic") or "General"
+        item["level"] = details.get("level") or ""
+        enriched_quizzes.append(item)
+
     submissions = list_submissions(student_id=student_id, db_path=db_path)
     return {
         "groups": groups,
         "assignments": assignments,
         "submissions": submissions,
-        "quiz_attempts": quizzes,
+        "quiz_attempts": enriched_quizzes,
     }
 
 

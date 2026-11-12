@@ -10006,7 +10006,9 @@
       const banner = document.getElementById('fpStudentActiveJobBanner');
       if (banner) {
         if (currentJobId) {
-          const pdfName = (currentReport && currentReport.pdf_filename) ? currentReport.pdf_filename : currentJobId;
+          const pdfName = (currentReport && (currentReport.job_meta?.filename || currentReport.pdf_filename))
+            ? (currentReport.job_meta?.filename || currentReport.pdf_filename)
+            : currentJobId;
           banner.innerHTML = `<span class="font-bold text-emerald-700"><i class="fa-solid fa-file-pdf mr-1"></i> PDF listo para entregar:</span> <span class="font-mono">${escapeHtml(pdfName)}</span> <span class="text-[11px] text-slate-500">(${escapeHtml(currentJobId)})</span>`;
         } else {
           banner.innerHTML = '<span class="text-amber-700 font-medium"><i class="fa-solid fa-circle-info mr-1"></i> Sube y analiza primero un PDF (o aplica correcciones) en el visor principal para poder entregarlo.</span>';
@@ -10059,7 +10061,9 @@
                 const dec = comp.decisions || {};
                 const statusClass = s.status === 'GRADED'
                   ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                  : 'bg-amber-100 text-amber-800 border-amber-200';
+                  : (s.status === 'REVIEWED' || s.status === 'NEEDS_REVISION')
+                    ? 'bg-violet-100 text-violet-800 border-violet-200'
+                    : 'bg-amber-100 text-amber-800 border-amber-200';
                 const gradeLabel = (s.final_grade !== null && s.final_grade !== undefined)
                   ? `Nota: ${Number(s.final_grade).toFixed(2)} / 10`
                   : `Pre-estimación: ${Number(comp.suggested_final_grade || 0).toFixed(1)} / 10`;
@@ -10090,7 +10094,11 @@
 
           if (quizzes.length) {
             html += `<div class="pt-3 border-t border-slate-200"><div class="text-[11px] font-bold uppercase text-slate-500 mb-1.5">Cuestionarios Técnicos Completados (${quizzes.length})</div><div class="flex flex-wrap gap-2">`
-              + quizzes.map((q) => `<span class="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px] font-semibold">Test ${escapeHtml(q.profile)}: ${((Number(q.score_pct || 0)) / 10).toFixed(1)}/10 (${escapeHtml(q.level || '')})</span>`).join('')
+              + quizzes.map((q) => {
+                  const topicLabel = escapeHtml(q.topic || q.profile || 'General');
+                  const levelSuffix = q.level ? ` (${escapeHtml(q.level)})` : '';
+                  return `<span class="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px] font-semibold">Test ${topicLabel}: ${((Number(q.score_pct || 0)) / 10).toFixed(1)}/10${levelSuffix}</span>`;
+                }).join('')
               + '</div></div>';
           }
           subsBox.innerHTML = html;
@@ -10206,7 +10214,7 @@
         const scenSel = document.querySelector('[data-id="fpNewAssignScenario"]');
         if (scenSel) {
           scenSel.innerHTML = '<option value="">Selecciona reto del catálogo...</option>'
-            + scenarios.map((sc) => `<option value="${escapeHtml(sc.id)}">${escapeHtml(sc.title)} [${escapeHtml(sc.difficulty || '')}]</option>`).join('');
+            + scenarios.map((sc) => `<option value="${escapeHtml(sc.id)}">${escapeHtml(sc.title)} [${escapeHtml(sc.level || sc.difficulty || '')}]</option>`).join('');
         }
 
         const rubSel = document.querySelector('[data-id="fpNewAssignRubric"]');

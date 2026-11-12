@@ -169,10 +169,34 @@ class RequestLimitsMiddleware:
             return await self.app(scope, receive, send)
         path = scope.get("path", "")
         api = path.startswith("/api/") or path.startswith("/verify/")
-        # Report reads can rehydrate a didactic PDF, so they also need a slot.
-        cheap = (path.startswith(("/api/profiles", "/api/manual/"))
-                 or path in ("/api/icc-catalog", "/api/storage-status", "/api/hotfolder/status",
-                             "/api/hotfolder/start", "/api/hotfolder/stop"))
+        # Report reads and student submissions can rehydrate a didactic PDF, so they also need a slot.
+        cheap = (
+            path.startswith((
+                "/api/profiles",
+                "/api/manual/",
+                "/api/auth/",
+                "/api/admin/",
+                "/api/didactic/quiz/",
+                "/api/client-approval/info/",
+                "/api/client-approval/submit/",
+            ))
+            or (
+                path.startswith("/api/fp/")
+                and not path.endswith(("/student/submit", "/report-pdf"))
+            )
+            or path in (
+                "/api/icc-catalog",
+                "/api/storage-status",
+                "/api/hotfolder/status",
+                "/api/hotfolder/start",
+                "/api/hotfolder/stop",
+                "/api/didactic/scenarios",
+                "/api/production-orders/catalogs",
+                "/api/production-orders/calculate",
+                "/api/validation/standards",
+                "/api/jobs",
+            )
+        )
         expensive = api and not cheap
         admitted = acquired = False
         slot_token = None

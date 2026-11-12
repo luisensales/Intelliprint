@@ -34,7 +34,9 @@ from db_store import (
     DEFAULT_DB_PATH,
     DuplicateEntryError,
     get_connection,
+    get_database_url,
     get_db_status,
+    is_postgres_configured,
 )
 
 
@@ -167,6 +169,25 @@ def user_has_permission(user: Optional[Dict[str, Any]], permission: str) -> bool
 # GESTIÓN DE CONEXIÓN Y ESQUEMA (POSTGRESQL / SQLITE)
 # ---------------------------------------------------------------------------
 
+_INITIALIZED_AUTH_KEYS: Set[str] = set()
+
+
+def get_db_cache_key(db_path: Optional[Path] = None) -> Optional[str]:
+    """Return a cache key for an already-existing DB target, or None if not yet created."""
+    target_db = Path(db_path) if db_path is not None else DB_PATH
+    if is_postgres_configured(target_db):
+        return f"pg:{get_database_url()}"
+    try:
+        if not target_db.exists():
+            return None
+        st = target_db.stat()
+        if st.st_size <= 0:
+            return None
+        return f"sqlite:{target_db.resolve()}:{st.st_ctime_ns}"
+    except OSError:
+        return None
+
+
 @contextmanager
 def get_db_connection(db_path: Optional[Path] = None):
     """Context manager yielding a unified connection (Neon Postgres or SQLite)."""
@@ -176,24 +197,29 @@ def get_db_connection(db_path: Optional[Path] = None):
 
 
 def _ensure_user_columns(conn) -> None:
-    """Safely add new columns to legacy SQLite/Postgres `users` tables."""
-    statements = [
-        "ALTER TABLE users ADD COLUMN requested_role TEXT",
-        "ALTER TABLE users ADD COLUMN approval_status TEXT DEFAULT 'ACTIVE'",
-    ]
-    for stmt in statements:
-        try:
-            conn.execute(stmt)
-            conn.commit()
-        except Exception:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
+    """Safely add new columns to legacy SQLite/Postgres `users` tables without throwing errors."""
+    if getattr(conn, "postgres", False):
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS requested_role TEXT")
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'ACTIVE'")
+        conn.commit()
+        return
+
+    existing_cols = {
+        row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()
+    }
+    if "requested_role" not in existing_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN requested_role TEXT")
+    if "approval_status" not in existing_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN approval_status TEXT DEFAULT 'ACTIVE'")
+    conn.commit()
 
 
-def init_auth_db(db_path: Optional[Path] = None):
+def init_auth_db(db_path: Optional[Path] = None, force: bool = False):
     """Inicializa las tablas de usuarios, sesiones y aprobaciones e inserta cuentas base."""
+    cache_key = get_db_cache_key(db_path)
+    if not force and cache_key and cache_key in _INITIALIZED_AUTH_KEYS:
+        return
+
     with get_db_connection(db_path) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -274,6 +300,10 @@ def init_auth_db(db_path: Optional[Path] = None):
                     VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, ?)
                 """, (username, pwd_hash, salt, full_name, role, email, role, now_iso))
             conn.commit()
+
+    final_key = get_db_cache_key(db_path)
+    if final_key:
+        _INITIALIZED_AUTH_KEYS.add(final_key)
 
 
 # ---------------------------------------------------------------------------
