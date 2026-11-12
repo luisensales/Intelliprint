@@ -163,6 +163,10 @@ from fp_classroom import (
     get_student_evolution as fp_student_evolution,
     export_grades_csv as fp_export_grades_csv,
     generate_evaluation_pdf_report as fp_generate_eval_pdf,
+    create_custom_challenge as fp_create_custom_challenge,
+    list_custom_challenges as fp_list_custom_challenges,
+    get_custom_challenge as fp_get_custom_challenge,
+    delete_custom_challenge as fp_delete_custom_challenge,
 )
 
 from security_limits import (
@@ -221,6 +225,7 @@ JOBS_DIR = DATA_DIR / "jobs"
 STATIC_DIR = BASE_DIR / "static"
 ASSETS_DIR = BASE_DIR / "assets"
 DIDACTIC_SCENARIOS_DIR = BASE_DIR / "didactic_scenarios"
+CUSTOM_CHALLENGES_DIR = DATA_DIR / "custom_challenges"
 WORKSHEETS_DIR = DATA_DIR / "worksheets"
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -228,28 +233,50 @@ JOBS_DIR.mkdir(parents=True, exist_ok=True)
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 DIDACTIC_SCENARIOS_DIR.mkdir(parents=True, exist_ok=True)
+CUSTOM_CHALLENGES_DIR.mkdir(parents=True, exist_ok=True)
 WORKSHEETS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _find_any_scenario(scenario_id: str) -> Optional[dict]:
+    """Resolve either a built-in catalog challenge or a teacher-uploaded challenge."""
+    sc = next((s for s in SCENARIOS_CATALOG if s["id"] == scenario_id), None)
+    if sc:
+        return sc
+    return fp_get_custom_challenge(scenario_id)
+
+
+def _all_scenarios() -> List[dict]:
+    """Return built-in didactic scenarios together with published teacher challenges."""
+    return list(SCENARIOS_CATALOG) + fp_list_custom_challenges(only_published=True)
+
 
 def rehydrate_didactic_job(job_id: str, scenario_id: str) -> Optional[dict]:
     """
     Reconstruye un trabajo didáctico FP a partir de los PDFs reales pre-generados
-    cuando un trabajo se consulta y no está en la memoria del contenedor (ej. reinicios de Render).
+    o plantillas subidas por el docente cuando se consulta tras un reinicio.
     """
-    scenario = next((s for s in SCENARIOS_CATALOG if s["id"] == scenario_id), None)
+    scenario = _find_any_scenario(scenario_id)
     if not scenario:
         return None
 
     job_folder = UPLOAD_DIR / job_id
     job_folder.mkdir(parents=True, exist_ok=True)
-    filename = f"{scenario_id}.pdf"
+    filename = f"{Path(scenario_id).name}.pdf"
     file_path = job_folder / filename
 
-    src_pdf = DIDACTIC_SCENARIOS_DIR / filename
-    if src_pdf.exists():
-        shutil.copyfile(src_pdf, file_path)
+    if scenario.get("is_custom"):
+        src_custom = CUSTOM_CHALLENGES_DIR / f"{Path(scenario_id).name}.pdf"
+        if not src_custom.exists():
+            return None
+        shutil.copyfile(src_custom, file_path)
     else:
-        generate_scenario_pdf(scenario_id, file_path)
+        src_pdf = DIDACTIC_SCENARIOS_DIR / filename
+        if src_pdf.exists():
+            shutil.copyfile(src_pdf, file_path)
+        else:
+            generate_scenario_pdf(scenario_id, file_path)
 
+    target_profile = scenario.get("target_profile") or "OFFSET_300"
     file_size_mb = round(file_path.stat().st_size / (1024 * 1024), 2)
     with open(file_path, "rb") as f:
         pdf_sha256 = hashlib.sha256(f.read()).hexdigest()
@@ -257,7 +284,7 @@ def rehydrate_didactic_job(job_id: str, scenario_id: str) -> Optional[dict]:
     try:
         report = engine.run_preflight(
             pdf_path=str(file_path),
-            profile_id="OFFSET_300",
+            profile_id=target_profile,
             icc_choice="preserve"
         )
     except Exception as e:
@@ -266,14 +293,15 @@ def rehydrate_didactic_job(job_id: str, scenario_id: str) -> Optional[dict]:
 
     report["job_meta"] = {
         "job_id": job_id,
-        "filename": filename,
+        "filename": scenario.get("filename") if scenario.get("is_custom") else filename,
         "file_size_mb": file_size_mb,
         "sha256": pdf_sha256,
-        "profile_id": "OFFSET_300",
+        "profile_id": target_profile,
         "icc_option": "preserve",
         "selected_icc": None,
         "pdf_path": str(file_path),
         "is_didactic_scenario": True,
+        "is_custom_challenge": bool(scenario.get("is_custom")),
         "scenario_id": scenario_id,
         "scenario_title": scenario["title"]
     }
@@ -1326,15 +1354,26 @@ def admin_update_user_access_endpoint(user_id: int, request: Request, body: dict
 def fp_teacher_overview_endpoint(request: Request, group_id: Optional[int] = None):
     """Panel completo del docente FP: grupos, prácticas, entregas, rúbricas y evolución."""
     _require_permission(request, "view_student_progress")
+    custom_challenges = fp_list_custom_challenges(only_published=True)
     return {
         "groups": fp_list_groups(),
         "rubrics": fp_list_rubrics(),
         "assignments": fp_list_assignments(group_id=group_id),
         "submissions": fp_list_submissions(group_id=group_id),
         "evolution": fp_student_evolution(group_id=group_id),
+        "custom_challenges": custom_challenges,
         "scenarios": [
-            {"id": s["id"], "title": s["title"], "level": s["level"], "difficulty": s["level"], "module": s["module"]}
-            for s in SCENARIOS_CATALOG
+            {
+                "id": s["id"],
+                "title": s["title"],
+                "level": s.get("level", ""),
+                "difficulty": s.get("level", ""),
+                "module": s.get("module", ""),
+                "is_custom": bool(s.get("is_custom")),
+                "teacher_name": s.get("teacher_name"),
+                "target_profile": s.get("target_profile", "OFFSET_300"),
+            }
+            for s in _all_scenarios()
         ],
         "db_status": get_db_status(),
     }
@@ -1395,6 +1434,106 @@ def fp_teacher_create_assignment_endpoint(request: Request, body: dict = Body(de
         raise HTTPException(status_code=400, detail=str(exc))
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.get("/api/fp/teacher/challenges")
+def fp_teacher_list_challenges_endpoint(request: Request):
+    """Lista los retos propios (PDF con errores) subidos por el profesorado."""
+    _require_permission(request, "view_student_progress")
+    return {"challenges": fp_list_custom_challenges(only_published=True)}
+
+
+@app.post("/api/fp/teacher/challenges")
+def fp_teacher_upload_challenge_endpoint(
+    request: Request,
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    description: str = Form(default=""),
+    target_profile: str = Form(default="OFFSET_300"),
+    level: str = Form(default="Reto Docente FP"),
+    module: str = Form(default="Preimpresión y Arte Final"),
+    doc_type: str = Form(default="PDF Personalizado"),
+    iso_norm: str = Form(default="ISO 12647-2 / PDF/X"),
+    target_errors: str = Form(default=""),
+):
+    """Permite al docente subir un PDF propio con errores preparados como reto reutilizable."""
+    user = _require_permission(request, "grade_submissions")
+    try:
+        safe_name = validate_pdf_filename(file.filename or "reto_docente.pdf")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    challenge_id = f"custom_{uuid.uuid4().hex[:10]}"
+    dest_path = CUSTOM_CHALLENGES_DIR / f"{challenge_id}.pdf"
+    _, pdf_sha256 = save_bounded_upload(file, dest_path)
+
+    try:
+        with open(dest_path, "rb") as f:
+            head = f.read(5)
+        if head != b"%PDF-":
+            raise HTTPException(status_code=400, detail="El archivo subido no es un PDF válido.")
+
+        report = engine.run_preflight(
+            pdf_path=str(dest_path),
+            profile_id=target_profile or "OFFSET_300",
+            icc_choice="preserve",
+        )
+    except HTTPException:
+        dest_path.unlink(missing_ok=True)
+        raise
+    except Exception as exc:
+        dest_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=f"No se pudo analizar el PDF del reto: {exc}")
+
+    parsed_errors = [line.strip(" -•") for line in (target_errors or "").splitlines() if line.strip()]
+    if not parsed_errors:
+        seen_msgs = []
+        for f in report.get("findings", []):
+            if f.get("severity") in ("ERROR", "WARNING"):
+                msg = (f.get("title") or f.get("message") or "").strip()
+                if msg and msg not in seen_msgs:
+                    seen_msgs.append(msg)
+                if len(seen_msgs) >= 5:
+                    break
+        parsed_errors = seen_msgs or ["Inspección libre de preflight requerida según el perfil de destino."]
+
+    try:
+        challenge = fp_create_custom_challenge(
+            title=title,
+            filename=safe_name,
+            pdf_sha256=pdf_sha256,
+            teacher_id=user["id"],
+            teacher_name=user.get("full_name") or user.get("username") or "Docente FP",
+            description=description,
+            level=level,
+            module=module,
+            doc_type=doc_type,
+            target_profile=target_profile or "OFFSET_300",
+            iso_norm=iso_norm,
+            target_errors=parsed_errors,
+            challenge_id=challenge_id,
+        )
+        return {"status": "ok", "challenge": challenge}
+    except ValueError as exc:
+        dest_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.delete("/api/fp/teacher/challenges/{challenge_id}")
+def fp_teacher_delete_challenge_endpoint(challenge_id: str, request: Request):
+    """Elimina una plantilla de reto subida por el docente."""
+    user = _require_permission(request, "grade_submissions")
+    safe_id = Path(challenge_id).name
+    try:
+        fp_delete_custom_challenge(safe_id, requester_id=user["id"], requester_role=user.get("role", "teacher"))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    pdf_path = CUSTOM_CHALLENGES_DIR / f"{safe_id}.pdf"
+    if pdf_path.exists():
+        pdf_path.unlink(missing_ok=True)
+    return {"status": "ok"}
 
 
 @app.get("/api/fp/teacher/submissions/{submission_id}")
@@ -5137,36 +5276,45 @@ def get_job_qr_endpoint(job_id: str, request: Request):
 
 @app.get("/api/didactic/scenarios")
 def get_didactic_scenarios_endpoint():
-    """Retorna la lista de retos de taller FP disponibles para práctica."""
-    return {"scenarios": SCENARIOS_CATALOG}
+    """Retorna la lista de retos de taller FP disponibles (catálogo + retos subidos por docentes)."""
+    return {"scenarios": _all_scenarios()}
 
 
 @app.post("/api/didactic/load-scenario/{scenario_id}")
 def load_didactic_scenario_endpoint(scenario_id: str):
     """
-    Carga el PDF real del reto didáctico seleccionado,
+    Carga el PDF real del reto didáctico seleccionado (catálogo o reto propio del docente),
     lo procesa con el motor de preflight y devuelve el reporte completo para análisis en clase.
     """
-    scenario = next((s for s in SCENARIOS_CATALOG if s["id"] == scenario_id), None)
+    scenario = _find_any_scenario(scenario_id)
     if not scenario:
         raise HTTPException(status_code=404, detail="Reto didáctico no encontrado.")
 
-    job_id = f"fp_{scenario_id}"
+    safe_id = Path(scenario_id).name
+    job_id = f"fp_{safe_id}"
     job_folder = UPLOAD_DIR / job_id
     job_folder.mkdir(parents=True, exist_ok=True)
 
-    filename = f"{scenario_id}.pdf"
-    file_path = job_folder / filename
+    is_custom = bool(scenario.get("is_custom"))
+    filename = scenario.get("filename") if is_custom else f"{safe_id}.pdf"
+    file_path = job_folder / f"{safe_id}.pdf"
 
-    src_pdf = DIDACTIC_SCENARIOS_DIR / filename
-    if src_pdf.exists():
-        shutil.copyfile(src_pdf, file_path)
+    if is_custom:
+        src_custom = CUSTOM_CHALLENGES_DIR / f"{safe_id}.pdf"
+        if not src_custom.exists():
+            raise HTTPException(status_code=404, detail="Archivo PDF del reto docente no encontrado en el servidor.")
+        shutil.copyfile(src_custom, file_path)
     else:
-        try:
-            generate_scenario_pdf(scenario_id, file_path)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error generando PDF de reto didáctico: {e}")
+        src_pdf = DIDACTIC_SCENARIOS_DIR / f"{safe_id}.pdf"
+        if src_pdf.exists():
+            shutil.copyfile(src_pdf, file_path)
+        else:
+            try:
+                generate_scenario_pdf(safe_id, file_path)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Error generando PDF de reto didáctico: {e}")
 
+    target_profile = scenario.get("target_profile") or "OFFSET_300"
     file_size_mb = round(file_path.stat().st_size / (1024 * 1024), 2)
     with open(file_path, "rb") as f:
         pdf_sha256 = hashlib.sha256(f.read()).hexdigest()
@@ -5174,7 +5322,7 @@ def load_didactic_scenario_endpoint(scenario_id: str):
     try:
         report = engine.run_preflight(
             pdf_path=str(file_path),
-            profile_id="OFFSET_300",
+            profile_id=target_profile,
             icc_choice="preserve"
         )
     except Exception as e:
@@ -5185,12 +5333,13 @@ def load_didactic_scenario_endpoint(scenario_id: str):
         "filename": filename,
         "file_size_mb": file_size_mb,
         "sha256": pdf_sha256,
-        "profile_id": "OFFSET_300",
+        "profile_id": target_profile,
         "icc_option": "preserve",
         "selected_icc": None,
         "pdf_path": str(file_path),
         "is_didactic_scenario": True,
-        "scenario_id": scenario_id,
+        "is_custom_challenge": is_custom,
+        "scenario_id": safe_id,
         "scenario_title": scenario["title"]
     }
     update_pdf_identity(report, file_path, original_sha256=pdf_sha256)
@@ -5205,7 +5354,7 @@ def load_didactic_scenario_endpoint(scenario_id: str):
             JOBS_DIR,
             label="PDF original recibido",
             notes=f"Reto didáctico FP: {scenario['title']}",
-            author="Laboratorio FP",
+            author=scenario.get("teacher_name") or "Laboratorio FP",
             tags=["original", "didactico"],
         )
     except Exception:
@@ -5226,10 +5375,20 @@ def load_didactic_scenario_endpoint(scenario_id: str):
 @app.get("/api/didactic/scenario/{scenario_id}/download")
 def download_didactic_scenario_pdf_endpoint(scenario_id: str):
     """
-    Descarga el archivo PDF real y original del reto para que alumnos y profesores
-    puedan abrirlo en InDesign, Illustrator o Acrobat e inspeccionar los fallos de arte final.
+    Descarga el archivo PDF real y original del reto (del catálogo o subido por un docente)
+    para que alumnos y profesores puedan abrirlo en InDesign, Illustrator o Acrobat.
     """
     safe_id = Path(scenario_id).name
+    custom = fp_get_custom_challenge(safe_id)
+    if custom:
+        pdf_path = CUSTOM_CHALLENGES_DIR / f"{safe_id}.pdf"
+        if not pdf_path.exists():
+            raise HTTPException(status_code=404, detail="PDF del reto docente no encontrado.")
+        return FileResponse(
+            pdf_path,
+            media_type="application/pdf",
+            filename=custom.get("filename") or f"{safe_id}.pdf",
+        )
     pdf_path = DIDACTIC_SCENARIOS_DIR / f"{safe_id}.pdf"
     if not pdf_path.exists():
         generate_scenario_pdf(safe_id, pdf_path)

@@ -2593,6 +2593,9 @@
             <button id="scenCatBtn_avanzado" onclick="filterScenariosCategory('avanzado')" class="px-3 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer">
               <span class="w-2 h-2 rounded-full bg-purple-500 inline-block mr-1"></span>Avanzado (6)
             </button>
+            <button id="scenCatBtn_docente" onclick="filterScenariosCategory('docente')" class="px-3 py-1 text-xs font-semibold rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 transition cursor-pointer">
+              <span class="w-2 h-2 rounded-full bg-amber-500 inline-block mr-1"></span>Retos Docentes (0)
+            </button>
           </div>
 
           <div id="scenariosGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3736,6 +3739,41 @@
               </button>
               <div id="fpTeacherAssignmentsList" class="space-y-1.5 pt-2 text-xs max-h-48 overflow-y-auto"></div>
             </div>
+          </div>
+
+          <div id="fpCustomChallengePanel" class="bg-white p-4 rounded-xl border border-amber-200/80 shadow-2xs space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <i class="fa-solid fa-file-arrow-up text-amber-600"></i> Retos Propios del Docente (Plantillas PDF Reutilizables)
+                </h4>
+                <p class="text-[11px] text-slate-500 mt-0.5">Sube un PDF con errores preparados para publicarlo en el catálogo del Simulador FP y asignarlo a cualquier grupo.</p>
+              </div>
+              <span id="fpCustomChallengesBadge" class="px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold">0 retos propios</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-2.5 text-xs">
+              <input type="text" data-id="fpCustomChallTitle" placeholder="Título del reto (Ej. Cartel Museo CMYK sin sangre)" class="md:col-span-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none">
+              <select data-id="fpCustomChallProfile" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none">
+                <option value="OFFSET_300">Offset Comercial (300%)</option>
+                <option value="DIGITAL_200">Impresión Digital (200 ppp)</option>
+                <option value="PERIODICO_TAC240">Prensa / Periódico (240% TAC)</option>
+                <option value="PACKAGING_CARTONCILLO">Packaging / Cartoncillo</option>
+                <option value="GRAN_FORMATO">Gran Formato</option>
+                <option value="PANTALLA_RGB">Pantalla / Digital (RGB)</option>
+              </select>
+              <input type="file" data-id="fpCustomChallFile" accept=".pdf" class="rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-[11px] text-slate-700 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:font-bold file:bg-amber-600 file:text-white cursor-pointer">
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
+              <input type="text" data-id="fpCustomChallDesc" placeholder="Descripción para el alumnado (qué pieza es y qué objetivo tiene)" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none">
+              <input type="text" data-id="fpCustomChallErrors" placeholder="Errores clave (opcional; si lo dejas vacío IntelliPrint los detecta automáticamente)" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none">
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="text-[11px] text-slate-500"><i class="fa-solid fa-wand-magic-sparkles text-amber-500 mr-1"></i>Al subir el PDF se ejecuta un preflight inicial para generar las pistas pedagógicas del reto.</span>
+              <button type="button" onclick="uploadFpCustomChallenge()" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Subir y Publicar Reto Docente
+              </button>
+            </div>
+            <div id="fpTeacherCustomChallengesList" class="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1 text-xs max-h-56 overflow-y-auto"></div>
           </div>
 
           <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
@@ -8858,7 +8896,14 @@
         const res = await fetch('/api/didactic/scenarios');
         const data = await res.json();
         cachedScenarios = data.scenarios || [];
-        renderScenariosGrid(cachedScenarios);
+        const allBtn = document.getElementById('scenCatBtn_all');
+        if (allBtn) allBtn.textContent = `Todos (${cachedScenarios.length})`;
+        const docBtn = document.getElementById('scenCatBtn_docente');
+        const customCount = cachedScenarios.filter(s => s.category === 'docente' || s.is_custom).length;
+        if (docBtn) {
+          docBtn.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500 inline-block mr-1"></span>Retos Docentes (${customCount})`;
+        }
+        renderScenariosGrid(currentScenCategory === 'all' ? cachedScenarios : cachedScenarios.filter(s => s.category === currentScenCategory));
         populateScenarioSelect(cachedScenarios);
       } catch (err) {
         console.error('Error cargando retos didácticos:', err);
@@ -8869,11 +8914,13 @@
 
     function filterScenariosCategory(cat) {
       currentScenCategory = cat;
-      ['all', 'iniciacion', 'intermedio', 'avanzado'].forEach(c => {
+      ['all', 'iniciacion', 'intermedio', 'avanzado', 'docente'].forEach(c => {
         const btn = document.getElementById('scenCatBtn_' + c);
         if (btn) {
           if (c === cat) {
             btn.className = 'px-3 py-1 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-xs transition cursor-pointer';
+          } else if (c === 'docente') {
+            btn.className = 'px-3 py-1 text-xs font-semibold rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 transition cursor-pointer';
           } else {
             btn.className = 'px-3 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer';
           }
@@ -8889,35 +8936,45 @@
       const container = document.getElementById('scenariosGrid');
       if (!container) return;
 
+      if (!scenarios.length) {
+        container.innerHTML = '<div class="col-span-full p-6 text-center text-xs text-slate-500 bg-white rounded-xl border border-slate-200">No hay retos publicados todavía en esta categoría. El profesorado puede subir sus propios PDFs desde el <strong>Panel Docente</strong>.</div>';
+        return;
+      }
+
       container.innerHTML = scenarios.map(s => {
         const catBadge = s.category === 'iniciacion'
           ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
           : (s.category === 'intermedio'
             ? 'bg-blue-100 text-blue-800 border-blue-200'
-            : 'bg-purple-100 text-purple-800 border-purple-200');
+            : (s.category === 'docente' || s.is_custom
+              ? 'bg-amber-100 text-amber-900 border-amber-300'
+              : 'bg-purple-100 text-purple-800 border-purple-200'));
+        const safeId = escapeHtml(s.id);
+        const errs = Array.isArray(s.target_errors) ? s.target_errors : [];
 
         return `
-        <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+        <div class="bg-white rounded-xl border ${s.is_custom ? 'border-amber-200' : 'border-slate-200'} p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
           <div class="space-y-3">
-            <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
               <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${catBadge} border">
-                ${s.level}
+                ${escapeHtml(s.level || 'Reto FP')}
               </span>
               <span class="text-[10px] font-semibold text-slate-500">
-                <i class="fa-solid fa-book-open text-slate-400 mr-1"></i>${s.doc_type}
+                <i class="fa-solid fa-book-open text-slate-400 mr-1"></i>${escapeHtml(s.doc_type || 'PDF')}
               </span>
             </div>
 
-            <h4 class="text-sm font-bold text-slate-900 leading-snug">${s.title}</h4>
-            <p class="text-xs text-slate-600">${s.description}</p>
+            <h4 class="text-sm font-bold text-slate-900 leading-snug">${escapeHtml(s.title)}</h4>
+            ${s.is_custom ? `<div class="text-[11px] font-semibold text-amber-700 flex items-center gap-1"><i class="fa-solid fa-chalkboard-user"></i> Subido por ${escapeHtml(s.teacher_name || 'Docente FP')} · Perfil ${escapeHtml(s.target_profile || 'OFFSET_300')}</div>` : ''}
+            <p class="text-xs text-slate-600">${escapeHtml(s.description || '')}</p>
 
             <div class="pt-2 border-t border-slate-100 space-y-1.5">
               <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Incidencias a diagnosticar:</span>
               <ul class="space-y-1">
-                ${s.target_errors.map(err => `
+                ${errs.map(err => `
                   <li class="text-[11px] text-slate-700 flex items-start gap-1.5">
                     <span class="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0"></span>
-                    <span>${err}</span>
+                    <span>${escapeHtml(err)}</span>
                   </li>
                 `).join('')}
               </ul>
@@ -8925,16 +8982,16 @@
 
             <div class="pt-2">
               <span class="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                <i class="fa-solid fa-stamp"></i> ${s.iso_norm}
+                <i class="fa-solid fa-stamp"></i> ${escapeHtml(s.iso_norm || 'ISO 12647-2')}
               </span>
             </div>
           </div>
 
           <div class="pt-3 mt-2 flex flex-col gap-2">
-            <button onclick="loadDidacticScenario('${s.id}', this)" class="w-full py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-2 cursor-pointer">
+            <button onclick="loadDidacticScenario('${safeId}', this)" class="w-full py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-2 cursor-pointer">
               <i class="fa-solid fa-play text-amber-300"></i> Cargar Reto en IntelliPrint
             </button>
-            <a href="/api/didactic/scenario/${s.id}/download" download="${s.id}.pdf" class="w-full py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold rounded-lg transition flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer shadow-2xs" title="Descarga el PDF real del reto para abrirlo en InDesign, Illustrator o Acrobat">
+            <a href="/api/didactic/scenario/${encodeURIComponent(s.id)}/download" download="${safeId}.pdf" class="w-full py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold rounded-lg transition flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer shadow-2xs" title="Descarga el PDF real del reto para abrirlo en InDesign, Illustrator o Acrobat">
               <i class="fa-solid fa-file-arrow-down text-indigo-500"></i> Descargar PDF Real para Práctica
             </a>
           </div>
@@ -11446,8 +11503,51 @@
 
         const scenSel = document.querySelector('[data-id="fpNewAssignScenario"]');
         if (scenSel) {
-          scenSel.innerHTML = '<option value="">Selecciona reto del catálogo...</option>'
-            + scenarios.map((sc) => `<option value="${escapeHtml(sc.id)}">${escapeHtml(sc.title)} [${escapeHtml(sc.level || sc.difficulty || '')}]</option>`).join('');
+          const customFirst = scenarios.filter((sc) => sc.is_custom);
+          const catalogScens = scenarios.filter((sc) => !sc.is_custom);
+          const renderOpt = (sc) => `<option value="${escapeHtml(sc.id)}">${sc.is_custom ? '[Propio] ' : ''}${escapeHtml(sc.title)} [${escapeHtml(sc.level || sc.difficulty || '')}]</option>`;
+          scenSel.innerHTML = '<option value="">Selecciona reto del catálogo o propio...</option>'
+            + customFirst.map(renderOpt).join('')
+            + catalogScens.map(renderOpt).join('');
+        }
+
+        const customChallenges = data.custom_challenges || scenarios.filter((sc) => sc.is_custom);
+        window._fpCustomChallengesCache = customChallenges;
+        const customBadge = document.getElementById('fpCustomChallengesBadge');
+        if (customBadge) customBadge.textContent = `${customChallenges.length} ${customChallenges.length === 1 ? 'reto propio' : 'retos propios'}`;
+        const customList = document.getElementById('fpTeacherCustomChallengesList');
+        if (customList) {
+          customList.innerHTML = customChallenges.length
+            ? customChallenges.map((c) => {
+                const errs = (c.target_errors || []).slice(0, 3).map(e => escapeHtml(e)).join(' · ');
+                const safeCid = escapeHtml(c.id);
+                return `
+                  <div class="p-2.5 rounded-lg border border-amber-200 bg-amber-50/40 space-y-1.5">
+                    <div class="flex items-start justify-between gap-2">
+                      <div>
+                        <div class="font-bold text-slate-800">${escapeHtml(c.title)}</div>
+                        <div class="text-[10px] text-slate-500">${escapeHtml(c.filename || '')} · ${escapeHtml(c.target_profile || 'OFFSET_300')} · ${escapeHtml(c.teacher_name || 'Docente FP')}</div>
+                      </div>
+                      <button type="button" onclick="deleteFpCustomChallenge('${safeCid}')" class="text-[10px] px-1.5 py-0.5 rounded bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 cursor-pointer" title="Eliminar reto propio">
+                        <i class="fa-solid fa-trash"></i>
+                      </button>
+                    </div>
+                    ${errs ? `<div class="text-[10px] text-slate-600 line-clamp-2">${errs}</div>` : ''}
+                    <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <button type="button" onclick="assignCustomChallengeToForm('${safeCid}')" class="px-2 py-1 rounded bg-fuchsia-600 hover:bg-fuchsia-700 text-white text-[10px] font-bold cursor-pointer">
+                        Asignar a Grupo
+                      </button>
+                      <button type="button" onclick="closeFpClassroomModal(); loadDidacticScenario('${safeCid}', null);" class="px-2 py-1 rounded bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 text-[10px] font-semibold cursor-pointer">
+                        Cargar en Visor
+                      </button>
+                      <a href="/api/didactic/scenario/${encodeURIComponent(c.id)}/download" class="px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-semibold">
+                        PDF
+                      </a>
+                    </div>
+                  </div>
+                `;
+              }).join('')
+            : '<p class="text-slate-500 col-span-full">Aún no has subido retos propios. Sube un PDF con errores arriba para reutilizarlo en tus prácticas.</p>';
         }
 
         const rubSel = document.querySelector('[data-id="fpNewAssignRubric"]');
@@ -11671,6 +11771,77 @@
         if (examChk) examChk.checked = false;
         notifyUser(`Práctica "${title}" publicada en el grupo.`, 'success');
         await loadTeacherOverview();
+      } catch (err) {
+        notifyUser(err.message, 'error');
+      }
+    }
+
+    async function uploadFpCustomChallenge() {
+      const titleEl = document.querySelector('[data-id="fpCustomChallTitle"]');
+      const profileEl = document.querySelector('[data-id="fpCustomChallProfile"]');
+      const fileEl = document.querySelector('[data-id="fpCustomChallFile"]');
+      const descEl = document.querySelector('[data-id="fpCustomChallDesc"]');
+      const errsEl = document.querySelector('[data-id="fpCustomChallErrors"]');
+
+      const title = titleEl?.value.trim() || '';
+      const file = fileEl?.files?.[0] || null;
+      if (!title || !file) {
+        notifyUser('Indica un título y selecciona un archivo PDF para el reto docente.', 'warning');
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('title', title);
+      fd.append('target_profile', profileEl?.value || 'OFFSET_300');
+      fd.append('description', descEl?.value.trim() || '');
+      const rawErrors = errsEl?.value.trim() || '';
+      fd.append('target_errors', rawErrors.replace(/\s*;\s*/g, '\n'));
+
+      try {
+        const resp = await fetch('/api/fp/teacher/challenges', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Error publicando el reto propio');
+
+        if (titleEl) titleEl.value = '';
+        if (fileEl) fileEl.value = '';
+        if (descEl) descEl.value = '';
+        if (errsEl) errsEl.value = '';
+
+        notifyUser(`Reto propio "${title}" publicado para tus grupos y en Simulador FP.`, 'success');
+        await loadTeacherOverview();
+        if (typeof loadDidacticScenarios === 'function') await loadDidacticScenarios();
+      } catch (err) {
+        notifyUser(err.message, 'error');
+      }
+    }
+
+    function assignCustomChallengeToForm(challengeId) {
+      const ch = (window._fpCustomChallengesCache || []).find((item) => item.id === challengeId);
+      const typeSel = document.querySelector('[data-id="fpNewAssignType"]');
+      const scenSel = document.querySelector('[data-id="fpNewAssignScenario"]');
+      const titleInput = document.querySelector('[data-id="fpNewAssignTitle"]');
+      const profSel = document.querySelector('[data-id="fpNewAssignProfile"]');
+
+      if (typeSel) {
+        typeSel.value = 'reto';
+        if (typeof toggleFpScenarioSelect === 'function') toggleFpScenarioSelect();
+      }
+      if (scenSel) scenSel.value = challengeId;
+      if (titleInput && ch && !titleInput.value.trim()) titleInput.value = ch.title;
+      if (profSel && ch?.target_profile) profSel.value = ch.target_profile;
+      if (titleInput && typeof titleInput.focus === 'function') titleInput.focus();
+      notifyUser('Reto seleccionado en el formulario. Elige grupo, rúbrica y pulsa "Publicar Práctica en el Grupo".', 'info', 3500);
+    }
+
+    async function deleteFpCustomChallenge(challengeId) {
+      try {
+        const resp = await fetch(`/api/fp/teacher/challenges/${encodeURIComponent(challengeId)}`, { method: 'DELETE' });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'No se pudo eliminar el reto');
+        notifyUser('Reto propio eliminado.', 'info');
+        await loadTeacherOverview();
+        if (typeof loadDidacticScenarios === 'function') await loadDidacticScenarios();
       } catch (err) {
         notifyUser(err.message, 'error');
       }

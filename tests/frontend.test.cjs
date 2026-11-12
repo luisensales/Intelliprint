@@ -964,3 +964,54 @@ test('trilingual switcher updates I18N strings, persistence, and client report /
   assert.equal(i18nNodes[0].textContent, 'Analyze PDF with IntelliPrint');
   assert.equal(document.getElementById('downloadClientReportBtn').href, '/api/download-client-report/job-trilingual-1?lang=en');
 });
+
+test('teacher custom challenge filter and assignCustomChallengeToForm prefill assignment builder', () => {
+  const document = fakeDocument();
+  const selects = {
+    '[data-id="fpNewAssignType"]': { value: 'pdf_real' },
+    '[data-id="fpNewAssignScenario"]': { value: '' },
+    '[data-id="fpNewAssignTitle"]': { value: '', focus() {} },
+    '[data-id="fpNewAssignProfile"]': { value: 'OFFSET_300' },
+  };
+  document.querySelector = (sel) => selects[sel] || null;
+  const alerts = [];
+  const context = {
+    document,
+    window: {
+      _fpCustomChallengesCache: [
+        {
+          id: 'custom_abc123',
+          category: 'docente',
+          is_custom: true,
+          title: 'Cartel Propio <Museo>',
+          description: 'Desc',
+          level: 'Reto Docente FP',
+          doc_type: 'PDF',
+          target_profile: 'PACKAGING_CARTONCILLO',
+          target_errors: ['Sin sangrado'],
+          teacher_name: 'Prof. Ikasle',
+          iso_norm: 'ISO 12647-2',
+        },
+      ],
+    },
+    cachedScenarios: [
+      { id: 'reto_1', category: 'iniciacion', title: 'Reto 1', level: 'Init', doc_type: 'Card', target_errors: ['E1'], iso_norm: 'ISO' },
+      { id: 'custom_abc123', category: 'docente', is_custom: true, title: 'Cartel Propio <Museo>', level: 'Docente', doc_type: 'PDF', target_errors: ['Sin sangrado'], teacher_name: 'Prof. <Test>', iso_norm: 'ISO' },
+    ],
+    toggleFpScenarioSelect() {},
+    notifyUser(msg) { alerts.push(msg); },
+  };
+  loadFunctions(context, ['escapeHtml', 'renderScenariosGrid', 'filterScenariosCategory', 'assignCustomChallengeToForm']);
+
+  context.filterScenariosCategory('docente');
+  const gridHtml = document.getElementById('scenariosGrid').innerHTML;
+  assert.ok(gridHtml.includes('Cartel Propio &lt;Museo&gt;'));
+  assert.ok(!gridHtml.includes('Reto 1'));
+
+  context.assignCustomChallengeToForm('custom_abc123');
+  assert.equal(selects['[data-id="fpNewAssignType"]'].value, 'reto');
+  assert.equal(selects['[data-id="fpNewAssignScenario"]'].value, 'custom_abc123');
+  assert.equal(selects['[data-id="fpNewAssignTitle"]'].value, 'Cartel Propio <Museo>');
+  assert.equal(selects['[data-id="fpNewAssignProfile"]'].value, 'PACKAGING_CARTONCILLO');
+  assert.ok(alerts.length >= 1);
+});

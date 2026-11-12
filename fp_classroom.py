@@ -210,6 +210,28 @@ def init_fp_db(db_path: Optional[Path] = None, force: bool = False) -> None:
                 FOREIGN KEY (student_id) REFERENCES users (id) ON DELETE CASCADE
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS fp_custom_challenges (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                category TEXT NOT NULL DEFAULT 'docente',
+                level TEXT NOT NULL DEFAULT 'Reto Docente FP',
+                module TEXT NOT NULL DEFAULT 'Preimpresión y Arte Final',
+                doc_type TEXT NOT NULL DEFAULT 'PDF Personalizado',
+                target_profile TEXT NOT NULL DEFAULT 'OFFSET_300',
+                iso_norm TEXT NOT NULL DEFAULT 'ISO 12647-2 / PDF/X',
+                target_errors_json TEXT NOT NULL DEFAULT '[]',
+                learning_goals_json TEXT NOT NULL DEFAULT '[]',
+                filename TEXT NOT NULL,
+                pdf_sha256 TEXT,
+                teacher_id INTEGER,
+                teacher_name TEXT,
+                is_published INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (teacher_id) REFERENCES users (id) ON DELETE SET NULL
+            )
+        """)
         conn.commit()
         _ensure_fp_assignment_columns(conn)
 
@@ -1265,6 +1287,163 @@ def generate_evaluation_pdf_report(submission_id: int, db_path: Optional[Path] =
         writer.end_page()
     writer.close()
     return out_buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# RETOS PROPIOS SUBIDOS POR EL DOCENTE (PLANTILLAS REUTILIZABLES FP)
+# ---------------------------------------------------------------------------
+
+def _normalize_custom_challenge_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize a database row from `fp_custom_challenges` to scenario-compatible dict."""
+    try:
+        target_errors = json.loads(row.get("target_errors_json") or "[]")
+        if not isinstance(target_errors, list):
+            target_errors = []
+    except Exception:
+        target_errors = []
+    try:
+        learning_goals = json.loads(row.get("learning_goals_json") or "[]")
+        if not isinstance(learning_goals, list):
+            learning_goals = []
+    except Exception:
+        learning_goals = []
+
+    return {
+        "id": row["id"],
+        "category": row.get("category") or "docente",
+        "title": row["title"],
+        "description": row.get("description") or "",
+        "level": row.get("level") or "Reto Docente FP",
+        "difficulty": row.get("level") or "Reto Docente FP",
+        "module": row.get("module") or "Preimpresión y Arte Final",
+        "doc_type": row.get("doc_type") or "PDF Personalizado",
+        "target_profile": row.get("target_profile") or "OFFSET_300",
+        "iso_norm": row.get("iso_norm") or "ISO 12647-2 / PDF/X",
+        "target_errors": target_errors,
+        "learning_goals": learning_goals,
+        "filename": row.get("filename") or f"{row['id']}.pdf",
+        "pdf_sha256": row.get("pdf_sha256"),
+        "teacher_id": row.get("teacher_id"),
+        "teacher_name": row.get("teacher_name") or "Docente FP",
+        "is_published": bool(row.get("is_published", 1)),
+        "is_custom": True,
+        "created_at": row.get("created_at"),
+    }
+
+
+def create_custom_challenge(
+    title: str,
+    filename: str,
+    pdf_sha256: str,
+    teacher_id: Optional[int],
+    teacher_name: str = "Docente FP",
+    description: str = "",
+    level: str = "Reto Docente FP",
+    module: str = "Preimpresión y Arte Final",
+    doc_type: str = "PDF Personalizado",
+    target_profile: str = "OFFSET_300",
+    iso_norm: str = "ISO 12647-2 / PDF/X",
+    target_errors: Optional[List[str]] = None,
+    learning_goals: Optional[List[str]] = None,
+    challenge_id: Optional[str] = None,
+    db_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Persist a teacher-uploaded PDF challenge template so groups can reuse it."""
+    init_fp_db(db_path)
+    clean_title = (title or "").strip()
+    if len(clean_title) < 2:
+        raise ValueError("El título del reto propio debe tener al menos 2 caracteres.")
+
+    cid = (challenge_id or f"custom_{secrets.token_hex(6)}").strip().lower()
+    errors_list = [str(e).strip() for e in (target_errors or []) if str(e).strip()]
+    goals_list = [str(g).strip() for g in (learning_goals or []) if str(g).strip()]
+    if not goals_list:
+        goals_list = [
+            "Diagnosticar todas las incidencias del PDF original del docente antes de producir.",
+            f"Ajustar el arte final al perfil objetivo ({target_profile or 'OFFSET_300'}).",
+        ]
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with get_db_connection(db_path) as conn:
+        conn.execute("""
+            INSERT INTO fp_custom_challenges (
+                id, title, description, category, level, module, doc_type,
+                target_profile, iso_norm, target_errors_json, learning_goals_json,
+                filename, pdf_sha256, teacher_id, teacher_name, is_published, created_at
+            )
+            VALUES (?, ?, ?, 'docente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        """, (
+            cid,
+            clean_title,
+            (description or "").strip() or "Caso práctico preparado por el profesorado a partir de un PDF real de taller.",
+            (level or "").strip() or "Reto Docente FP",
+            (module or "").strip() or "Preimpresión y Arte Final",
+            (doc_type or "").strip() or "PDF Personalizado",
+            (target_profile or "").strip() or "OFFSET_300",
+            (iso_norm or "").strip() or "ISO 12647-2 / PDF/X",
+            json.dumps(errors_list, ensure_ascii=False),
+            json.dumps(goals_list, ensure_ascii=False),
+            filename or f"{cid}.pdf",
+            pdf_sha256,
+            teacher_id,
+            (teacher_name or "").strip() or "Docente FP",
+            now_iso,
+        ))
+        conn.commit()
+        row = conn.execute("SELECT * FROM fp_custom_challenges WHERE id = ?", (cid,)).fetchone()
+    return _normalize_custom_challenge_row(row)
+
+
+def list_custom_challenges(
+    teacher_id: Optional[int] = None,
+    only_published: bool = True,
+    db_path: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    """Return teacher-uploaded custom challenges formatted for the scenarios catalog & classroom."""
+    init_fp_db(db_path)
+    with get_db_connection(db_path) as conn:
+        clauses = []
+        params: List[Any] = []
+        if only_published:
+            clauses.append("is_published = 1")
+        if teacher_id is not None:
+            clauses.append("teacher_id = ?")
+            params.append(teacher_id)
+        sql = "SELECT * FROM fp_custom_challenges"
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY created_at DESC"
+        rows = conn.execute(sql, tuple(params)).fetchall()
+    return [_normalize_custom_challenge_row(r) for r in rows]
+
+
+def get_custom_challenge(challenge_id: str, db_path: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    """Fetch a single teacher-uploaded challenge by id."""
+    if not challenge_id:
+        return None
+    init_fp_db(db_path)
+    with get_db_connection(db_path) as conn:
+        row = conn.execute("SELECT * FROM fp_custom_challenges WHERE id = ?", (challenge_id,)).fetchone()
+    return _normalize_custom_challenge_row(row) if row else None
+
+
+def delete_custom_challenge(
+    challenge_id: str,
+    requester_id: int,
+    requester_role: str = "teacher",
+    db_path: Optional[Path] = None,
+) -> bool:
+    """Delete a teacher-uploaded challenge if the requester is its owner or admin."""
+    init_fp_db(db_path)
+    with get_db_connection(db_path) as conn:
+        row = conn.execute("SELECT * FROM fp_custom_challenges WHERE id = ?", (challenge_id,)).fetchone()
+        if not row:
+            raise FileNotFoundError("Reto docente no encontrado.")
+        if requester_role != "admin" and row.get("teacher_id") not in (None, requester_id):
+            raise PermissionError("Solo el docente autor o un administrador puede eliminar este reto.")
+        conn.execute("DELETE FROM fp_custom_challenges WHERE id = ?", (challenge_id,))
+        conn.commit()
+    return True
 
 
 # Inicialización automática segura

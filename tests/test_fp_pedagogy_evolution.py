@@ -232,6 +232,97 @@ class FPPedagogyEvolutionTests(unittest.TestCase):
         conn2.close()
         self.assertIn("exam_mode", cols)
 
+    def test_teacher_custom_challenge_upload_catalog_load_and_delete(self):
+        import pymupdf
+
+        custom_dir = Path(self.tmp.name) / "custom_challenges"
+        custom_dir.mkdir(parents=True, exist_ok=True)
+        uploads_dir = Path(self.tmp.name) / "uploads"
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+
+        doc = pymupdf.open()
+        page = doc.new_page(width=200, height=200)
+        page.insert_text((20, 40), "Cartel Prueba RGB", color=(0, 0, 0), fontsize=14)
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        with patch.object(app, "CUSTOM_CHALLENGES_DIR", custom_dir), patch.object(app, "UPLOAD_DIR", uploads_dir):
+            teacher_client = TestClient(app.app)
+            with patch.dict(os.environ, {"INTELLIPRINT_DOCENTE_CODE": "SALESIANOS-FP"}, clear=False):
+                r_doc = teacher_client.post(
+                    "/api/auth/register",
+                    json={
+                        "full_name": "Profesor Reto",
+                        "email": "prof_reto@fp.edu",
+                        "password": "Password123!",
+                        "role": "docente",
+                        "invite_code": "SALESIANOS-FP",
+                    },
+                )
+                self.assertEqual(r_doc.status_code, 200, r_doc.text)
+
+            student_client = TestClient(app.app)
+            r_stu = student_client.post(
+                "/api/auth/register",
+                json={
+                    "full_name": "Alumno Reto",
+                    "email": "alum_reto@fp.edu",
+                    "password": "Password123!",
+                    "role": "alumno",
+                },
+            )
+            self.assertEqual(r_stu.status_code, 200, r_stu.text)
+
+            # Students cannot upload teacher templates
+            forbidden = student_client.post(
+                "/api/fp/teacher/challenges",
+                data={"title": "Intento Alumno"},
+                files={"file": ("test.pdf", pdf_bytes, "application/pdf")},
+            )
+            self.assertEqual(forbidden.status_code, 403)
+
+            # Teacher uploads PDF template without explicit errors -> preflight auto-populates errors
+            upload = teacher_client.post(
+                "/api/fp/teacher/challenges",
+                data={
+                    "title": "Reto Propio Cartel Museo",
+                    "description": "Revisar sangrado y negro RGB",
+                    "target_profile": "OFFSET_300",
+                },
+                files={"file": ("cartel_museo.pdf", pdf_bytes, "application/pdf")},
+            )
+            self.assertEqual(upload.status_code, 200)
+            challenge = upload.json()["challenge"]
+            cid = challenge["id"]
+            self.assertTrue(challenge["is_custom"])
+            self.assertEqual(challenge["category"], "docente")
+            self.assertTrue(len(challenge["target_errors"]) >= 1)
+            self.assertTrue((custom_dir / f"{cid}.pdf").exists())
+
+            # Appears in didactic catalog and teacher overview
+            catalog = student_client.get("/api/didactic/scenarios").json()["scenarios"]
+            self.assertTrue(any(s["id"] == cid and s.get("is_custom") for s in catalog))
+            overview = teacher_client.get("/api/fp/teacher/overview").json()
+            self.assertTrue(any(c["id"] == cid for c in overview["custom_challenges"]))
+
+            # Can be loaded as a playable preflight challenge & downloaded
+            loaded = student_client.post(f"/api/didactic/load-scenario/{cid}")
+            self.assertEqual(loaded.status_code, 200)
+            payload = loaded.json()
+            self.assertEqual(payload["job_id"], f"fp_{cid}")
+            self.assertTrue(payload["report"]["job_meta"]["is_custom_challenge"])
+
+            dl = student_client.get(f"/api/didactic/scenario/{cid}/download")
+            self.assertEqual(dl.status_code, 200)
+            self.assertTrue(dl.content.startswith(b"%PDF-"))
+
+            # Teacher can delete own template
+            deleted = teacher_client.delete(f"/api/fp/teacher/challenges/{cid}")
+            self.assertEqual(deleted.status_code, 200)
+            self.assertFalse((custom_dir / f"{cid}.pdf").exists())
+            catalog_after = student_client.get("/api/didactic/scenarios").json()["scenarios"]
+            self.assertFalse(any(s["id"] == cid for s in catalog_after))
+
 
 if __name__ == "__main__":
     unittest.main()
