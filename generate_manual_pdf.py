@@ -46,13 +46,13 @@ def build_manual_pdf(output_path=None):
     width, height = A4
     content_width = width - 40 * mm
     styles = {
-        'body': ParagraphStyle('Body', fontName='ManualSans', fontSize=10.1, leading=14, spaceAfter=7, textColor=colors.black),
-        'title': ParagraphStyle('Title', fontName='ManualSansBold', fontSize=25, leading=31, spaceBefore=10, spaceAfter=16, textColor=colors.black),
-        'h1': ParagraphStyle('Chapter', fontName='ManualSansBold', fontSize=18, leading=23, spaceAfter=14, keepWithNext=True, textColor=colors.black),
-        'h2': ParagraphStyle('Section', fontName='ManualSansBold', fontSize=13, leading=18, spaceBefore=12, spaceAfter=7, keepWithNext=True, textColor=colors.black),
-        'h3': ParagraphStyle('Minor', fontName='ManualSansBold', fontSize=11, leading=15, spaceBefore=9, spaceAfter=6, keepWithNext=True, textColor=colors.black),
-        'cell': ParagraphStyle('Cell', fontName='ManualSans', fontSize=8.8, leading=12, spaceAfter=1, textColor=colors.black),
-        'head': ParagraphStyle('CellHeader', fontName='ManualSansBold', fontSize=9, leading=12, spaceAfter=1, textColor=colors.black),
+        'body': ParagraphStyle('Body', fontName='ManualSans', fontSize=9.8, leading=12.6, spaceAfter=5.5, textColor=colors.black),
+        'title': ParagraphStyle('Title', fontName='ManualSansBold', fontSize=24, leading=29, spaceBefore=10, spaceAfter=14, textColor=colors.black),
+        'h1': ParagraphStyle('Chapter', fontName='ManualSansBold', fontSize=17.5, leading=22, spaceAfter=12, keepWithNext=True, textColor=colors.black),
+        'h2': ParagraphStyle('Section', fontName='ManualSansBold', fontSize=12.5, leading=16.5, spaceBefore=10, spaceAfter=6, keepWithNext=True, textColor=colors.black),
+        'h3': ParagraphStyle('Minor', fontName='ManualSansBold', fontSize=10.8, leading=14, spaceBefore=8, spaceAfter=5, keepWithNext=True, textColor=colors.black),
+        'cell': ParagraphStyle('Cell', fontName='ManualSans', fontSize=8.6, leading=11.2, spaceAfter=1, textColor=colors.black),
+        'head': ParagraphStyle('CellHeader', fontName='ManualSansBold', fontSize=8.8, leading=11.4, spaceAfter=1, textColor=colors.black),
     }
     fd, temporary = tempfile.mkstemp(suffix='.pdf', dir=output_path.parent)
     os.close(fd)
@@ -121,10 +121,10 @@ def build_manual_pdf(output_path=None):
                     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#E8F0FA')),
                     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F7F9FC')]),
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('LEFTPADDING', (0, 0), (-1, -1), 6), ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-                    ('TOPPADDING', (0, 0), (-1, -1), 6), ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 5.5), ('RIGHTPADDING', (0, 0), (-1, -1), 5.5),
+                    ('TOPPADDING', (0, 0), (-1, -1), 4.5), ('BOTTOMPADDING', (0, 0), (-1, -1), 4.5),
                 ]))
-                story.extend([table, Spacer(1, 8)])
+                story.extend([table, Spacer(1, 6)])
         document.build(story)
         os.replace(temporary, output_path)
     finally:

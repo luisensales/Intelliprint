@@ -73,7 +73,7 @@ def add_table(doc, rows):
             properties.append(shade)
             paragraph = cell.paragraphs[0]
             paragraph.paragraph_format.space_after = Pt(2)
-            paragraph.paragraph_format.line_spacing = 1.05
+            paragraph.paragraph_format.line_spacing = 1.10
             add_inline(paragraph, text, 9.3)
             if row_index == 0:
                 for run in paragraph.runs:
@@ -121,7 +121,7 @@ def build_manual_docx(output_path=None):
     normal = doc.styles["Normal"]
     normal.font.name, normal.font.size = "Arial", Pt(10.5)
     normal.font.color.rgb = RGBColor(0, 0, 0)
-    normal.paragraph_format.line_spacing = 1.10
+    normal.paragraph_format.line_spacing = 1.15
     normal.paragraph_format.space_after = Pt(6)
     normal.paragraph_format.widow_control = True
     for name, size in (("Title", 26), ("Subtitle", 12), ("Heading 1", 18), ("Heading 2", 13), ("Heading 3", 11)):
@@ -177,8 +177,8 @@ def build_manual_docx(output_path=None):
         if kind == 'heading':
             paragraph = doc.add_heading(block['text'], level=block['level'] - 1)
             if block['level'] == 2:
-                paragraph.paragraph_format.space_before = Pt(22)
-                paragraph.paragraph_format.page_break_before = block is blocks[first_chapter]
+                paragraph.paragraph_format.space_before = Pt(0)
+                paragraph.paragraph_format.page_break_before = True
         elif kind == 'paragraph':
             add_inline(doc.add_paragraph(), block['text'])
         elif kind == 'ordered_list':
