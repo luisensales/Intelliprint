@@ -110,7 +110,7 @@ La conversión automática RGB a CMYK trabaja sobre imágenes embebidas. No es u
 
 ### Acceso y primera pantalla
 
-Abre la dirección de la aplicación en un navegador actual con JavaScript habilitado. La primera pantalla contiene el archivo de entrada, el perfil de verificación y la selección ICC. En un servicio gratuito puede haber una espera inicial al reactivarse el servidor. Espera a que se carguen los catálogos antes de iniciar el análisis.
+Abre la dirección de la aplicación en un navegador actual con JavaScript habilitado. La primera pantalla contiene el archivo de entrada, el perfil de verificación, la selección ICC y los accesos directos **Probar con Reto de Muestra** (carga en un clic un caso de ejemplo real de taller) y **Aula / Prácticas FP**. En un servicio gratuito puede haber una espera inicial al reactivarse el servidor (`GET /api/health` confirma el estado del motor y de la base de datos). Espera a que se carguen los catálogos antes de iniciar el análisis.
 
 El botón de inicio y el logotipo de IntelliPrint llevan a la aplicación. Los logotipos institucionales enlazan a las webs de los centros y del departamento de educación; no son herramientas de análisis. El indicador «Motor Activo» identifica la interfaz disponible, pero no acredita que un documento concreto haya superado su revisión.
 
@@ -121,18 +121,19 @@ La barra superior de IntelliPrint agrupa las herramientas por bloques de trabajo
 | Opción | Uso y efecto |
 | --- | --- |
 | Acceso Taller | Abre el panel de autenticación de usuarios y roles (RBAC), las cuentas demo de taller y el registro individual con código de grupo FP. |
-| Nuevo PDF | Limpia la selección y el informe mostrado para comenzar otro trabajo. Descarga antes los resultados que quieras conservar. No equivale a borrar los archivos del servidor. |
+| Nuevo PDF | Limpia la selección y el informe mostrado para comenzar otro trabajo (`Alt + N`). Descarga antes los resultados que quieras conservar. No equivale a borrar los archivos del servidor. |
 | Trabajos | Abre el gestor de trabajos activos con filtros de búsqueda, estado de caducidad (24 h), recarga rápida de sesiones y descarga de Paquetes de Producción ZIP. |
 | Perfiles | Abre la lista de perfiles y su editor personalizado (crear, copiar, modificar, importar y exportar en JSON). También se llega desde Gestionar Perfiles. |
 | Orden Producción | Conecta el documento con recetas reales de producto, máquina, papel y acabados para calcular pliegos y emitir el Job Ticket oficial en PDF. |
 | Validación GWG | Lanza la auditoría normativa contra estándares GWG 2015 / ISO PDF/X sobre el PDF acumulado actual y descarga su certificado pericial. |
 | Simulador FP | Abre el módulo didáctico: catálogo de 20 retos prácticos, 4 simuladores físicos de máquina, autoevaluación y ficha del alumno PDF. |
-| Panel Docente | Abre el aula virtual de FP: gestión de grupos, códigos de clase, prácticas, evaluación por rúbricas ponderadas, gráficas de evolución, exportación CSV y administración de cuentas. |
-| Manual (PDF) | Abre este manual en el lector web interactivo con filtro por perfil y permite descargar el manual oficial en PDF. |
-| Cabina D50 | Cambia al tema oscuro antirreflejo de cabina de prensa y vuelve al modo de oficina al pulsarlo de nuevo. La elección se recuerda en ese navegador. |
+| Panel Docente | Abre el aula virtual de FP (`Alt + F`): gestión de grupos, códigos de clase, prácticas, evaluación por rúbricas ponderadas, gráficas de evolución, exportación CSV y administración de cuentas. |
+| Manual (PDF) | Abre este manual (`Alt + M`) en el lector web interactivo con filtro por perfil y permite descargar el manual oficial en PDF. |
+| Cabina D50 | Cambia al tema oscuro antirreflejo de cabina de prensa (`Alt + K`) adaptando formularios, alertas y modales, y vuelve al modo de oficina al pulsarlo de nuevo. La elección se recuerda en ese navegador. |
 | Pantalla Completa | Solicita el modo kiosko o pantalla completa del navegador. Se sale con el mismo control o con la tecla Esc cuando el navegador lo permite. |
+| Ayuda / Sello (`?`) | Abre el panel institucional con el consorcio educativo (*Salesianos Urnieta*, *CIFP Mendizabala LHII* y *Gobierno Vasco*), el estado del sistema y la guía de atajos de teclado (`Esc`, `Alt + K`, `Alt + N`, `Alt + M`, `Alt + F` y `?`). |
 
-El modo Cabina D50 reduce el brillo visual de la interfaz para pupitres de prensa. No calibra el monitor, no instala un perfil de pantalla ni controla la iluminación física D50. Para juzgar color hay que disponer de un monitor y unas condiciones de observación adecuados.
+El modo Cabina D50 reduce el brillo visual de la interfaz para pupitres de prensa (y respeta fondo blanco limpio automático al imprimir la página desde el navegador). No calibra el monitor, no instala un perfil de pantalla ni controla la iluminación física D50. Las confirmaciones y avisos interactivos se muestran mediante **notificaciones Toast no bloqueantes** en la esquina inferior derecha. Para juzgar color hay que disponer de un monitor y unas condiciones de observación adecuados.
 
 ### Acceso Taller, roles del sistema y sesión única
 

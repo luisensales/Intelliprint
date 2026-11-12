@@ -1191,6 +1191,17 @@ def auth_login_endpoint(request: Request, response: Response, body: dict = Body(
     }
 
 
+@app.get("/api/health")
+def health_check():
+    """Endpoint ligero de estado institucional y base de datos para monitorización."""
+    return {
+        "status": "ok",
+        "service": "IntelliPrint",
+        "version": "1.2.1-sepfix",
+        "db_status": get_db_status(),
+    }
+
+
 @app.post("/api/auth/register")
 def auth_register_endpoint(request: Request, response: Response, body: dict = Body(default={})):
     """Registra una cuenta individual con email, contraseña y asignación segura de rol."""

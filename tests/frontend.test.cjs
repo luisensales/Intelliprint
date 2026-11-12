@@ -857,3 +857,51 @@ test('FP exam_mode locks Taller en 1 Clic button and blocks openBatchFixModal', 
   assert.equal(context.activeFpAssignment, null);
   assert.equal(btnBatch.disabled, false);
 });
+
+test('showToast escapes untrusted text and handleGlobalKeydown closes open modals on Escape and toggles ? help', () => {
+  const document = fakeDocument();
+  const appended = [];
+  document.getElementById('toastContainer').appendChild = (el) => appended.push(el);
+  const clsSet = new Set(['hidden']);
+  const shortcutsModal = document.getElementById('shortcutsModal');
+  shortcutsModal.classList = {
+    add: (c) => clsSet.add(c),
+    remove: (c) => clsSet.delete(c),
+    contains: (c) => clsSet.has(c),
+  };
+
+  const context = {
+    document,
+    setTimeout: () => 1,
+    currentDbStatus: { label: 'SQLite Local' },
+    closeBatchFixModal: () => {},
+    closeImpositionModal: () => {},
+    closeBarcodeModal: () => {},
+    closeBatchHotfolderModal: () => {},
+    closeSafetyMarginModal: () => {},
+    closeDidacticModal: () => {},
+    closeManualModal: () => {},
+    closeProfileManagerModal: () => {},
+    closeCip3Modal: () => {},
+    closeVersionComparisonModal: () => {},
+    closeJobsManagementModal: () => {},
+    closeProductionOrderModal: () => {},
+    closeGwgValidationModal: () => {},
+    closeAuthModal: () => {},
+    closeFpClassroomModal: () => {},
+    closeClientApprovalModal: () => {},
+  };
+  loadFunctions(context, ['escapeHtml', 'showToast', 'notifyUser', 'openShortcutsModal', 'closeShortcutsModal', 'handleGlobalKeydown']);
+
+  context.notifyUser('<img src=x onerror=1>', 'success');
+  assert.equal(appended.length, 1);
+  assert.ok(!appended[0].innerHTML.includes('<img src=x'));
+  assert.ok(appended[0].innerHTML.includes('&lt;img src=x'));
+
+  context.handleGlobalKeydown({ key: '?', target: { tagName: 'BODY' }, ctrlKey: false, metaKey: false });
+  assert.equal(shortcutsModal.classList.contains('hidden'), false);
+  assert.ok(document.getElementById('shortcutsSystemStatus').innerHTML.includes('SQLite Local'));
+
+  context.handleGlobalKeydown({ key: 'Escape', target: { tagName: 'BODY' } });
+  assert.equal(shortcutsModal.classList.contains('hidden'), true);
+});

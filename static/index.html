@@ -81,15 +81,35 @@
     }
     body.theme-kiosk-d50 select,
     body.theme-kiosk-d50 input[type="text"],
-    body.theme-kiosk-d50 input[type="number"] {
+    body.theme-kiosk-d50 input[type="number"],
+    body.theme-kiosk-d50 input[type="email"],
+    body.theme-kiosk-d50 input[type="password"],
+    body.theme-kiosk-d50 textarea {
       background-color: #131d33 !important;
       color: #f8fafc !important;
       border-color: #334766 !important;
     }
     body.theme-kiosk-d50 select:focus,
-    body.theme-kiosk-d50 input:focus {
+    body.theme-kiosk-d50 input:focus,
+    body.theme-kiosk-d50 textarea:focus {
       border-color: #38bdf8 !important;
       box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25) !important;
+    }
+    body.theme-kiosk-d50 footer {
+      background-color: #030712 !important;
+      border-top-color: #1f293d !important;
+      color: #94a3b8 !important;
+    }
+    body.theme-kiosk-d50 .bg-blue-50,
+    body.theme-kiosk-d50 .bg-indigo-50,
+    body.theme-kiosk-d50 .bg-violet-50,
+    body.theme-kiosk-d50 .bg-purple-50,
+    body.theme-kiosk-d50 .bg-emerald-50,
+    body.theme-kiosk-d50 .bg-amber-50,
+    body.theme-kiosk-d50 .bg-rose-50 {
+      background-color: #111c33 !important;
+      border-color: #2c4166 !important;
+      color: #e2e8f0 !important;
     }
     /* Paneles modales en modo cabina */
     body.theme-kiosk-d50 .relative.bg-white {
@@ -105,6 +125,19 @@
     body.theme-kiosk-d50 .institutional-logos-pill {
       background-color: #ffffff !important;
       border-color: #cbd5e1 !important;
+    }
+    @media print {
+      body, body.theme-kiosk-d50 {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+      }
+      header .border-t, #toastContainer, button, .no-print {
+        display: none !important;
+      }
+      section, .bg-white {
+        box-shadow: none !important;
+        border-color: #cbd5e1 !important;
+      }
     }
   </style>
 </head>
@@ -211,11 +244,14 @@
             <i class="fa-solid fa-file-pdf text-red-400"></i> <span>Manual (PDF)</span>
           </button>
           <div class="h-3.5 w-px bg-slate-800"></div>
-          <button id="themeToggleBtn" onclick="toggleKioskTheme()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Conmutar Modo Cabina de Máquina D50 (Fondo oscuro antirreflejo para pupitres de prensa ISO 3664)">
+          <button id="themeToggleBtn" onclick="toggleKioskTheme()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Conmutar Modo Cabina de Máquina D50 (Fondo oscuro antirreflejo para pupitres de prensa ISO 3664 · Alt+K)">
             <i class="fa-solid fa-moon text-amber-300"></i> <span id="themeToggleLabel">Cabina D50</span>
           </button>
           <button onclick="toggleFullScreen()" class="hidden md:inline-flex items-center gap-1 px-1.5 py-1 hover:bg-slate-800 text-slate-400 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer" title="Pantalla Completa / Kiosko Táctil para Pupitre de Máquina">
             <i class="fa-solid fa-expand"></i>
+          </button>
+          <button onclick="openShortcutsModal()" class="inline-flex items-center justify-center w-6 h-6 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 text-xs font-extrabold rounded-lg border border-slate-700/70 transition cursor-pointer" title="Sello Institucional, Atajos de Teclado (?) y Estado del Sistema">
+            ?
           </button>
         </div>
       </div>
@@ -355,9 +391,17 @@
 
       </div>
 
-      <!-- Action Button -->
-      <div class="pt-2 flex justify-end">
-        <button id="startCheckBtn" disabled class="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+      <!-- Action Button & Quick Onboarding -->
+      <div class="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <button type="button" onclick="launchQuickDemoScenario(this)" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 font-semibold transition cursor-pointer" title="Carga un PDF didáctico de muestra con errores reales de taller en 1 clic">
+            <i class="fa-solid fa-flask text-amber-600"></i> <span>Probar con Reto de Muestra</span>
+          </button>
+          <button type="button" onclick="openFpClassroomModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-900 font-semibold transition cursor-pointer" title="Entrar al Aula Virtual FP o Panel Docente">
+            <i class="fa-solid fa-chalkboard-user text-violet-600"></i> <span>Aula / Prácticas FP</span>
+          </button>
+        </div>
+        <button id="startCheckBtn" disabled class="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow disabled:opacity-50 disabled:cursor-not-allowed transition-all">
           <i class="fa-solid fa-play"></i>
           <span>Analizar PDF con IntelliPrint</span>
         </button>
@@ -3774,6 +3818,72 @@
     </div>
   </div>
 
+  <!-- MODAL: GUÍA RÁPIDA, ATAJOS Y SELLO INSTITUCIONAL -->
+  <div id="shortcutsModal" class="hidden fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-4" onclick="if(event.target === this) closeShortcutsModal()">
+    <div class="relative bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-6 py-4 text-white flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <img src="/asset/Logo-intelliprint-imago.svg" alt="IntelliPrint" class="h-8 w-auto rounded-md">
+          <div>
+            <h3 class="text-base font-extrabold tracking-tight">IntelliPrint · Sello Institucional y Atajos</h3>
+            <p class="text-[11px] text-slate-300">Proyecto de Innovación Aplicada en Artes Gráficas · v1.2.1-sepfix</p>
+          </div>
+        </div>
+        <button onclick="closeShortcutsModal()" class="w-8 h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 flex items-center justify-center cursor-pointer" title="Cerrar (Esc)">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-5 text-xs text-slate-700 max-h-[80vh] overflow-y-auto">
+        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+          <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">Consorcio Educativo y Soporte Institucional</div>
+          <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 institutional-logos-pill">
+            <img src="/asset/logo-salesianos.svg" alt="CPIFP Salesianos Urnieta LHIPI" class="h-7 w-auto object-contain">
+            <img src="/asset/logo-mendizabala.png" alt="CIFP Mendizabala LHII" class="h-7 w-auto object-contain">
+            <img src="/asset/logo-dept-educacion-1.svg" alt="Departamento de Educación · Gobierno Vasco" class="h-8 w-auto object-contain">
+          </div>
+          <p class="text-[11px] text-slate-600 leading-relaxed">
+            Desarrollado para formación técnica y transferencia al sector gráfico por <strong>CPIFP Salesianos Urnieta LHIPI</strong> y <strong>CIFP Mendizabala LHII</strong> con el impulso de <strong>Hezkuntza Saila · Departamento de Educación (Gobierno Vasco)</strong>.
+          </p>
+          <div id="shortcutsSystemStatus" class="flex flex-wrap items-center gap-2 text-[11px] pt-1"></div>
+        </div>
+
+        <div class="space-y-2">
+          <h4 class="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">Atajos de Teclado de Cabina y Taller</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+              <span>Cerrar modal o visor activo</span>
+              <kbd class="px-2 py-0.5 rounded bg-white border border-slate-300 font-mono text-[11px] font-bold text-slate-800">Esc</kbd>
+            </div>
+            <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+              <span>Conmutar Cabina D50 (ISO 3664)</span>
+              <kbd class="px-2 py-0.5 rounded bg-white border border-slate-300 font-mono text-[11px] font-bold text-slate-800">Alt + K</kbd>
+            </div>
+            <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+              <span>Nuevo análisis PDF</span>
+              <kbd class="px-2 py-0.5 rounded bg-white border border-slate-300 font-mono text-[11px] font-bold text-slate-800">Alt + N</kbd>
+            </div>
+            <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+              <span>Abrir Manual Oficial (PDF)</span>
+              <kbd class="px-2 py-0.5 rounded bg-white border border-slate-300 font-mono text-[11px] font-bold text-slate-800">Alt + M</kbd>
+            </div>
+            <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+              <span>Abrir Panel Docente / Aula FP</span>
+              <kbd class="px-2 py-0.5 rounded bg-white border border-slate-300 font-mono text-[11px] font-bold text-slate-800">Alt + F</kbd>
+            </div>
+            <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+              <span>Mostrar / ocultar esta ayuda</span>
+              <kbd class="px-2 py-0.5 rounded bg-white border border-slate-300 font-mono text-[11px] font-bold text-slate-800">?</kbd>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATIONS CONTAINER -->
+  <div id="toastContainer" role="status" aria-live="polite" class="fixed bottom-4 right-4 z-[70] flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
   <!-- Footer -->
   <footer class="bg-white border-t border-slate-200 py-6 mt-auto">
     <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
@@ -3831,6 +3941,55 @@
       return String(value ?? '').replace(/[&<>"']/g, char => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       }[char]));
+    }
+
+    function showToast(message, type = 'info', durationMs = 4500) {
+      const container = document.getElementById('toastContainer');
+      if (!container || typeof document.createElement !== 'function') return false;
+      const styles = {
+        success: 'bg-emerald-950/95 border-emerald-500/60 text-emerald-50',
+        error: 'bg-rose-950/95 border-rose-500/60 text-rose-50',
+        warning: 'bg-amber-950/95 border-amber-500/60 text-amber-50',
+        info: 'bg-slate-900/95 border-cyan-500/50 text-slate-50',
+      };
+      const icons = {
+        success: 'fa-circle-check text-emerald-400',
+        error: 'fa-circle-exclamation text-rose-400',
+        warning: 'fa-triangle-exclamation text-amber-400',
+        info: 'fa-circle-info text-cyan-400',
+      };
+      const cls = styles[type] || styles.info;
+      const iconCls = icons[type] || icons.info;
+
+      const toast = document.createElement('div');
+      toast.className = `pointer-events-auto flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl border shadow-xl text-xs transition-all duration-200 ${cls}`;
+      toast.innerHTML = `
+        <i class="fa-solid ${iconCls} text-sm shrink-0 mt-0.5"></i>
+        <div class="flex-1 leading-snug font-medium">${escapeHtml(message)}</div>
+        <button type="button" class="text-slate-400 hover:text-white shrink-0 cursor-pointer ml-1" aria-label="Cerrar aviso">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      `;
+      const closeBtn = typeof toast.querySelector === 'function' ? toast.querySelector('button') : null;
+      const removeToast = () => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      };
+      if (closeBtn) closeBtn.addEventListener('click', removeToast);
+      container.appendChild(toast);
+      if (durationMs > 0) setTimeout(removeToast, durationMs);
+      return true;
+    }
+
+    function notifyUser(message, type = 'info') {
+      if (!showToast(message, type) && typeof alert === 'function') {
+        alert(message);
+      }
+    }
+
+    async function launchQuickDemoScenario(btnEl) {
+      if (typeof loadDidacticScenario !== 'function') return;
+      await loadDidacticScenario('reto_tarjeta_richblack', btnEl || null);
+      notifyUser('Reto de muestra cargado: analiza sus incidencias técnicas o prueba el Taller en 1 Clic.', 'info');
     }
 
     // Elements
@@ -10834,7 +10993,7 @@
       const codeEl = document.querySelector('[data-id="studentJoinCodeInput"]');
       const join_code = codeEl ? codeEl.value.trim() : '';
       if (!join_code) {
-        alert('Introduce el código de grupo proporcionado por tu profesor/a.');
+        notifyUser('Introduce el código de grupo proporcionado por tu profesor/a.', 'warning');
         return;
       }
       try {
@@ -10846,21 +11005,22 @@
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || 'Código inválido');
         if (codeEl) codeEl.value = '';
+        notifyUser('Te has matriculado correctamente en el grupo FP.', 'success');
         await loadStudentDashboard();
       } catch (err) {
-        alert(err.message);
+        notifyUser(err.message, 'error');
       }
     }
 
     async function submitStudentJob() {
       if (!currentJobId) {
-        alert('Primero debes subir y analizar un PDF en IntelliPrint.');
+        notifyUser('Primero debes subir y analizar un PDF en IntelliPrint.', 'warning');
         return;
       }
       const sel = document.querySelector('[data-id="studentSubmitAssignmentSelect"]');
       const assignment_id = sel ? parseInt(sel.value, 10) : 0;
       if (!assignment_id) {
-        alert('Selecciona una práctica abierta de tu grupo.');
+        notifyUser('Selecciona una práctica abierta de tu grupo.', 'warning');
         return;
       }
       try {
@@ -10871,10 +11031,10 @@
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || 'Error enviando entrega');
-        alert('¡Práctica entregada! Se ha guardado el diagnóstico inicial, las correcciones aplicadas y el resultado final.');
+        notifyUser('¡Práctica entregada! Se ha guardado el diagnóstico inicial, las correcciones aplicadas y el resultado final.', 'success');
         await loadStudentDashboard();
       } catch (err) {
-        alert(err.message);
+        notifyUser(err.message, 'error');
       }
     }
 
@@ -11071,7 +11231,7 @@
       const title = document.querySelector('[data-id="fpRubricTitle"]')?.value.trim() || '';
       const description = document.querySelector('[data-id="fpRubricDesc"]')?.value.trim() || '';
       if (!title) {
-        alert('Introduce un título para la rúbrica ponderada.');
+        notifyUser('Introduce un título para la rúbrica ponderada.', 'warning');
         return;
       }
 
@@ -11086,7 +11246,7 @@
         }
       }
       if (!criteria.length || totalWeight <= 0) {
-        alert('Define al menos un criterio con peso mayor que 0%.');
+        notifyUser('Define al menos un criterio con peso mayor que 0%.', 'warning');
         return;
       }
 
@@ -11101,9 +11261,10 @@
         document.querySelector('[data-id="fpRubricTitle"]').value = '';
         document.querySelector('[data-id="fpRubricDesc"]').value = '';
         toggleFpRubricBuilder(false);
+        notifyUser(`Rúbrica "${title}" guardada correctamente.`, 'success');
         await loadTeacherOverview();
       } catch (err) {
-        alert(err.message);
+        notifyUser(err.message, 'error');
       }
     }
 
@@ -11112,7 +11273,7 @@
       const center = document.querySelector('[data-id="fpNewGroupCenter"]')?.value.trim() || 'Centro FP';
       const module_name = document.querySelector('[data-id="fpNewGroupModule"]')?.value.trim() || 'Preimpresión Digital';
       if (!name) {
-        alert('Introduce un nombre para el grupo (ej. 2º GS Preimpresión).');
+        notifyUser('Introduce un nombre para el grupo (ej. 2º GS Preimpresión).', 'warning');
         return;
       }
       try {
@@ -11124,9 +11285,10 @@
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || 'Error creando grupo');
         document.querySelector('[data-id="fpNewGroupName"]').value = '';
+        notifyUser(`Grupo "${name}" creado con código ${data.group?.join_code || ''}.`, 'success');
         await loadTeacherOverview();
       } catch (err) {
-        alert(err.message);
+        notifyUser(err.message, 'error');
       }
     }
 
@@ -11141,7 +11303,7 @@
       const exam_mode = Boolean(document.querySelector('[data-id="fpNewAssignExamMode"]')?.checked);
 
       if (!group_id || !title) {
-        alert('Selecciona un grupo y escribe el título de la práctica.');
+        notifyUser('Selecciona un grupo y escribe el título de la práctica.', 'warning');
         return;
       }
       try {
@@ -11156,9 +11318,10 @@
         document.querySelector('[data-id="fpNewAssignDesc"]').value = '';
         const examChk = document.querySelector('[data-id="fpNewAssignExamMode"]');
         if (examChk) examChk.checked = false;
+        notifyUser(`Práctica "${title}" publicada en el grupo.`, 'success');
         await loadTeacherOverview();
       } catch (err) {
-        alert(err.message);
+        notifyUser(err.message, 'error');
       }
     }
 
@@ -11325,10 +11488,11 @@
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || 'Error guardando calificación');
+        notifyUser('Calificación y feedback docente guardados.', 'success');
         await loadTeacherOverview();
         await selectFpSubmission(submissionId);
       } catch (err) {
-        alert(err.message);
+        notifyUser(err.message, 'error');
       }
     }
 
@@ -11452,19 +11616,104 @@
       const urlInput = document.querySelector('[data-id="clientApprovalUrlInput"]');
       if (urlInput && urlInput.value) {
         navigator.clipboard.writeText(urlInput.value).then(() => {
-          alert('¡Enlace de visto bueno copiado al portapapeles!\nPuedes enviarlo al cliente por email o mensajería.');
+          notifyUser('Enlace de visto bueno copiado al portapapeles.', 'success');
         }).catch(() => {
           urlInput.select();
           document.execCommand('copy');
-          alert('Enlace copiado.');
+          notifyUser('Enlace de visto bueno copiado al portapapeles.', 'success');
         });
       }
     }
 
-    // Inicializar tema al cargar DOM
+    function openShortcutsModal() {
+      const modal = document.getElementById('shortcutsModal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      const statusEl = document.getElementById('shortcutsSystemStatus');
+      if (statusEl) {
+        const dbLabel = (typeof currentDbStatus === 'object' && currentDbStatus?.label)
+          ? currentDbStatus.label
+          : 'Base de datos conectada';
+        statusEl.innerHTML = `
+          <span class="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold"><i class="fa-solid fa-circle-check mr-1"></i>Motor Preflight OK</span>
+          <span class="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-800 font-semibold"><i class="fa-solid fa-database mr-1"></i>${escapeHtml(dbLabel)}</span>
+        `;
+      }
+    }
+
+    function closeShortcutsModal() {
+      const modal = document.getElementById('shortcutsModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function handleGlobalKeydown(e) {
+      if (!e) return;
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
+      const isEditing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || Boolean(e.target && e.target.isContentEditable);
+
+      if (e.key === 'Escape') {
+        const modalClosers = [
+          ['shortcutsModal', closeShortcutsModal],
+          ['batchFixModal', closeBatchFixModal],
+          ['impositionModal', closeImpositionModal],
+          ['barcodeModal', closeBarcodeModal],
+          ['batchHotfolderModal', closeBatchHotfolderModal],
+          ['safetyMarginModal', closeSafetyMarginModal],
+          ['didacticModal', closeDidacticModal],
+          ['manualModal', closeManualModal],
+          ['profileManagerModal', closeProfileManagerModal],
+          ['cip3Modal', closeCip3Modal],
+          ['versionComparisonModal', closeVersionComparisonModal],
+          ['jobsManagementModal', closeJobsManagementModal],
+          ['productionOrderModal', closeProductionOrderModal],
+          ['gwgValidationModal', closeGwgValidationModal],
+          ['authModal', closeAuthModal],
+          ['fpClassroomModal', closeFpClassroomModal],
+          ['clientApprovalModal', closeClientApprovalModal],
+        ];
+        for (const [id, closeFn] of modalClosers) {
+          const el = document.getElementById(id);
+          if (el && !el.classList.contains('hidden') && typeof closeFn === 'function') {
+            closeFn();
+            return;
+          }
+        }
+        return;
+      }
+
+      if (isEditing) return;
+
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
+        const scModal = document.getElementById('shortcutsModal');
+        if (scModal && !scModal.classList.contains('hidden')) closeShortcutsModal();
+        else openShortcutsModal();
+        return;
+      }
+
+      if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        const k = String(e.key || '').toLowerCase();
+        if (k === 'k' && typeof toggleKioskTheme === 'function') {
+          e.preventDefault();
+          toggleKioskTheme();
+          notifyUser('Modo Cabina D50 / Oficina alternado.', 'info', 2500);
+        } else if (k === 'n' && typeof resetToNewAnalysis === 'function') {
+          e.preventDefault();
+          resetToNewAnalysis();
+        } else if (k === 'm' && typeof openManualModal === 'function') {
+          e.preventDefault();
+          openManualModal();
+        } else if (k === 'f' && typeof openFpClassroomModal === 'function') {
+          e.preventDefault();
+          openFpClassroomModal();
+        }
+      }
+    }
+
+    // Inicializar tema y atajos al cargar DOM
     document.addEventListener('DOMContentLoaded', () => {
       initKioskTheme();
       checkCurrentUserSession();
+      document.addEventListener('keydown', handleGlobalKeydown);
     });
     initKioskTheme();
   </script>
