@@ -346,7 +346,12 @@
               <div class="text-xs w-full">
                 <span class="font-bold text-slate-800">Elegir de icc_profiles/</span>
                 <select id="iccCatalogSelect" disabled class="mt-1.5 w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 disabled:opacity-50">
-                  <option value="">Cargando catálogo...</option>
+                  <option value="ISOcoated_v2_300_bas.icc" selected>ISO Coated v2 300% (FOGRA39 - Estucado) (CMYK)</option>
+                  <option value="PSOcoated_v3.icc">PSO Coated v3 (FOGRA51 - Estucado) (CMYK)</option>
+                  <option value="PSOuncoated_v3_FOGRA52.icc">PSO Uncoated v3 (FOGRA52 - No estucado) (CMYK)</option>
+                  <option value="ISOcoated_v2_eci.icc">ISO Coated v2 ECI (FOGRA39) (CMYK)</option>
+                  <option value="AdobeRGB1998.icc">Adobe RGB 1998 (Fotografía/RGB amplio) (RGB)</option>
+                  <option value="sRGB2014.icc">sRGB IEC61966-2.1 (RGB)</option>
                 </select>
               </div>
             </label>
@@ -3702,14 +3707,21 @@
     async function loadIccCatalog() {
       try {
         const res = await fetch('/api/icc-catalog');
+        if (res && res.ok === false) return;
         const data = await res.json();
-        iccCatalogSelect.innerHTML = '';
-        data.profiles.forEach(p => {
-          const opt = document.createElement('option');
-          opt.value = p.id;
-          opt.textContent = `${p.name} (${p.family})`;
-          iccCatalogSelect.appendChild(opt);
-        });
+        if (data && Array.isArray(data.profiles) && data.profiles.length > 0) {
+          const currentVal = iccCatalogSelect.value;
+          iccCatalogSelect.innerHTML = '';
+          data.profiles.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = `${p.name} (${p.family})`;
+            if (p.id === currentVal || (!currentVal && p.id === 'ISOcoated_v2_300_bas.icc')) {
+              opt.selected = true;
+            }
+            iccCatalogSelect.appendChild(opt);
+          });
+        }
       } catch (err) {
         console.error('Error cargando ICCs:', err);
       }
@@ -3723,6 +3735,7 @@
       if (!container) return;
       try {
         const res = await fetch('/api/profiles');
+        if (res && res.ok === false) return;
         const data = await res.json();
         cachedTargetProfiles = data.profiles || [];
 
@@ -3762,8 +3775,21 @@
     document.querySelectorAll('input[name="icc_option"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         iccCatalogSelect.disabled = (e.target.value !== 'custom_selection');
+        if (e.target.value === 'custom_selection') {
+          if (!iccCatalogSelect.options.length || iccCatalogSelect.options[0]?.value === '') {
+            loadIccCatalog();
+          }
+        }
       });
     });
+
+    if (iccCatalogSelect) {
+      iccCatalogSelect.addEventListener('focus', () => {
+        if (!iccCatalogSelect.options.length || iccCatalogSelect.options[0]?.value === '') {
+          loadIccCatalog();
+        }
+      });
+    }
 
     // File Drag & Drop
     ['dragenter', 'dragover'].forEach(name => {
