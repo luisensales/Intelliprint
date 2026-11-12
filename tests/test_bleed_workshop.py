@@ -167,6 +167,25 @@ class WorkshopTests(unittest.TestCase):
         self.assertNotIn('mirror_bleed',[s['action'] for s in response.json()['steps_applied']])
         self.assertNotIn('printer_marks',[s['action'] for s in response.json()['steps_applied']])
 
+    def test_preflight_reports_safety_margin_infraction_near_cut_edge(self):
+        source = self.root / 'margin_test.pdf'
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        page.insert_text(pymupdf.Point(50, 6), 'ALERTA', fontsize=8)
+        doc.save(str(source))
+        doc.close()
+
+        upload = self.client.post('/api/check', files={'file': ('margin_test.pdf', source.read_bytes(), 'application/pdf')},
+                                  data={'profile_id': 'OFFSET_300'})
+        self.assertEqual(upload.status_code, 200, upload.text)
+        report = upload.json()
+        findings = [f for f in report['findings'] if f.get('rule_id') == 'SAFETY_MARGIN_TRIMBOX']
+        self.assertTrue(len(findings) >= 1)
+        self.assertEqual(findings[0]['severity'], 'WARNING')
+        self.assertEqual(findings[0]['side'], 'top')
+        self.assertIn('ALERTA', findings[0]['element_content'])
+        self.assertIsNotNone(findings[0]['bbox'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -301,6 +301,21 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
             ]
         })
 
+    # 8. Margen de seguridad de corte (TrimBox < 3 mm)
+    has_safety_margin_err = any(f.get("rule_id") == "SAFETY_MARGIN_TRIMBOX" for f in findings)
+    if has_safety_margin_err:
+        items.append({
+            "category": "safety_margin",
+            "icon": "CORTE",
+            "severity": "AVISO",
+            "title": "Textos Próximos a la Línea de Corte (< 3 mm)",
+            "problem": "Se han detectado textos o elementos vivos a menos de 3 mm de la línea de corte (TrimBox). La guillotina de corte tiene una tolerancia mecánica de ±1 mm; si los elementos están muy pegados al borde, corren riesgo de quedar amputados o visualmente descompensados.",
+            "solution": [
+                "En InDesign / Illustrator: activa las guías de márgenes (Márgenes y columnas) y sitúa los textos al menos a 3 mm hacia el interior del borde de página.",
+                "Mantén una distancia prudencial en titulares y pies de página para garantizar un margen visual limpio tras el guillotinado."
+            ]
+        })
+
     if summary.get("required_color_family") == "RGB":
         for item in items:
             if item["category"] == "rgb":
@@ -320,6 +335,7 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
         "hairlines": {"HAIRLINE_WIDTH", "HAIRLINE_STROKE", "HAIRLINE_DETECTED"},
         "spots": {"SPOT_COLOR_FOUND", "SPOT_COLOR_NOT_ALLOWED"},
         "tac": {"MAX_INK_COVERAGE"},
+        "safety_margin": {"SAFETY_MARGIN_TRIMBOX"},
     }
     handled = set().union(*rules_by_category.values())
     for item in items:

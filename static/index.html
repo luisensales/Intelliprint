@@ -4202,6 +4202,7 @@
           const isFontMissing = (g.rule_id === 'USED_FONTS_EMBEDDED');
           const isRgbImage = (data.job_summary.required_color_family !== 'RGB') && ((g.rule_id === 'SOURCE_COLOR_DIAGNOSTIC') || (g.category === 'Color' && g.title.toLowerCase().includes('rgb')));
           const isTacExcess = g.rule_id === 'MAX_INK_COVERAGE';
+          const isSafetyMargin = (g.rule_id === 'SAFETY_MARGIN_TRIMBOX');
 
           let cardStyle = '';
           let iconHtml = '';
@@ -4281,6 +4282,18 @@
             cardStyle = 'bg-red-50/50 border-red-200 text-red-900';
             iconHtml = '<i class="fa-solid fa-droplet text-red-600 text-sm"></i>';
             actionHtml = renderTacCorrectionAction(data);
+          } else if (isSafetyMargin) {
+            cardStyle = 'bg-amber-50/80 border-amber-300 text-amber-950 shadow-xs ring-1 ring-amber-400/20';
+            iconHtml = '<i class="fa-solid fa-scissors text-amber-600 text-sm"></i>';
+            badgeHtml = '<span class="text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded font-bold ml-1 tracking-wide">&lt; 3 mm de corte</span>';
+            actionHtml = `
+              <div class="mt-2.5 pt-2 border-t border-amber-200 flex items-center justify-between gap-2 flex-wrap">
+                <span class="text-[11px] text-amber-800 font-medium"><i class="fa-solid fa-ruler-combined text-amber-600 mr-1"></i>Inspección milimétrica de seguridad:</span>
+                <button onclick="openSafetyMarginModal()" class="flex items-center gap-1.5 px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer" title="Abrir visor interactivo con cotas milimétricas">
+                  <i class="fa-solid fa-magnifying-glass text-amber-200"></i> Abrir en Inspector de Margen & Lomo
+                </button>
+              </div>
+            `;
           } else if (isErr) {
             cardStyle = 'bg-red-50/50 border-red-200 text-red-900';
             iconHtml = '<i class="fa-solid fa-circle-xmark text-red-600 text-sm"></i>';
@@ -4315,6 +4328,8 @@
               summaryText = `Se han detectado ${g.findings.length} filetes con grosor inferior a 0,25 pt en ${g.pages.length} páginas (${pageStr}).`;
             } else if (is100KO) {
               summaryText = `Se han detectado ${g.findings.length} textos de negro puro (100% K) en calado en ${g.pages.length} páginas (${pageStr}).`;
+            } else if (isSafetyMargin) {
+              summaryText = `Se han detectado ${g.findings.length} texto(s) a menos de 3 mm de la línea de corte en ${g.pages.length} páginas (${pageStr}). Riesgo de corte accidental por tolerancia de guillotina.`;
             } else {
               summaryText = `Se han detectado ${g.findings.length} errores correspondientes a ${g.pages.length} páginas (${pageStr}).`;
             }

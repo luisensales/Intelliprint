@@ -623,6 +623,48 @@ class IntelliPrintEngine:
             else:
                 rules_evaluated["BLEED_GEOMETRY_3MM"] = "FAIL"
 
+        # Safety Margin to TrimBox cut lines (< 3.0 mm)
+        if requires_bleed or req_family == "CMYK" or min_bleed_req_mm > 0:
+            try:
+                from safety_margin_engine import inspect_safety_margins
+                safety_report = inspect_safety_margins(
+                    pdf_path=pdf_path,
+                    safety_margin_mm=min_bleed_req_mm if min_bleed_req_mm > 0 else 3.0,
+                    critical_threshold_mm=1.5,
+                    binding_mode="auto",
+                )
+                cut_infractions_count = 0
+                for page_data in safety_report.get("pages", []):
+                    p_num = page_data.get("page_number", 1)
+                    # Exclusivamente bordes de corte (no lomo de encuadernación)
+                    cut_issues = [
+                        iss for iss in page_data.get("issues", [])
+                        if not iss.get("is_spine_edge")
+                    ]
+                    cut_infractions_count += len(cut_issues)
+                    for iss in cut_issues[:8]:
+                        dist_val = iss.get("distance_mm", 0.0)
+                        side_name = iss.get("side", "corte")
+                        side_es = {"top": "superior", "bottom": "inferior", "left": "izquierdo", "right": "derecho"}.get(side_name, side_name)
+                        txt_val = iss.get("content", "").strip()
+                        req_m = iss.get("required_mm", 3.0)
+                        findings.append({
+                            "page": p_num,
+                            "rule_id": "SAFETY_MARGIN_TRIMBOX",
+                            "severity": "WARNING",
+                            "category": "Geometría",
+                            "title": f"Texto próximo al corte de guillotina (< {req_m:.1f} mm)",
+                            "message": f"Texto '{txt_val}' a solo {dist_val:.1f} mm del borde de corte {side_es} (pág {p_num}). Mínimo recomendado: {req_m:.1f} mm (riesgo de ser guillotinado).",
+                            "bbox": iss.get("rect_pt"),
+                            "side": side_name,
+                            "distance_mm": dist_val,
+                            "element_content": txt_val,
+                            "required_mm": req_m,
+                        })
+                rules_evaluated["SAFETY_MARGIN_TRIMBOX"] = "FAIL" if cut_infractions_count > 0 else "PASS"
+            except Exception:
+                rules_evaluated["SAFETY_MARGIN_TRIMBOX"] = "NOT_VERIFIED"
+
         # Images & Resolution inspection
         images_inventory = []
         for p_idx in range(page_count):
