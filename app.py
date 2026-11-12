@@ -130,12 +130,36 @@ from gwg_validator import (
 )
 from auth_manager import (
     authenticate_user,
+    authenticate_user_detailed,
+    register_user,
+    list_users,
+    update_user_access,
+    user_has_permission,
     create_user_session,
     get_user_from_session,
     delete_session,
     generate_client_approval_link,
     get_client_approval_by_token,
     submit_client_decision,
+    get_db_status,
+)
+from fp_classroom import (
+    create_group as fp_create_group,
+    list_groups as fp_list_groups,
+    list_rubrics as fp_list_rubrics,
+    create_rubric as fp_create_rubric,
+    create_assignment as fp_create_assignment,
+    list_assignments as fp_list_assignments,
+    join_group_by_code as fp_join_group,
+    submit_job_for_assignment as fp_submit_job,
+    list_submissions as fp_list_submissions,
+    get_submission_detail as fp_get_submission_detail,
+    grade_submission as fp_grade_submission,
+    record_quiz_attempt as fp_record_quiz_attempt,
+    list_student_dashboard as fp_student_dashboard,
+    get_student_evolution as fp_student_evolution,
+    export_grades_csv as fp_export_grades_csv,
+    generate_evaluation_pdf_report as fp_generate_eval_pdf,
 )
 
 from security_limits import (
@@ -1074,23 +1098,47 @@ def get_authenticated_user(request: Request) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _require_auth(request: Request) -> Dict[str, Any]:
+    user = get_authenticated_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Debes iniciar sesión para realizar esta operación.")
+    return user
+
+
+def _require_permission(request: Request, permission: str) -> Dict[str, Any]:
+    user = _require_auth(request)
+    if not user_has_permission(user, permission):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Tu rol ({user.get('role')}) no tiene permiso para esta operación ({permission}).",
+        )
+    return user
+
+
 # =============================================================================
-# AUTENTICACIÓN, SESIONES Y ROLES (RBAC)
+# AUTENTICACIÓN, REGISTRO INDIVIDUAL, SESIONES ÚNICAS Y ROLES (RBAC)
 # =============================================================================
 
 @app.post("/api/auth/login")
 def auth_login_endpoint(request: Request, response: Response, body: dict = Body(default={})):
-    """Inicia sesión con credenciales y emite una cookie de sesión segura HttpOnly."""
-    username = body.get("username", "").strip()
+    """Inicia sesión por email o usuario con sesión única activa (cierra sesiones previas)."""
+    username = (body.get("username") or body.get("email") or "").strip()
     password = body.get("password", "")
     if not username or not password:
-        raise HTTPException(status_code=400, detail="Usuario y contraseña obligatorios.")
+        raise HTTPException(status_code=400, detail="Correo/usuario y contraseña obligatorios.")
 
-    user = authenticate_user(username, password)
+    user, err_reason = authenticate_user_detailed(username, password)
     if not user:
-        raise HTTPException(status_code=401, detail="Credenciales incorrectas o usuario desactivado.")
+        if err_reason == "pending_approval":
+            raise HTTPException(
+                status_code=403,
+                detail="Tu cuenta fue creada, pero la asignación del rol solicitado está pendiente de aprobación por el administrador.",
+            )
+        if err_reason == "disabled":
+            raise HTTPException(status_code=403, detail="Esta cuenta está desactivada.")
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas.")
 
-    session_id = create_user_session(user["id"])
+    session_id = create_user_session(user["id"], single_session=True)
     response.set_cookie(
         key="intelliprint_session",
         value=session_id,
@@ -1103,6 +1151,65 @@ def auth_login_endpoint(request: Request, response: Response, body: dict = Body(
         "status": "ok",
         "user": user,
         "session_id": session_id,
+        "db_status": get_db_status(),
+    }
+
+
+@app.post("/api/auth/register")
+def auth_register_endpoint(request: Request, response: Response, body: dict = Body(default={})):
+    """Registra una cuenta individual con email, contraseña y asignación segura de rol."""
+    email = (body.get("email") or "").strip()
+    password = body.get("password") or ""
+    full_name = (body.get("full_name") or "").strip()
+    requested_role = (body.get("role") or "alumno").strip()
+    invite_code = (body.get("invite_code") or "").strip() or None
+    class_code = (body.get("class_code") or "").strip() or None
+
+    try:
+        user = register_user(
+            email=email,
+            password=password,
+            full_name=full_name,
+            requested_role=requested_role,
+            invite_code=invite_code,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    joined_group = None
+    if user.get("is_active"):
+        if class_code:
+            try:
+                joined_group = fp_join_group(user["id"], class_code).get("group")
+            except Exception as exc:
+                # No abortar el alta si el código de grupo no existe, pero avisar
+                joined_group = {"error": str(exc)}
+
+        session_id = create_user_session(user["id"], single_session=True)
+        response.set_cookie(
+            key="intelliprint_session",
+            value=session_id,
+            httponly=True,
+            samesite="lax",
+            max_age=86400,
+            path="/",
+        )
+        return {
+            "status": "ok",
+            "user": user,
+            "session_id": session_id,
+            "joined_group": joined_group,
+            "db_status": get_db_status(),
+        }
+
+    return {
+        "status": "pending",
+        "message": (
+            f"Cuenta registrada para {user['email']}. "
+            f"El rol '{user['requested_role']}' requiere aprobación del administrador o código de centro."
+        ),
+        "user": user,
+        "db_status": get_db_status(),
     }
 
 
@@ -1118,14 +1225,237 @@ def auth_logout_endpoint(request: Request, response: Response):
 
 @app.get("/api/auth/me")
 def auth_me_endpoint(request: Request):
-    """Devuelve los datos del usuario autenticado actual y sus permisos RBAC."""
+    """Devuelve los datos del usuario autenticado actual, permisos RBAC y estado BD."""
     user = get_authenticated_user(request)
+    db_st = get_db_status()
     if not user:
-        return {"authenticated": False, "user": None}
+        return {"authenticated": False, "user": None, "db_status": db_st}
     return {
         "authenticated": True,
         "user": user,
+        "db_status": db_st,
     }
+
+
+@app.get("/api/admin/users")
+def admin_list_users_endpoint(request: Request):
+    """Lista todas las cuentas registradas para gestión de roles y aprobaciones."""
+    _require_permission(request, "manage_users")
+    return {"users": list_users(), "db_status": get_db_status()}
+
+
+@app.post("/api/admin/users/{user_id}/access")
+def admin_update_user_access_endpoint(user_id: int, request: Request, body: dict = Body(default={})):
+    """Aprueba solicitudes de rol, cambia roles o activa/desactiva cuentas."""
+    _require_permission(request, "manage_users")
+    role = body.get("role")
+    is_active = body.get("is_active")
+    approval_status = body.get("approval_status")
+    try:
+        updated = update_user_access(
+            user_id=user_id,
+            role=role,
+            is_active=is_active,
+            approval_status=approval_status,
+        )
+        return {"status": "ok", "user": updated}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+# =============================================================================
+# PANEL DOCENTE FP: GRUPOS, PRÁCTICAS, RÚBRICAS, ENTREGAS Y EVOLUCIÓN
+# =============================================================================
+
+@app.get("/api/fp/teacher/overview")
+def fp_teacher_overview_endpoint(request: Request, group_id: Optional[int] = None):
+    """Panel completo del docente FP: grupos, prácticas, entregas, rúbricas y evolución."""
+    _require_permission(request, "view_student_progress")
+    return {
+        "groups": fp_list_groups(),
+        "rubrics": fp_list_rubrics(),
+        "assignments": fp_list_assignments(group_id=group_id),
+        "submissions": fp_list_submissions(group_id=group_id),
+        "evolution": fp_student_evolution(group_id=group_id),
+        "scenarios": [
+            {"id": s["id"], "title": s["title"], "level": s["level"], "module": s["module"]}
+            for s in SCENARIOS_CATALOG
+        ],
+        "db_status": get_db_status(),
+    }
+
+
+@app.post("/api/fp/teacher/groups")
+def fp_teacher_create_group_endpoint(request: Request, body: dict = Body(default={})):
+    """Crea un nuevo grupo FP con código de matrícula."""
+    user = _require_permission(request, "grade_submissions")
+    try:
+        group = fp_create_group(
+            name=body.get("name", ""),
+            center=body.get("center", "CPIFP Salesianos Urnieta"),
+            module_name=body.get("module_name", "Preimpresión Digital"),
+            teacher_id=user["id"],
+            join_code=body.get("join_code"),
+        )
+        return {"status": "ok", "group": group}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/fp/teacher/rubrics")
+def fp_teacher_create_rubric_endpoint(request: Request, body: dict = Body(default={})):
+    """Crea una nueva rúbrica ponderada."""
+    user = _require_permission(request, "grade_submissions")
+    try:
+        rubric = fp_create_rubric(
+            title=body.get("title", ""),
+            description=body.get("description", ""),
+            criteria=body.get("criteria", []),
+            teacher_id=user["id"],
+        )
+        return {"status": "ok", "rubric": rubric}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/fp/teacher/assignments")
+def fp_teacher_create_assignment_endpoint(request: Request, body: dict = Body(default={})):
+    """Crea una práctica evaluable asociada a un grupo y rúbrica."""
+    user = _require_permission(request, "grade_submissions")
+    try:
+        assignment = fp_create_assignment(
+            group_id=int(body["group_id"]),
+            teacher_id=user["id"],
+            title=body.get("title", ""),
+            description=body.get("description", ""),
+            assignment_type=body.get("assignment_type", "pdf_real"),
+            scenario_id=body.get("scenario_id"),
+            target_profile=body.get("target_profile", "OFFSET_300"),
+            rubric_id=int(body["rubric_id"]) if body.get("rubric_id") else None,
+            due_date=body.get("due_date"),
+        )
+        return {"status": "ok", "assignment": assignment}
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.get("/api/fp/teacher/submissions/{submission_id}")
+def fp_teacher_submission_detail_endpoint(submission_id: int, request: Request):
+    """Obtiene el análisis comparativo Inicial -> Decisiones -> Final de una entrega."""
+    user = _require_auth(request)
+    detail = fp_get_submission_detail(submission_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Entrega no encontrada.")
+    if not user_has_permission(user, "view_student_progress") and detail["student_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="No tienes permiso para ver esta entrega.")
+    return {"submission": detail}
+
+
+@app.post("/api/fp/teacher/submissions/{submission_id}/grade")
+def fp_teacher_grade_submission_endpoint(submission_id: int, request: Request, body: dict = Body(default={})):
+    """Guarda la calificación por rúbrica y observaciones del docente."""
+    user = _require_permission(request, "grade_submissions")
+    try:
+        graded = fp_grade_submission(
+            submission_id=submission_id,
+            teacher_id=user["id"],
+            rubric_scores=body.get("rubric_scores", {}),
+            final_grade=body.get("final_grade"),
+            teacher_feedback=body.get("teacher_feedback", ""),
+            status=body.get("status", "GRADED"),
+        )
+        return {"status": "ok", "submission": graded}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/fp/teacher/export-csv")
+def fp_teacher_export_csv_endpoint(request: Request, group_id: Optional[int] = None):
+    """Descarga el acta de entregas y calificaciones en formato CSV para Excel."""
+    _require_permission(request, "view_student_progress")
+    csv_text = fp_export_grades_csv(group_id=group_id)
+    return Response(
+        content=csv_text.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="IntelliPrint_Actas_FP.csv"'},
+    )
+
+
+@app.get("/api/fp/teacher/submissions/{submission_id}/report-pdf")
+def fp_submission_report_pdf_endpoint(submission_id: int, request: Request):
+    """Descarga el Boletín Oficial de Evaluación Práctica FP en PDF A4."""
+    user = _require_auth(request)
+    detail = fp_get_submission_detail(submission_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Entrega no encontrada.")
+    if not user_has_permission(user, "view_student_progress") and detail["student_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Sin permiso para descargar este boletín.")
+    pdf_bytes = fp_generate_eval_pdf(submission_id)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="Evaluacion_FP_Entrega_{submission_id}.pdf"'},
+    )
+
+
+@app.get("/api/fp/student/dashboard")
+def fp_student_dashboard_endpoint(request: Request):
+    """Panel del alumno: grupos inscritos, prácticas abiertas, entregas y cuestionarios."""
+    user = _require_auth(request)
+    return {
+        "dashboard": fp_student_dashboard(user["id"]),
+        "db_status": get_db_status(),
+    }
+
+
+@app.post("/api/fp/student/join-group")
+def fp_student_join_group_endpoint(request: Request, body: dict = Body(default={})):
+    """Matricula al usuario autenticado en un grupo FP mediante código de clase."""
+    user = _require_auth(request)
+    try:
+        res = fp_join_group(user["id"], body.get("join_code", ""))
+        return {"status": "ok", **res}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/fp/student/submit")
+def fp_student_submit_endpoint(request: Request, body: dict = Body(default={})):
+    """Entrega un trabajo PDF analizado/corregido (job_id) a una práctica FP."""
+    user = _require_permission(request, "submit_fp_assignment")
+    assignment_id = body.get("assignment_id")
+    raw_job_id = body.get("job_id")
+    if not assignment_id or not raw_job_id:
+        raise HTTPException(status_code=400, detail="assignment_id y job_id son obligatorios.")
+
+    safe_id = safe_job_id(str(raw_job_id))
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo PDF no encontrado en el servidor.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    try:
+        sub = fp_submit_job(
+            student_id=user["id"],
+            assignment_id=int(assignment_id),
+            job_id=safe_id,
+            job_data=job_data,
+        )
+        return {"status": "ok", "submission": sub}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # =============================================================================
@@ -4559,10 +4889,26 @@ def get_quiz_questions_endpoint():
 
 
 @app.post("/api/didactic/quiz/evaluate")
-def evaluate_quiz_endpoint(payload: dict):
-    """Evalúa las respuestas del alumno y devuelve nota y fundamentación técnica."""
+def evaluate_quiz_endpoint(request: Request, payload: dict):
+    """Evalúa las respuestas del alumno, guarda intento en Panel FP si hay sesión y devuelve nota."""
     answers = payload.get("answers", {})
     results = evaluate_student_quiz(answers)
+    auth_user = get_authenticated_user(request)
+    if auth_user:
+        try:
+            score_pct = round(float(results.get("score", 0.0)) * 10.0, 1)
+            fp_record_quiz_attempt(
+                student_id=auth_user["id"],
+                topic=payload.get("topic") or "Cuestionario Técnico FP",
+                score_pct=score_pct,
+                correct_count=int(results.get("correct_answers", 0)),
+                total_count=int(results.get("total_questions", 0)),
+                assignment_id=int(payload["assignment_id"]) if payload.get("assignment_id") else None,
+                details={"level": results.get("level"), "score_10": results.get("score")},
+            )
+            results["recorded_in_fp_classroom"] = True
+        except Exception as exc:
+            print(f"[quiz] Aviso registro FP: {exc}")
     return results
 
 

@@ -171,6 +171,9 @@
           <button onclick="openDidacticModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer" title="Modo Didáctico y Simulador de Taller para Alumnos FP">
             <i class="fa-solid fa-graduation-cap text-amber-300"></i> <span>Alumnos FP</span>
           </button>
+          <button onclick="openFpClassroomModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-violet-700 to-fuchsia-700 hover:from-violet-600 hover:to-fuchsia-600 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer" title="Panel Docente FP (Grupos, Entregas, Rúbricas y Evolución) y Tareas del Alumnado">
+            <i class="fa-solid fa-chalkboard-user text-violet-200"></i> <span>Panel Docente FP</span>
+          </button>
           <button onclick="openManualModal()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition cursor-pointer" title="Manual Oficial de Usuario y Guía de Operación (PDF / Word)">
             <i class="fa-solid fa-book-bookmark text-amber-300"></i> <span>Manual de Usuario</span>
           </button>
@@ -401,6 +404,9 @@
             </button>
             <button onclick="openClientApprovalModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Generar enlace seguro para que el cliente revise y dé su visto bueno (OK para plancha)">
               <i class="fa-solid fa-paper-plane text-sky-200"></i> <span>Aprobación Cliente</span>
+            </button>
+            <button onclick="openFpClassroomModal('student')" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer" title="Enviar este trabajo PDF (con su historial inicial y correcciones) a una práctica FP">
+              <i class="fa-solid fa-chalkboard-user text-violet-200"></i> <span>Entregar Práctica FP</span>
             </button>
             <button onclick="resetToNewAnalysis()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer" title="Cerrar este reporte y analizar otro PDF desde el principio">
               <i class="fa-solid fa-arrow-left"></i> Nuevo PDF
@@ -3223,11 +3229,21 @@
         </button>
       </div>
 
-      <!-- Formulario -->
-      <div class="p-6 space-y-4">
+      <!-- Selector de Pestañas Login / Registro -->
+      <div class="flex border-b border-slate-200 bg-slate-50 px-6 pt-3 gap-2 shrink-0">
+        <button id="authTabLoginBtn" onclick="switchAuthTab('login')" class="px-3.5 py-2 text-xs font-bold rounded-t-lg border-b-2 border-blue-600 text-blue-700 bg-white transition cursor-pointer">
+          Iniciar Sesión
+        </button>
+        <button id="authTabRegisterBtn" onclick="switchAuthTab('register')" class="px-3.5 py-2 text-xs font-bold rounded-t-lg border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition cursor-pointer">
+          Crear Cuenta (Email)
+        </button>
+      </div>
+
+      <!-- Formulario Login -->
+      <div id="authLoginPanel" class="p-6 space-y-4">
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">Nombre de Usuario:</label>
-          <input type="text" data-id="authUsernameInput" placeholder="Ej. responsable, preimpresion, docente" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+          <label class="block text-xs font-bold text-slate-700 mb-1">Email o Usuario:</label>
+          <input type="text" data-id="authUsernameInput" placeholder="Ej. nombre@centro.eus o responsable" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
         </div>
 
         <div>
@@ -3237,7 +3253,7 @@
 
         <!-- Cuentas Rápidas Demo/FP -->
         <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Cuentas Preconfiguradas (Taller y FP):</span>
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Cuentas Demo (Sesión Única Activa):</span>
           <div class="flex flex-wrap gap-1.5">
             <button onclick="fillAuthCredentials('responsable', 'taller123')" class="px-2 py-1 rounded bg-white hover:bg-blue-50 border border-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer">
               Jefe Taller
@@ -3251,6 +3267,9 @@
             <button onclick="fillAuthCredentials('disenador', 'diseno123')" class="px-2 py-1 rounded bg-white hover:bg-blue-50 border border-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer">
               Diseñadora
             </button>
+            <button onclick="fillAuthCredentials('admin', 'admin123')" class="px-2 py-1 rounded bg-white hover:bg-blue-50 border border-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer">
+              Admin
+            </button>
           </div>
         </div>
 
@@ -3258,6 +3277,55 @@
 
         <button onclick="submitUserLogin()" class="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition flex items-center justify-center gap-2 cursor-pointer">
           <i class="fa-solid fa-right-to-bracket"></i> Iniciar Sesión en Taller
+        </button>
+
+        <div id="authDbStatusBadge" class="text-[11px] text-slate-500 text-center pt-1"></div>
+      </div>
+
+      <!-- Formulario Registro Individual -->
+      <div id="authRegisterPanel" class="hidden p-6 space-y-3 max-h-[75vh] overflow-y-auto">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Nombre y Apellidos:</label>
+          <input type="text" data-id="regFullNameInput" placeholder="Ej. Ane Miren Etxebarria" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Correo Electrónico (único por persona):</label>
+          <input type="email" data-id="regEmailInput" placeholder="ane@salesianosurnieta.com" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Contraseña (mín. 6):</label>
+            <input type="password" data-id="regPasswordInput" placeholder="••••••" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Perfil / Rol:</label>
+            <select data-id="regRoleSelect" onchange="toggleRegisterRoleHints()" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="alumno">Alumno/a FP</option>
+              <option value="diseñador">Diseñador/a Gráfico</option>
+              <option value="preimpresion">Técnico Preimpresión (CTP)</option>
+              <option value="responsable">Responsable de Taller</option>
+              <option value="docente">Docente FP</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="regClassCodeBox">
+          <label class="block text-xs font-bold text-slate-700 mb-1">Código de Grupo FP (opcional):</label>
+          <input type="text" data-id="regClassCodeInput" placeholder="Ej. FP-A1B2 (te matricula al instante)" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-mono uppercase text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+
+        <div id="regInviteCodeBox" class="hidden p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5">
+          <label class="block text-xs font-bold text-amber-900">Código de Centro / Invitación (opcional):</label>
+          <input type="password" data-id="regInviteCodeInput" placeholder="Código de autorización directa" class="w-full rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs text-slate-800 outline-none">
+          <p class="text-[11px] text-amber-800">Si no dispones de código, tu cuenta quedará en estado <strong>Pendiente</strong> hasta que el Administrador valide tu rol.</p>
+        </div>
+
+        <div id="regStatusMsg" class="hidden p-2.5 rounded-lg text-xs font-medium"></div>
+
+        <button onclick="submitUserRegister()" class="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-bold shadow-xs transition flex items-center justify-center gap-2 cursor-pointer">
+          <i class="fa-solid fa-user-plus"></i> Crear Cuenta Individual
         </button>
       </div>
     </div>
@@ -3317,6 +3385,201 @@
           <button onclick="closeClientApprovalModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition cursor-pointer">
             Cerrar
           </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       MODAL: PANEL DOCENTE FP & AULA DE PRÁCTICAS (GRUPOS, RÚBRICAS, EVOLUCIÓN)
+  ====================================================================== -->
+  <div id="fpClassroomModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-2 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="fpClassroomModalTitle">
+    <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeFpClassroomModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[92vh] border border-slate-200 overflow-hidden animate-fade-in flex flex-col">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-violet-800 via-fuchsia-800 to-slate-900 text-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-violet-400/20 text-violet-200 flex items-center justify-center border border-violet-300/30">
+            <i class="fa-solid fa-chalkboard-user text-base"></i>
+          </div>
+          <div>
+            <h3 id="fpClassroomModalTitle" class="text-sm font-bold flex items-center gap-2">
+              Panel Docente FP &amp; Aula de Prácticas
+              <span id="fpDbModeBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-white/15 text-violet-100 font-semibold"></span>
+            </h3>
+            <p class="text-xs text-violet-100 font-normal">Grupos, retos y PDFs reales, evaluador comparativo (Inicial ➔ Decisiones ➔ Final), rúbricas y evolución.</p>
+          </div>
+        </div>
+        <button onclick="closeFpClassroomModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-white/80 hover:text-white cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Barra de pestañas -->
+      <div id="fpClassroomTabsBar" class="flex items-center gap-1.5 px-6 pt-3 pb-0 bg-slate-50 border-b border-slate-200 overflow-x-auto shrink-0">
+        <button id="fpTabBtn_student" onclick="switchFpTab('student')" class="px-3.5 py-2 text-xs font-bold rounded-t-lg border-b-2 border-violet-600 text-violet-700 bg-white transition cursor-pointer shrink-0">
+          <i class="fa-solid fa-graduation-cap mr-1"></i> Mis Tareas y Entregas
+        </button>
+        <button id="fpTabBtn_groups" onclick="switchFpTab('groups')" class="hidden px-3.5 py-2 text-xs font-bold rounded-t-lg border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition cursor-pointer shrink-0">
+          <i class="fa-solid fa-users-rectangle mr-1"></i> Grupos y Prácticas
+        </button>
+        <button id="fpTabBtn_submissions" onclick="switchFpTab('submissions')" class="hidden px-3.5 py-2 text-xs font-bold rounded-t-lg border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition cursor-pointer shrink-0">
+          <i class="fa-solid fa-scale-balanced mr-1"></i> Entregas y Rúbricas
+        </button>
+        <button id="fpTabBtn_evolution" onclick="switchFpTab('evolution')" class="hidden px-3.5 py-2 text-xs font-bold rounded-t-lg border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition cursor-pointer shrink-0">
+          <i class="fa-solid fa-chart-line mr-1"></i> Evolución Alumnado
+        </button>
+        <button id="fpTabBtn_users" onclick="switchFpTab('users')" class="hidden px-3.5 py-2 text-xs font-bold rounded-t-lg border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition cursor-pointer shrink-0">
+          <i class="fa-solid fa-user-shield mr-1"></i> Usuarios y Roles
+        </button>
+      </div>
+
+      <!-- Cuerpo scrollable -->
+      <div class="p-5 sm:p-6 overflow-y-auto flex-1 space-y-5 bg-slate-50/40">
+        <!-- Aviso si no hay sesión iniciada -->
+        <div id="fpAuthPromptBox" class="hidden p-5 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div class="text-xs text-amber-900 space-y-1">
+            <p class="font-bold text-sm"><i class="fa-solid fa-lock text-amber-600 mr-1.5"></i> Inicia sesión o regístrate con tu email para usar el Aula FP</p>
+            <p>Los alumnos pueden crear su cuenta y unirse por código de clase; los docentes pueden gestionar grupos, rúbricas y calificar trabajos reales.</p>
+          </div>
+          <button onclick="closeFpClassroomModal(); openAuthModal();" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shrink-0 cursor-pointer">
+            Entrar / Registrarse
+          </button>
+        </div>
+
+        <!-- TAB 1: ALUMNO (MIS TAREAS Y ENTREGAR PDF) -->
+        <div id="fpTabPanel_student" class="hidden space-y-5">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+              <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <i class="fa-solid fa-key text-violet-600"></i> Unirse a un Grupo FP
+              </h4>
+              <div class="flex items-center gap-2">
+                <input type="text" data-id="studentJoinCodeInput" placeholder="Código de clase (ej. FP-A1B2)" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-mono uppercase text-slate-800 outline-none focus:ring-2 focus:ring-violet-500">
+                <button onclick="submitStudentJoinGroup()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-bold shrink-0 cursor-pointer">
+                  Unirme
+                </button>
+              </div>
+              <div id="fpStudentGroupsList" class="text-xs text-slate-600">Sin grupos inscritos todavía.</div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+              <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <i class="fa-solid fa-paper-plane text-emerald-600"></i> Entregar PDF Actual a Práctica
+              </h4>
+              <div id="fpStudentActiveJobBanner" class="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700"></div>
+              <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <select data-id="studentSubmitAssignmentSelect" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 outline-none">
+                  <option value="">Selecciona una práctica abierta...</option>
+                </select>
+                <button onclick="submitStudentJob()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shrink-0 cursor-pointer">
+                  Enviar Entrega
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700">Historial de Mis Entregas y Evaluaciones</h4>
+            <div id="fpStudentSubmissionsList" class="space-y-2 text-xs"></div>
+          </div>
+        </div>
+
+        <!-- TAB 2: DOCENTE - GRUPOS Y PRÁCTICAS -->
+        <div id="fpTabPanel_groups" class="hidden space-y-5">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+              <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <i class="fa-solid fa-plus-circle text-violet-600"></i> Crear Grupo / Módulo FP
+              </h4>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <input type="text" data-id="fpNewGroupName" placeholder="Ej. 2º GS Preimpresión" class="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none">
+                <input type="text" data-id="fpNewGroupCenter" placeholder="Centro (Salesianos / Mendizabala)" class="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none">
+              </div>
+              <div class="flex items-center gap-2">
+                <input type="text" data-id="fpNewGroupModule" placeholder="Módulo (Ej. Imposición y Forma Impresora)" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none">
+                <button onclick="createFpGroup()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-bold shrink-0 cursor-pointer">
+                  Crear Grupo
+                </button>
+              </div>
+              <div id="fpTeacherGroupsList" class="space-y-2 pt-2 text-xs"></div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+              <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <i class="fa-solid fa-file-circle-plus text-fuchsia-600"></i> Publicar Nueva Práctica / Reto
+              </h4>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <select data-id="fpNewAssignGroup" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none">
+                  <option value="">Selecciona grupo...</option>
+                </select>
+                <select data-id="fpNewAssignType" onchange="toggleFpScenarioSelect()" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none">
+                  <option value="pdf_real">PDF Real del Alumno / Taller</option>
+                  <option value="reto">Reto Didáctico del Catálogo (20)</option>
+                  <option value="libre">Práctica Libre / Proyecto</option>
+                </select>
+              </div>
+              <input type="text" data-id="fpNewAssignTitle" placeholder="Título de la práctica (Ej. Tríptico Offset FOGRA39 con sangre 3 mm)" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none">
+              <div id="fpScenarioPickerWrap" class="hidden">
+                <select data-id="fpNewAssignScenario" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none">
+                  <option value="">Selecciona reto del catálogo...</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <select data-id="fpNewAssignProfile" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none">
+                  <option value="OFFSET_300">Offset Estándar (300% TAC)</option>
+                  <option value="DIGITAL_200">Digital / Bajo Coste</option>
+                  <option value="PERIODICO_240">Prensa / Periódico (240% TAC)</option>
+                </select>
+                <select data-id="fpNewAssignRubric" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none"></select>
+              </div>
+              <textarea data-id="fpNewAssignDesc" rows="2" placeholder="Instrucciones y criterios de entrega para el alumnado..." class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none"></textarea>
+              <button onclick="createFpAssignment()" class="w-full py-2 bg-fuchsia-600 hover:bg-fuchsia-700 text-white rounded-lg text-xs font-bold cursor-pointer">
+                Publicar Práctica en el Grupo
+              </button>
+              <div id="fpTeacherAssignmentsList" class="space-y-1.5 pt-2 text-xs max-h-48 overflow-y-auto"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: DOCENTE - BANDEJA DE ENTREGAS Y EVALUADOR COMPARATIVO -->
+        <div id="fpTabPanel_submissions" class="hidden space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 bg-white p-3 rounded-xl border border-slate-200">
+            <div class="flex items-center gap-2 text-xs">
+              <span class="font-bold text-slate-700">Filtrar por Grupo:</span>
+              <select data-id="fpFilterGroupSelect" onchange="loadTeacherOverview()" class="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 outline-none">
+                <option value="">Todos los grupos</option>
+              </select>
+            </div>
+            <a href="/api/fp/teacher/export-csv" target="_blank" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5">
+              <i class="fa-solid fa-file-csv"></i> Exportar Actas CSV (Excel)
+            </a>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div id="fpTeacherSubmissionsList" class="lg:col-span-5 space-y-2 max-h-[58vh] overflow-y-auto pr-1"></div>
+            <div id="fpSubmissionEvaluatorPane" class="lg:col-span-7 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+              <p class="text-xs text-slate-500 text-center py-10">Selecciona una entrega de la izquierda para analizar su diagnóstico inicial, decisiones tomadas, resultado final y evaluar su rúbrica.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: DOCENTE - EVOLUCIÓN DEL ALUMNADO -->
+        <div id="fpTabPanel_evolution" class="hidden space-y-4">
+          <div id="fpTeacherEvolutionBody" class="space-y-3 text-xs"></div>
+        </div>
+
+        <!-- TAB 5: ADMIN - GESTIÓN DE USUARIOS Y ROLES -->
+        <div id="fpTabPanel_users" class="hidden space-y-4">
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+            <div class="flex items-center justify-between">
+              <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700">Cuentas Registradas, Solicitudes Pendientes y Roles</h4>
+              <button onclick="loadAdminUsers()" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-700 cursor-pointer">
+                <i class="fa-solid fa-rotate"></i> Actualizar
+              </button>
+            </div>
+            <div id="fpAdminUsersTable" class="space-y-2 text-xs"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -9387,16 +9650,35 @@
     }
 
     // =========================================================================
-    // USUARIOS, SESIONES RBAC Y APROBACIÓN DE CLIENTE (MEJORA 3)
+    // USUARIOS, SESIONES RBAC, REGISTRO NEON Y APROBACIÓN DE CLIENTE
     // =========================================================================
 
     let currentAuthUser = null;
+    let currentDbStatus = null;
+
+    function renderDbStatusBadge() {
+      const authEl = document.getElementById('authDbStatusBadge');
+      const fpEl = document.getElementById('fpDbModeBadge');
+      const isPg = Boolean(currentDbStatus && currentDbStatus.persistent);
+      const label = isPg
+        ? 'Neon PostgreSQL · Persistente'
+        : 'SQLite Local (en Render usa DATABASE_URL)';
+      if (authEl) {
+        authEl.innerHTML = isPg
+          ? `<span class="inline-flex items-center gap-1.5 text-emerald-700 font-semibold"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>${label}</span>`
+          : `<span class="inline-flex items-center gap-1.5 text-amber-700 font-medium"><span class="w-2 h-2 rounded-full bg-amber-500"></span>${label}</span>`;
+      }
+      if (fpEl) {
+        fpEl.textContent = isPg ? 'Neon PostgreSQL' : 'SQLite Local';
+      }
+    }
 
     async function checkCurrentUserSession() {
       try {
         const resp = await fetch('/api/auth/me');
         if (resp.ok) {
           const data = await resp.json();
+          currentDbStatus = data.db_status || null;
           if (data.authenticated && data.user) {
             currentAuthUser = data.user;
           } else {
@@ -9407,6 +9689,7 @@
         console.warn('Sesión auth no disponible:', err);
       }
       renderAuthUserBadge();
+      renderDbStatusBadge();
     }
 
     function renderAuthUserBadge() {
@@ -9415,14 +9698,16 @@
 
       if (currentAuthUser) {
         let roleBg = 'bg-blue-600';
-        let roleLabel = currentAuthUser.role.toUpperCase();
-        if (currentAuthUser.role === 'responsable') roleBg = 'bg-amber-600';
+        let roleLabel = (currentAuthUser.role || 'usuario').toUpperCase();
+        if (currentAuthUser.role === 'responsable' || currentAuthUser.role === 'admin') roleBg = 'bg-amber-600';
         if (currentAuthUser.role === 'docente') roleBg = 'bg-emerald-600';
+        if (currentAuthUser.role === 'alumno') roleBg = 'bg-violet-600';
 
+        const firstName = (currentAuthUser.full_name || currentAuthUser.username || 'Usuario').split(' ')[0];
         container.innerHTML = `
           <div class="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 px-3 py-1.5 rounded-xl text-xs shadow-xs">
             <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span class="font-bold text-white">${escapeHtml(currentAuthUser.full_name.split(' ')[0])}</span>
+            <span class="font-bold text-white">${escapeHtml(firstName)}</span>
             <span class="px-1.5 py-0.2 rounded text-[9px] font-black uppercase text-white ${roleBg}">${escapeHtml(roleLabel)}</span>
             <button onclick="submitUserLogout()" class="text-slate-400 hover:text-red-400 ml-1 transition cursor-pointer" title="Cerrar sesión">
               <i class="fa-solid fa-right-from-bracket"></i>
@@ -9431,23 +9716,55 @@
         `;
       } else {
         container.innerHTML = `
-          <button onclick="openAuthModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-xs border border-blue-400/30 transition cursor-pointer" title="Iniciar sesión con tu cuenta de taller (Diseñador, CTP, Responsable o Docente)">
+          <button onclick="openAuthModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-xs border border-blue-400/30 transition cursor-pointer" title="Iniciar sesión o registrarse con email (sesión única por cuenta)">
             <i class="fa-solid fa-user-lock text-blue-200"></i> <span>Acceso Taller</span>
           </button>
         `;
       }
     }
 
-    function openAuthModal() {
+    function openAuthModal(initialTab = 'login') {
       const modal = document.getElementById('authModal');
       if (modal) modal.classList.remove('hidden');
       const err = document.getElementById('authErrorMsg');
       if (err) err.classList.add('hidden');
+      const regMsg = document.getElementById('regStatusMsg');
+      if (regMsg) regMsg.classList.add('hidden');
+      switchAuthTab(initialTab);
+      renderDbStatusBadge();
     }
 
     function closeAuthModal() {
       const modal = document.getElementById('authModal');
       if (modal) modal.classList.add('hidden');
+    }
+
+    function switchAuthTab(tab) {
+      const loginPanel = document.getElementById('authLoginPanel');
+      const regPanel = document.getElementById('authRegisterPanel');
+      const loginBtn = document.getElementById('authTabLoginBtn');
+      const regBtn = document.getElementById('authTabRegisterBtn');
+      const isReg = tab === 'register';
+
+      if (loginPanel) loginPanel.classList.toggle('hidden', isReg);
+      if (regPanel) regPanel.classList.toggle('hidden', !isReg);
+      if (loginBtn) {
+        loginBtn.className = `px-3.5 py-2 text-xs font-bold rounded-t-lg border-b-2 transition cursor-pointer ${isReg ? 'border-transparent text-slate-500 hover:text-slate-700' : 'border-blue-600 text-blue-700 bg-white'}`;
+      }
+      if (regBtn) {
+        regBtn.className = `px-3.5 py-2 text-xs font-bold rounded-t-lg border-b-2 transition cursor-pointer ${isReg ? 'border-emerald-600 text-emerald-700 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`;
+      }
+      toggleRegisterRoleHints();
+    }
+
+    function toggleRegisterRoleHints() {
+      const roleSel = document.querySelector('[data-id="regRoleSelect"]');
+      const classBox = document.getElementById('regClassCodeBox');
+      const inviteBox = document.getElementById('regInviteCodeBox');
+      const roleVal = roleSel ? roleSel.value : 'alumno';
+      const isStudent = roleVal === 'alumno';
+      if (classBox) classBox.classList.toggle('hidden', !isStudent);
+      if (inviteBox) inviteBox.classList.toggle('hidden', isStudent);
     }
 
     function fillAuthCredentials(username, pwd) {
@@ -9467,7 +9784,7 @@
 
       if (!username || !password) {
         if (errBox) {
-          errBox.textContent = 'Por favor, introduce usuario y contraseña.';
+          errBox.textContent = 'Por favor, introduce tu email o usuario y contraseña.';
           errBox.classList.remove('hidden');
         }
         return;
@@ -9486,13 +9803,81 @@
         }
 
         currentAuthUser = data.user;
+        if (data.db_status) currentDbStatus = data.db_status;
         renderAuthUserBadge();
+        renderDbStatusBadge();
         closeAuthModal();
+
+        const fpModal = document.getElementById('fpClassroomModal');
+        if (fpModal && !fpModal.classList.contains('hidden')) {
+          openFpClassroomModal();
+        }
       } catch (err) {
         if (errBox) {
           errBox.textContent = err.message;
           errBox.classList.remove('hidden');
         }
+      }
+    }
+
+    async function submitUserRegister() {
+      const fullNameEl = document.querySelector('[data-id="regFullNameInput"]');
+      const emailEl = document.querySelector('[data-id="regEmailInput"]');
+      const passEl = document.querySelector('[data-id="regPasswordInput"]');
+      const roleEl = document.querySelector('[data-id="regRoleSelect"]');
+      const classEl = document.querySelector('[data-id="regClassCodeInput"]');
+      const inviteEl = document.querySelector('[data-id="regInviteCodeInput"]');
+      const msgBox = document.getElementById('regStatusMsg');
+
+      const showRegMsg = (text, ok) => {
+        if (!msgBox) return;
+        msgBox.textContent = text;
+        msgBox.className = `p-2.5 rounded-lg text-xs font-medium ${ok ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-red-50 border border-red-200 text-red-700'}`;
+      };
+
+      const full_name = fullNameEl ? fullNameEl.value.trim() : '';
+      const email = emailEl ? emailEl.value.trim() : '';
+      const password = passEl ? passEl.value : '';
+      const role = roleEl ? roleEl.value : 'alumno';
+      const class_code = classEl ? classEl.value.trim() : '';
+      const invite_code = inviteEl ? inviteEl.value.trim() : '';
+
+      if (!full_name || !email || password.length < 6) {
+        showRegMsg('Completa nombre, email válido y una contraseña de al menos 6 caracteres.', false);
+        return;
+      }
+
+      try {
+        const resp = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ full_name, email, password, role, class_code, invite_code })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || 'No se pudo completar el registro.');
+        }
+
+        if (data.db_status) currentDbStatus = data.db_status;
+        renderDbStatusBadge();
+
+        if (data.status === 'pending') {
+          showRegMsg(data.message || 'Cuenta creada en estado Pendiente de aprobación por Administrador.', true);
+          return;
+        }
+
+        currentAuthUser = data.user;
+        renderAuthUserBadge();
+        closeAuthModal();
+        if (data.joined_group) {
+          alert(`Cuenta creada e inscrita automáticamente en el grupo: ${data.joined_group.name}`);
+        }
+        const fpModal = document.getElementById('fpClassroomModal');
+        if (fpModal && !fpModal.classList.contains('hidden')) {
+          openFpClassroomModal();
+        }
+      } catch (err) {
+        showRegMsg(err.message, false);
       }
     }
 
@@ -9504,6 +9889,659 @@
       }
       currentAuthUser = null;
       renderAuthUserBadge();
+    }
+
+    // =========================================================================
+    // PANEL DOCENTE FP & AULA DE PRÁCTICAS
+    // =========================================================================
+
+    let fpTeacherCache = null;
+    let fpActiveSubmissionId = null;
+    const FP_ALL_TABS = ['student', 'groups', 'submissions', 'evolution', 'users'];
+
+    function openFpClassroomModal(preferredTab = null) {
+      const modal = document.getElementById('fpClassroomModal');
+      if (modal) modal.classList.remove('hidden');
+      renderDbStatusBadge();
+
+      const promptBox = document.getElementById('fpAuthPromptBox');
+      if (!currentAuthUser) {
+        if (promptBox) promptBox.classList.remove('hidden');
+        FP_ALL_TABS.forEach((t) => {
+          const btn = document.getElementById(`fpTabBtn_${t}`);
+          const panel = document.getElementById(`fpTabPanel_${t}`);
+          if (btn) btn.classList.toggle('hidden', t !== 'student');
+          if (panel) panel.classList.add('hidden');
+        });
+        return;
+      }
+
+      if (promptBox) promptBox.classList.add('hidden');
+      const role = currentAuthUser.role || 'alumno';
+      const isTeacher = ['docente', 'responsable', 'admin'].includes(role);
+      const isAdmin = ['responsable', 'admin'].includes(role);
+
+      document.getElementById('fpTabBtn_student')?.classList.remove('hidden');
+      document.getElementById('fpTabBtn_groups')?.classList.toggle('hidden', !isTeacher);
+      document.getElementById('fpTabBtn_submissions')?.classList.toggle('hidden', !isTeacher);
+      document.getElementById('fpTabBtn_evolution')?.classList.toggle('hidden', !isTeacher);
+      document.getElementById('fpTabBtn_users')?.classList.toggle('hidden', !isAdmin);
+
+      let initialTab = preferredTab;
+      if (!initialTab || (initialTab !== 'student' && !isTeacher) || (initialTab === 'users' && !isAdmin)) {
+        initialTab = isTeacher ? 'submissions' : 'student';
+      }
+      switchFpTab(initialTab);
+    }
+
+    function closeFpClassroomModal() {
+      const modal = document.getElementById('fpClassroomModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function switchFpTab(tab) {
+      FP_ALL_TABS.forEach((t) => {
+        const btn = document.getElementById(`fpTabBtn_${t}`);
+        const panel = document.getElementById(`fpTabPanel_${t}`);
+        const active = t === tab;
+        if (panel) panel.classList.toggle('hidden', !active || !currentAuthUser);
+        if (btn) {
+          btn.classList.toggle('border-violet-600', active);
+          btn.classList.toggle('text-violet-700', active);
+          btn.classList.toggle('bg-white', active);
+          btn.classList.toggle('border-transparent', !active);
+          btn.classList.toggle('text-slate-600', !active);
+        }
+      });
+
+      if (!currentAuthUser) return;
+      if (tab === 'student') loadStudentDashboard();
+      if (['groups', 'submissions', 'evolution'].includes(tab)) loadTeacherOverview();
+      if (tab === 'users') loadAdminUsers();
+    }
+
+    async function loadStudentDashboard() {
+      const banner = document.getElementById('fpStudentActiveJobBanner');
+      if (banner) {
+        if (currentJobId) {
+          const pdfName = (currentReport && currentReport.pdf_filename) ? currentReport.pdf_filename : currentJobId;
+          banner.innerHTML = `<span class="font-bold text-emerald-700"><i class="fa-solid fa-file-pdf mr-1"></i> PDF listo para entregar:</span> <span class="font-mono">${escapeHtml(pdfName)}</span> <span class="text-[11px] text-slate-500">(${escapeHtml(currentJobId)})</span>`;
+        } else {
+          banner.innerHTML = '<span class="text-amber-700 font-medium"><i class="fa-solid fa-circle-info mr-1"></i> Sube y analiza primero un PDF (o aplica correcciones) en el visor principal para poder entregarlo.</span>';
+        }
+      }
+
+      try {
+        const resp = await fetch('/api/fp/student/dashboard');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data.db_status) {
+          currentDbStatus = data.db_status;
+          renderDbStatusBadge();
+        }
+        const dash = data.dashboard || {};
+
+        const groupsBox = document.getElementById('fpStudentGroupsList');
+        if (groupsBox) {
+          const groups = dash.groups || [];
+          groupsBox.innerHTML = groups.length
+            ? groups.map((g) => `
+                <div class="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
+                  <div>
+                    <div class="font-bold text-slate-800">${escapeHtml(g.name)}</div>
+                    <div class="text-[11px] text-slate-500">${escapeHtml(g.module_name)} · ${escapeHtml(g.center)}</div>
+                  </div>
+                  <span class="px-2 py-0.5 rounded bg-violet-50 border border-violet-200 text-violet-700 font-mono text-[11px] font-bold">${escapeHtml(g.join_code)}</span>
+                </div>
+              `).join('')
+            : '<p class="text-slate-500">Aún no estás inscrito en ningún grupo. Pide el código de clase a tu docente.</p>';
+        }
+
+        const assignSel = document.querySelector('[data-id="studentSubmitAssignmentSelect"]');
+        if (assignSel) {
+          const assigns = dash.assignments || [];
+          assignSel.innerHTML = assigns.length
+            ? assigns.map((a) => `<option value="${a.id}">${escapeHtml(a.group_name)} — ${escapeHtml(a.title)} (${escapeHtml(a.target_profile)})</option>`).join('')
+            : '<option value="">No hay prácticas abiertas en tus grupos</option>';
+        }
+
+        const subsBox = document.getElementById('fpStudentSubmissionsList');
+        if (subsBox) {
+          const subs = dash.submissions || [];
+          const quizzes = dash.quiz_attempts || [];
+          let html = subs.length
+            ? subs.map((s) => {
+                const comp = s.comparison || {};
+                const ini = comp.initial || {};
+                const fin = comp.final || {};
+                const dec = comp.decisions || {};
+                const statusClass = s.status === 'GRADED'
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                  : 'bg-amber-100 text-amber-800 border-amber-200';
+                const gradeLabel = (s.final_grade !== null && s.final_grade !== undefined)
+                  ? `Nota: ${Number(s.final_grade).toFixed(2)} / 10`
+                  : `Pre-estimación: ${Number(comp.suggested_final_grade || 0).toFixed(1)} / 10`;
+                return `
+                  <div class="p-3 rounded-xl border border-slate-200 bg-slate-50/70 space-y-1.5">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <span class="font-bold text-slate-800">${escapeHtml(s.assignment_title)}</span>
+                        <span class="text-[11px] text-slate-500 ml-1">(${escapeHtml(s.group_name)})</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusClass}">${escapeHtml(s.status)}</span>
+                        <span class="font-extrabold text-slate-900">${escapeHtml(gradeLabel)}</span>
+                        <a href="/api/fp/teacher/submissions/${s.id}/report-pdf" target="_blank" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold">PDF Evaluación</a>
+                      </div>
+                    </div>
+                    <div class="text-[11px] text-slate-600 flex flex-wrap gap-3">
+                      <span>Fichero: <strong>${escapeHtml(s.filename || '-')}</strong></span>
+                      <span>Críticos: <strong>${ini.critical_count ?? 0} ➔ ${fin.critical_count ?? 0}</strong></span>
+                      <span>Avisos: <strong>${ini.warning_count ?? 0} ➔ ${fin.warning_count ?? 0}</strong></span>
+                      <span>Correcciones aplicadas: <strong>${dec.fixes_count ?? 0}</strong></span>
+                    </div>
+                    ${s.teacher_feedback ? `<div class="p-2 rounded-lg bg-white border border-slate-200 text-[11px] text-slate-700"><strong>Feedback docente:</strong> ${escapeHtml(s.teacher_feedback)}</div>` : ''}
+                  </div>
+                `;
+              }).join('')
+            : '<p class="text-slate-500">Todavía no has realizado entregas en el Aula FP.</p>';
+
+          if (quizzes.length) {
+            html += `<div class="pt-3 border-t border-slate-200"><div class="text-[11px] font-bold uppercase text-slate-500 mb-1.5">Cuestionarios Técnicos Completados (${quizzes.length})</div><div class="flex flex-wrap gap-2">`
+              + quizzes.map((q) => `<span class="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px] font-semibold">Test ${escapeHtml(q.profile)}: ${((Number(q.score_pct || 0)) / 10).toFixed(1)}/10 (${escapeHtml(q.level || '')})</span>`).join('')
+              + '</div></div>';
+          }
+          subsBox.innerHTML = html;
+        }
+      } catch (err) {
+        console.warn('Error cargando dashboard alumno:', err);
+      }
+    }
+
+    async function submitStudentJoinGroup() {
+      const codeEl = document.querySelector('[data-id="studentJoinCodeInput"]');
+      const join_code = codeEl ? codeEl.value.trim() : '';
+      if (!join_code) {
+        alert('Introduce el código de grupo proporcionado por tu profesor/a.');
+        return;
+      }
+      try {
+        const resp = await fetch('/api/fp/student/join-group', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ join_code })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Código inválido');
+        if (codeEl) codeEl.value = '';
+        await loadStudentDashboard();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function submitStudentJob() {
+      if (!currentJobId) {
+        alert('Primero debes subir y analizar un PDF en IntelliPrint.');
+        return;
+      }
+      const sel = document.querySelector('[data-id="studentSubmitAssignmentSelect"]');
+      const assignment_id = sel ? parseInt(sel.value, 10) : 0;
+      if (!assignment_id) {
+        alert('Selecciona una práctica abierta de tu grupo.');
+        return;
+      }
+      try {
+        const resp = await fetch('/api/fp/student/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assignment_id, job_id: currentJobId })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Error enviando entrega');
+        alert('¡Práctica entregada! Se ha guardado el diagnóstico inicial, las correcciones aplicadas y el resultado final.');
+        await loadStudentDashboard();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function loadTeacherOverview() {
+      const filterEl = document.querySelector('[data-id="fpFilterGroupSelect"]');
+      const selectedGroup = filterEl ? filterEl.value : '';
+      const qs = selectedGroup ? `?group_id=${encodeURIComponent(selectedGroup)}` : '';
+
+      try {
+        const resp = await fetch(`/api/fp/teacher/overview${qs}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        fpTeacherCache = data;
+        if (data.db_status) {
+          currentDbStatus = data.db_status;
+          renderDbStatusBadge();
+        }
+
+        const groups = data.groups || [];
+        const rubrics = data.rubrics || [];
+        const assignments = data.assignments || [];
+        const submissions = data.submissions || [];
+        const scenarios = data.scenarios || [];
+        const evolution = data.evolution || { students: [] };
+
+        const groupsListEl = document.getElementById('fpTeacherGroupsList');
+        if (groupsListEl) {
+          groupsListEl.innerHTML = groups.length
+            ? groups.map((g) => `
+                <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+                  <div>
+                    <div class="font-bold text-slate-800">${escapeHtml(g.name)}</div>
+                    <div class="text-[11px] text-slate-500">${escapeHtml(g.module_name)} · ${escapeHtml(g.center)} · ${g.student_count ?? 0} alumnos</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="px-2 py-0.5 rounded bg-violet-100 text-violet-800 font-mono text-[11px] font-extrabold">${escapeHtml(g.join_code)}</div>
+                    <div class="text-[10px] text-slate-400 mt-0.5">${g.assignment_count || 0} prácticas</div>
+                  </div>
+                </div>
+              `).join('')
+            : '<p class="text-slate-500">Crea tu primer grupo FP para generar un código de clase.</p>';
+        }
+
+        const newAssignGroup = document.querySelector('[data-id="fpNewAssignGroup"]');
+        if (newAssignGroup) {
+          const prev = newAssignGroup.value;
+          newAssignGroup.innerHTML = groups.length
+            ? groups.map((g) => `<option value="${g.id}">${escapeHtml(g.name)} (${escapeHtml(g.join_code)})</option>`).join('')
+            : '<option value="">Crea antes un grupo...</option>';
+          if (prev && groups.some((g) => String(g.id) === String(prev))) newAssignGroup.value = prev;
+        }
+
+        if (filterEl) {
+          filterEl.innerHTML = '<option value="">Todos los grupos</option>'
+            + groups.map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+          filterEl.value = selectedGroup;
+        }
+
+        const scenSel = document.querySelector('[data-id="fpNewAssignScenario"]');
+        if (scenSel) {
+          scenSel.innerHTML = '<option value="">Selecciona reto del catálogo...</option>'
+            + scenarios.map((sc) => `<option value="${escapeHtml(sc.id)}">${escapeHtml(sc.title)} [${escapeHtml(sc.difficulty || '')}]</option>`).join('');
+        }
+
+        const rubSel = document.querySelector('[data-id="fpNewAssignRubric"]');
+        if (rubSel) {
+          rubSel.innerHTML = rubrics.map((r) => `<option value="${r.id}">${escapeHtml(r.title)}</option>`).join('');
+        }
+
+        const assignList = document.getElementById('fpTeacherAssignmentsList');
+        if (assignList) {
+          assignList.innerHTML = assignments.length
+            ? assignments.map((a) => `
+                <div class="p-2 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+                  <div>
+                    <div class="font-bold text-slate-800">${escapeHtml(a.title)}</div>
+                    <div class="text-[11px] text-slate-500">${escapeHtml(a.group_name)} · ${escapeHtml(a.assignment_type)} · ${escapeHtml(a.target_profile)}</div>
+                  </div>
+                  <span class="px-2 py-0.5 rounded bg-fuchsia-50 border border-fuchsia-200 text-fuchsia-700 text-[10px] font-bold">${a.submission_count || 0} entregas</span>
+                </div>
+              `).join('')
+            : '<p class="text-slate-500">Sin prácticas publicadas aún.</p>';
+        }
+
+        const subsList = document.getElementById('fpTeacherSubmissionsList');
+        if (subsList) {
+          subsList.innerHTML = submissions.length
+            ? submissions.map((s) => {
+                const isSelected = fpActiveSubmissionId === s.id;
+                const graded = s.status === 'GRADED';
+                const comp = s.comparison || {};
+                const iniC = comp.initial?.critical_count ?? 0;
+                const finC = comp.final?.critical_count ?? 0;
+                const fixesC = comp.decisions?.fixes_count ?? 0;
+                return `
+                  <button onclick="selectFpSubmission(${s.id})" class="w-full text-left p-3 rounded-xl border transition cursor-pointer ${isSelected ? 'border-violet-500 bg-violet-50/70 ring-1 ring-violet-300' : 'border-slate-200 bg-white hover:bg-slate-50'}">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="font-bold text-slate-900 text-xs">${escapeHtml(s.student_name)}</span>
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${graded ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
+                        ${graded && s.final_grade !== null && s.final_grade !== undefined ? `${Number(s.final_grade).toFixed(2)}/10` : escapeHtml(s.status)}
+                      </span>
+                    </div>
+                    <div class="text-[11px] font-semibold text-violet-700 mt-0.5">${escapeHtml(s.assignment_title)}</div>
+                    <div class="text-[11px] text-slate-500 flex flex-wrap gap-2 mt-1">
+                      <span>${escapeHtml(s.group_name)}</span>
+                      <span>· Críticos ${iniC}➔${finC}</span>
+                      <span>· Fixes: ${fixesC}</span>
+                    </div>
+                  </button>
+                `;
+              }).join('')
+            : '<div class="p-6 text-center bg-white rounded-xl border border-slate-200 text-xs text-slate-500">No hay entregas recibidas todavía.</div>';
+        }
+
+        const evoBox = document.getElementById('fpTeacherEvolutionBody');
+        if (evoBox) {
+          const students = evolution.students || [];
+          evoBox.innerHTML = students.length
+            ? `
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                ${students.map((st) => {
+                  const series = (st.timeline || [])
+                    .filter((t) => t.final_grade !== null && t.final_grade !== undefined)
+                    .map((t) => Number(t.final_grade).toFixed(1));
+                  return `
+                  <div class="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-2">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <div class="font-bold text-slate-900 text-xs">${escapeHtml(st.full_name)}</div>
+                        <div class="text-[11px] text-slate-500">${escapeHtml(st.email || '')}</div>
+                      </div>
+                      <span class="px-2.5 py-1 rounded-lg bg-violet-100 text-violet-900 font-extrabold text-xs">
+                        Media: ${st.avg_practice_grade !== null && st.avg_practice_grade !== undefined ? Number(st.avg_practice_grade).toFixed(2) : '--'} / 10
+                      </span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-center text-[11px] bg-slate-50 p-2 rounded-lg">
+                      <div><div class="text-slate-400">Entregas</div><div class="font-bold text-slate-800">${st.submissions_count} (${st.graded_count} eval.)</div></div>
+                      <div><div class="text-slate-400">% Res. Críticos</div><div class="font-bold text-emerald-700">${st.avg_error_resolution_pct !== null && st.avg_error_resolution_pct !== undefined ? `${st.avg_error_resolution_pct}%` : '--'}</div></div>
+                      <div><div class="text-slate-400">Media Cuestionarios</div><div class="font-bold text-indigo-700">${st.avg_quiz_grade !== null && st.avg_quiz_grade !== undefined ? `${Number(st.avg_quiz_grade).toFixed(1)}/10` : '--'}</div></div>
+                    </div>
+                    <div class="text-[11px] text-slate-600">
+                      Progresión notas: ${series.length ? series.join(' ➔ ') : 'Pendiente de calificación'}
+                    </div>
+                  </div>
+                `;
+                }).join('')}
+              </div>
+            `
+            : '<div class="p-6 text-center bg-white rounded-xl border border-slate-200 text-slate-500">Todavía no hay métricas de evolución para este filtro.</div>';
+        }
+      } catch (err) {
+        console.warn('Error cargando Panel Docente FP:', err);
+      }
+    }
+
+    function toggleFpScenarioSelect() {
+      const typeSel = document.querySelector('[data-id="fpNewAssignType"]');
+      const wrap = document.getElementById('fpScenarioPickerWrap');
+      if (wrap) wrap.classList.toggle('hidden', !typeSel || typeSel.value !== 'reto');
+    }
+
+    async function createFpGroup() {
+      const name = document.querySelector('[data-id="fpNewGroupName"]')?.value.trim() || '';
+      const center = document.querySelector('[data-id="fpNewGroupCenter"]')?.value.trim() || 'Centro FP';
+      const module_name = document.querySelector('[data-id="fpNewGroupModule"]')?.value.trim() || 'Preimpresión Digital';
+      if (!name) {
+        alert('Introduce un nombre para el grupo (ej. 2º GS Preimpresión).');
+        return;
+      }
+      try {
+        const resp = await fetch('/api/fp/teacher/groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, center, module_name })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Error creando grupo');
+        document.querySelector('[data-id="fpNewGroupName"]').value = '';
+        await loadTeacherOverview();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function createFpAssignment() {
+      const group_id = parseInt(document.querySelector('[data-id="fpNewAssignGroup"]')?.value || '0', 10);
+      const assignment_type = document.querySelector('[data-id="fpNewAssignType"]')?.value || 'pdf_real';
+      const title = document.querySelector('[data-id="fpNewAssignTitle"]')?.value.trim() || '';
+      const scenario_id = document.querySelector('[data-id="fpNewAssignScenario"]')?.value || null;
+      const target_profile = document.querySelector('[data-id="fpNewAssignProfile"]')?.value || 'OFFSET_300';
+      const rubric_id = parseInt(document.querySelector('[data-id="fpNewAssignRubric"]')?.value || '0', 10) || null;
+      const description = document.querySelector('[data-id="fpNewAssignDesc"]')?.value.trim() || '';
+
+      if (!group_id || !title) {
+        alert('Selecciona un grupo y escribe el título de la práctica.');
+        return;
+      }
+      try {
+        const resp = await fetch('/api/fp/teacher/assignments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ group_id, title, description, assignment_type, scenario_id, target_profile, rubric_id })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Error creando práctica');
+        document.querySelector('[data-id="fpNewAssignTitle"]').value = '';
+        document.querySelector('[data-id="fpNewAssignDesc"]').value = '';
+        await loadTeacherOverview();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    function recalcFpRubricTotal() {
+      const inputs = document.querySelectorAll('[data-fp-criterion-id]');
+      let weightedSum = 0;
+      let totalWeight = 0;
+      inputs.forEach((inp) => {
+        const w = parseFloat(inp.getAttribute('data-fp-weight') || '1');
+        const maxS = parseFloat(inp.getAttribute('data-fp-max') || '10') || 10;
+        const val = parseFloat(inp.value || '0');
+        weightedSum += ((val / maxS) * 10) * w;
+        totalWeight += w;
+      });
+      const calcEl = document.getElementById('fpRubricComputedTotal');
+      if (calcEl && totalWeight > 0) {
+        calcEl.textContent = (weightedSum / totalWeight).toFixed(2);
+      }
+    }
+
+    async function selectFpSubmission(submissionId) {
+      fpActiveSubmissionId = submissionId;
+      const pane = document.getElementById('fpSubmissionEvaluatorPane');
+      if (pane) pane.innerHTML = '<div class="text-xs text-slate-500 py-8 text-center"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Cargando análisis comparativo...</div>';
+
+      try {
+        const resp = await fetch(`/api/fp/teacher/submissions/${submissionId}`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Error cargando entrega');
+        const sub = data.submission;
+        const comp = sub.comparison || {};
+        const ini = comp.initial || {};
+        const fin = comp.final || {};
+        const decs = comp.decisions || {};
+        const delta = comp.delta || {};
+        const criteria = sub.rubric_criteria || [];
+        const savedScores = sub.rubric_scores || {};
+        const suggestedScores = comp.suggested_scores || {};
+        const observations = comp.observations || [];
+
+        const timelineHtml = (decs.steps || []).length
+          ? `<ul class="space-y-1 text-[11px] text-slate-700 mt-1.5">${decs.steps.map((item) => `<li class="flex items-start gap-1.5"><span class="text-violet-600 font-bold">•</span><span>${escapeHtml(item.action || '')} ${item.detail ? `<span class="text-slate-500">(${escapeHtml(item.detail)})</span>` : ''}</span></li>`).join('')}</ul>`
+          : '<p class="text-[11px] text-slate-400 mt-1">Sin intervenciones registradas.</p>';
+
+        const obsHtml = observations.length
+          ? `<div class="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200 text-[11px] text-amber-900 space-y-0.5"><div class="font-bold">Observaciones automáticas:</div>${observations.map((o) => `<div>• ${escapeHtml(o)}</div>`).join('')}</div>`
+          : '';
+
+        const criteriaHtml = criteria.map((c) => {
+          const val = (savedScores[c.id] !== undefined && savedScores[c.id] !== null)
+            ? savedScores[c.id]
+            : (suggestedScores[c.id] ?? comp.suggested_final_grade ?? 7.0);
+          return `
+            <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50/60 flex items-center justify-between gap-3">
+              <div>
+                <div class="text-xs font-bold text-slate-800">${escapeHtml(c.name)} <span class="text-[10px] font-semibold text-violet-700">(${c.weight}%)</span></div>
+                <div class="text-[11px] text-slate-500">${escapeHtml(c.description || '')}</div>
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                <input type="number" min="0" max="${c.max_score || 10}" step="0.25" value="${Number(val).toFixed(2)}"
+                  data-fp-criterion-id="${escapeHtml(c.id)}" data-fp-weight="${c.weight || 1}" data-fp-max="${c.max_score || 10}"
+                  oninput="recalcFpRubricTotal()"
+                  class="w-16 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-bold text-right text-slate-900">
+                <span class="text-[11px] text-slate-400">/ ${c.max_score || 10}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        if (pane) {
+          pane.innerHTML = `
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+              <div>
+                <h4 class="text-sm font-extrabold text-slate-900">${escapeHtml(sub.student_name)} — ${escapeHtml(sub.assignment_title)}</h4>
+                <p class="text-[11px] text-slate-500">${escapeHtml(sub.student_email || '')} · Grupo: ${escapeHtml(sub.group_name)} · PDF: <strong>${escapeHtml(sub.filename || '')}</strong></p>
+              </div>
+              <a href="/api/fp/teacher/submissions/${sub.id}/report-pdf" target="_blank" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold inline-flex items-center gap-1.5">
+                <i class="fa-solid fa-file-pdf"></i> Acta PDF A4
+              </a>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div class="p-3 rounded-xl bg-rose-50/70 border border-rose-200 space-y-1">
+                <div class="text-[10px] font-black uppercase text-rose-700">1. Diagnóstico Inicial</div>
+                <div>Errores críticos: <strong>${ini.critical_count ?? 0}</strong></div>
+                <div>Avisos: <strong>${ini.warning_count ?? 0}</strong></div>
+                <div>Páginas / Color: <strong>${ini.page_count ?? 1} pág · ${escapeHtml((ini.color_spaces || []).join(', ') || 'N/D')}</strong></div>
+                <div>TAC máx.: <strong>${ini.tac_max !== null && ini.tac_max !== undefined ? `${ini.tac_max}%` : 'N/D'}</strong></div>
+              </div>
+              <div class="p-3 rounded-xl bg-violet-50/70 border border-violet-200 space-y-1">
+                <div class="text-[10px] font-black uppercase text-violet-700">2. Decisiones (${decs.fixes_count ?? 0})</div>
+                <div class="text-[11px] text-slate-700">Trazabilidad técnica aplicada sobre el PDF:</div>
+                ${timelineHtml}
+              </div>
+              <div class="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-1">
+                <div class="text-[10px] font-black uppercase text-emerald-700">3. Resultado Final</div>
+                <div>Errores críticos finales: <strong>${fin.critical_count ?? 0}</strong> <span class="text-emerald-700 font-bold">(-${delta.resolved_critical ?? 0} / +${delta.introduced_critical ?? 0})</span></div>
+                <div>Resolución críticos: <strong>${delta.critical_resolution_pct ?? 0}%</strong></div>
+                <div>Avisos finales: <strong>${fin.warning_count ?? 0}</strong></div>
+                <div>Pre-estimación rúbrica: <strong>${Number(comp.suggested_final_grade || 0).toFixed(2)} / 10</strong></div>
+              </div>
+            </div>
+
+            ${obsHtml}
+
+            <div class="space-y-2.5 pt-1">
+              <div class="flex items-center justify-between">
+                <h5 class="text-xs font-extrabold uppercase tracking-wider text-slate-700">${escapeHtml(sub.rubric_title || 'Rúbrica de Evaluación')}</h5>
+                <div class="text-xs font-bold text-violet-800">Nota ponderada: <span id="fpRubricComputedTotal" class="text-sm font-black">--</span> / 10</div>
+              </div>
+              <div class="space-y-2">${criteriaHtml}</div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-600 mb-1">Ajuste Manual Nota Final (opcional):</label>
+                  <input type="number" id="fpGradeOverrideInput" min="0" max="10" step="0.1" value="${sub.final_grade !== null && sub.final_grade !== undefined ? sub.final_grade : ''}" placeholder="Automática según rúbrica" class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-800 outline-none">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-600 mb-1">Estado de la Entrega:</label>
+                  <select id="fpGradeStatusSelect" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 outline-none">
+                    <option value="GRADED" ${sub.status === 'GRADED' ? 'selected' : ''}>Calificada (Visible al Alumno)</option>
+                    <option value="REVIEWED" ${sub.status === 'REVIEWED' ? 'selected' : ''}>En Revisión / Pedir Mejora</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">Observaciones y Feedback Técnico al Alumno/a:</label>
+                <textarea id="fpTeacherFeedbackInput" rows="2" placeholder="Ej. Buena conversión a CMYK FOGRA39; recuerda revisar sobreimpresión del negro en textos pequeños." class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none">${escapeHtml(sub.teacher_feedback || '')}</textarea>
+              </div>
+
+              <button onclick="saveFpGrade(${sub.id})" class="w-full py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer">
+                <i class="fa-solid fa-check-double mr-1"></i> Guardar Calificación y Feedback
+              </button>
+            </div>
+          `;
+          recalcFpRubricTotal();
+        }
+      } catch (err) {
+        if (pane) pane.innerHTML = `<div class="p-4 text-xs text-red-700 bg-red-50 rounded-xl">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function saveFpGrade(submissionId) {
+      const rubric_scores = {};
+      document.querySelectorAll('[data-fp-criterion-id]').forEach((inp) => {
+        const cid = inp.getAttribute('data-fp-criterion-id');
+        if (cid) rubric_scores[cid] = parseFloat(inp.value || '0');
+      });
+      const overrideVal = document.getElementById('fpGradeOverrideInput')?.value.trim() || '';
+      const final_grade = overrideVal !== '' ? parseFloat(overrideVal) : null;
+      const teacher_feedback = document.getElementById('fpTeacherFeedbackInput')?.value.trim() || '';
+      const status = document.getElementById('fpGradeStatusSelect')?.value || 'GRADED';
+
+      try {
+        const resp = await fetch(`/api/fp/teacher/submissions/${submissionId}/grade`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rubric_scores, final_grade, teacher_feedback, status })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Error guardando calificación');
+        await loadTeacherOverview();
+        await selectFpSubmission(submissionId);
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function loadAdminUsers() {
+      const box = document.getElementById('fpAdminUsersTable');
+      if (!box) return;
+      try {
+        const resp = await fetch('/api/admin/users');
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Sin permisos');
+        const users = data.users || [];
+        box.innerHTML = users.map((u) => {
+          const pending = u.approval_status === 'PENDING';
+          return `
+            <div class="p-3 rounded-xl border ${pending ? 'border-amber-300 bg-amber-50/70' : 'border-slate-200 bg-slate-50/60'} flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <div class="font-bold text-slate-900">
+                  ${escapeHtml(u.full_name)}
+                  <span class="text-[11px] font-mono text-slate-500">(${escapeHtml(u.email || u.username)})</span>
+                  ${pending ? '<span class="ml-1 px-2 py-0.5 rounded bg-amber-200 text-amber-900 text-[10px] font-black">PENDIENTE</span>' : ''}
+                </div>
+                <div class="text-[11px] text-slate-500">Estado: ${escapeHtml(u.approval_status || 'ACTIVE')} · Sesiones activas: ${u.active_sessions || 0}</div>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <select id="adminRoleSel_${u.id}" class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800">
+                  <option value="alumno" ${u.role === 'alumno' ? 'selected' : ''}>Alumno FP</option>
+                  <option value="diseñador" ${u.role === 'diseñador' ? 'selected' : ''}>Diseñador</option>
+                  <option value="preimpresion" ${u.role === 'preimpresion' ? 'selected' : ''}>Preimpresión</option>
+                  <option value="docente" ${u.role === 'docente' ? 'selected' : ''}>Docente FP</option>
+                  <option value="responsable" ${u.role === 'responsable' ? 'selected' : ''}>Responsable</option>
+                </select>
+                <select id="adminActiveSel_${u.id}" class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800">
+                  <option value="1" ${u.is_active ? 'selected' : ''}>Activo / Aprobado</option>
+                  <option value="0" ${!u.is_active ? 'selected' : ''}>Suspendido</option>
+                </select>
+                <button onclick="saveAdminUserAccess(${u.id})" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold cursor-pointer">
+                  Aplicar
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        box.innerHTML = `<p class="text-red-600">${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    async function saveAdminUserAccess(userId) {
+      const role = document.getElementById(`adminRoleSel_${userId}`)?.value;
+      const is_active = document.getElementById(`adminActiveSel_${userId}`)?.value === '1';
+      const approval_status = is_active ? 'ACTIVE' : 'DISABLED';
+      try {
+        const resp = await fetch(`/api/admin/users/${userId}/access`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role, is_active, approval_status })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Error actualizando usuario');
+        await loadAdminUsers();
+      } catch (err) {
+        alert(err.message);
+      }
     }
 
     async function openClientApprovalModal() {
