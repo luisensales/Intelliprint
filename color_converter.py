@@ -138,18 +138,33 @@ def convert_rgb_images_to_cmyk(
 
     for page_index in range(len(mupdf_doc)):
         page = mupdf_doc[page_index]
+        for img_info in page.get_image_info(xrefs=True):
+            xref = img_info.get("xref", 0)
+            if not xref or xref in seen_xrefs:
+                continue
+            seen_xrefs.add(xref)
+            cs_num = img_info.get("colorspace", 0)
+            cs_name = str(img_info.get("cs-name", "")).upper()
+            if cs_num == 3 or "RGB" in cs_name:
+                rgb_xrefs.add(xref)
+            else:
+                result["images_skipped"] += 1
+
         for img_tuple in page.get_images(full=True):
             xref = img_tuple[0]
             if xref in seen_xrefs:
                 continue
             seen_xrefs.add(xref)
-            img_info = mupdf_doc.extract_image(xref)
-            cs = img_info.get("colorspace", 0)
-            del img_info
-            if cs == 3:   # RGB
-                rgb_xrefs.add(xref)
-            else:
-                result["images_skipped"] += 1
+            try:
+                ext_info = mupdf_doc.extract_image(xref)
+                cs_num = ext_info.get("colorspace", 0)
+                del ext_info
+                if cs_num == 3:
+                    rgb_xrefs.add(xref)
+                else:
+                    result["images_skipped"] += 1
+            except Exception:
+                pass
 
     mupdf_doc.close()
     release_pdf_memory()

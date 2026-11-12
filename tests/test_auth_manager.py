@@ -156,6 +156,7 @@ class AuthManagerTests(unittest.TestCase):
             resp_view = client.get(f"/api/client-approval/view/{token}")
             self.assertEqual(resp_view.status_code, 200)
             self.assertIn("Revista_Final.pdf", resp_view.text)
+            self.assertIn("no-cache", resp_view.headers.get("cache-control", ""))
 
             # 7. Cliente envía su visto bueno
             resp_decide = client.post(
@@ -174,6 +175,78 @@ class AuthManagerTests(unittest.TestCase):
             self.assertEqual(resp_out.status_code, 200)
             me_after = client.get("/api/auth/me").json()
             self.assertFalse(me_after["authenticated"])
+        finally:
+            app.JOBS_DIR = orig_jobs
+            auth_manager.DB_PATH = orig_db
+
+    def test_client_approval_view_shows_corrected_pdf_and_page_count(self):
+        orig_jobs = app.JOBS_DIR
+        app.JOBS_DIR = self.jobs_dir
+        orig_db = auth_manager.DB_PATH
+        auth_manager.DB_PATH = self.test_db
+        try:
+            # Crear un PDF de prueba de 2 páginas
+            two_page_pdf = self.jobs_dir / "diptico_corregido.pdf"
+            doc = pymupdf.open()
+            doc.new_page(width=595.3, height=841.9)
+            doc.new_page(width=595.3, height=841.9)
+            doc.save(str(two_page_pdf))
+            doc.close()
+
+            job_id = "test_job_approval_corr"
+            job_manifest = {
+                "job_meta": {
+                    "job_id": job_id,
+                    "filename": "Diptico-SS.pdf",
+                    "file_path": str(two_page_pdf),
+                    "pdf_path": str(two_page_pdf),
+                    "last_fixed_pdf_path": str(two_page_pdf),
+                    "current_sha256": "abcdef1234567890" * 4,
+                    "applied_fixes_history": [
+                        {"fix": "mirror_bleed", "path": str(two_page_pdf)},
+                        {"fix": "cmyk_converted", "path": str(two_page_pdf)},
+                    ]
+                },
+                "job_summary": {
+                    "pages": 2,
+                    "bleed_status": "PASS",
+                },
+                "triple_result": {},
+            }
+            (self.jobs_dir / f"{job_id}.json").write_text(json.dumps(job_manifest), encoding="utf-8")
+
+            client = TestClient(app.app)
+            # Generar token
+            resp_create = client.post(f"/api/client-approval/create/{job_id}")
+            self.assertEqual(resp_create.status_code, 200)
+            token = resp_create.json()["token"]
+
+            # Comprobar info
+            resp_info = client.get(f"/api/client-approval/info/{token}")
+            self.assertEqual(resp_info.status_code, 200)
+            data_info = resp_info.json()
+            self.assertEqual(data_info["page_count"], 2)
+            self.assertTrue(data_info["has_fixes"])
+            self.assertIn("mirror_bleed", data_info["applied_fixes"])
+
+            # Comprobar vista HTML
+            resp_view = client.get(f"/api/client-approval/view/{token}")
+            self.assertEqual(resp_view.status_code, 200)
+            view_text = resp_view.text
+            self.assertIn("Diptico-SS.pdf", view_text)
+            self.assertIn("2", view_text)
+            self.assertIn("página(s)", view_text)
+            self.assertIn("Versión Corregida para Imprenta", view_text)
+            self.assertIn("Sangrado Sintético (Mirror Bleed)", view_text)
+            self.assertIn("Conversión CMYK", view_text)
+            self.assertIn("?v=", view_text)
+
+            # Comprobar descarga
+            resp_dl = client.get(f"/api/download-pdf/{job_id}")
+            self.assertEqual(resp_dl.status_code, 200)
+            disp = resp_dl.headers.get("content-disposition", "")
+            self.assertIn("Diptico-SS_produccion_corregido.pdf", disp)
+            self.assertIn("no-cache", resp_dl.headers.get("cache-control", ""))
         finally:
             app.JOBS_DIR = orig_jobs
             auth_manager.DB_PATH = orig_db

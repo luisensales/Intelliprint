@@ -9851,7 +9851,10 @@
             <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
               <i class="fa-solid fa-list-check text-emerald-600"></i> Matriz de Evidencias Técnicas (${report.checks?.length || 0} comprobaciones)
             </h4>
-            <span class="text-[10px] text-slate-500 font-mono">Fichero: ${escapeHtml((report.pdf_filename || '').slice(0, 30))}</span>
+            <span class="text-[10px] text-slate-500 font-mono flex items-center gap-1.5">
+              ${report.has_fixes ? '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">PDF Corregido</span>' : '<span class="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">PDF Original</span>'}
+              Fichero: ${escapeHtml(report.pdf_filename || report.pdf_display_name || report.original_filename || '')}
+            </span>
           </div>
           ${checksHtml}
         </div>
@@ -10785,12 +10788,22 @@
         if (openBtn) openBtn.href = data.approval_url;
 
         if (statusBox) {
+          const meta = currentReport?.job_meta || {};
+          const hasFixes = !!(meta.applied_fixes_history?.length || meta.last_fixed_pdf_path);
+          const fileName = meta.filename || 'documento.pdf';
+          const versionBadge = hasFixes
+            ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">✓ Versión Corregida para Imprenta</span>'
+            : '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-300">Archivo Original</span>';
+
           statusBox.innerHTML = `
-            <div class="flex items-center gap-2 text-slate-800 font-medium">
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                PENDIENTE DE VISTO BUENO
-              </span>
-              <span>El cliente aún no ha emitido su decisión.</span>
+            <div class="space-y-1.5 text-xs text-slate-800">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                  PENDIENTE DE VISTO BUENO
+                </span>
+                ${versionBadge}
+              </div>
+              <p class="text-[11px] text-slate-600">Documento: <strong>${escapeHtml(fileName)}</strong>. El cliente examinará el PDF interactivo y emitirá su conformidad para máquina.</p>
             </div>
           `;
         }

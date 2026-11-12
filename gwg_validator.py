@@ -218,9 +218,18 @@ def validate_pdf_gwg(
         else:
             action_items["ready_for_press"].append(c)
 
+    # Determinar nombre descriptivo y versión del documento evaluado
+    meta = (job_data.get("job_meta") or {}) if job_data else {}
+    orig_name = meta.get("filename") or pdf_file.name
+    has_fixes = bool(meta.get("applied_fixes_history") or meta.get("last_fixed_pdf_path") or ("_fixed" in pdf_file.name) or ("_mirror_bleed" in pdf_file.name) or ("_cmyk" in pdf_file.name))
+    display_name = f"{orig_name} ({'Versión Corregida para Imprenta' if has_fixes else 'Original Recibido'})"
+
     return {
         "standard": std,
-        "pdf_filename": pdf_file.name,
+        "pdf_filename": display_name,
+        "raw_filename": pdf_file.name,
+        "original_filename": orig_name,
+        "has_fixes": has_fixes,
         "total_pages": total_pages,
         "evaluated_at": datetime.now(timezone.utc).isoformat(),
         "overall_status": overall_status,
@@ -406,7 +415,7 @@ def _check_output_intent_and_color(doc: pymupdf.Document, std: Dict[str, Any], j
 
     # 2. Límite de Cobertura de Tinta (TAC)
     tac_analysis = job_data.get("analisis_tac") or {}
-    tac_max = tac_analysis.get("tac_maximo", 0)
+    tac_max = tac_analysis.get("tac_maximo") or (job_data.get("job_summary") or {}).get("tac_measurement", {}).get("peak_percent") or 0
     std_max_tac = std.get("max_tac", 300)
 
     if tac_max == 0:
@@ -516,13 +525,14 @@ def _check_image_resolutions(doc: pymupdf.Document, std: Dict[str, Any], checks:
 
     for pno in range(len(doc)):
         page = doc[pno]
-        for img in page.get_image_info():
+        for img in page.get_image_info(xrefs=True):
             bbox = img.get("bbox")
             w_px = img.get("width", 0)
             h_px = img.get("height", 0)
             cs = str(img.get("cs-name", "")).lower()
+            cs_num = img.get("colorspace", 0)
 
-            if "rgb" in cs:
+            if "rgb" in cs or cs_num == 3:
                 rgb_images.append((pno + 1, img.get("number", 0)))
 
             if bbox and len(bbox) == 4 and w_px > 0 and h_px > 0:

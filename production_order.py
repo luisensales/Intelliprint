@@ -454,7 +454,7 @@ def validate_pdf_against_order(
                 })
 
     # 3. Límite TAC de papel
-    measured_tac = (job_data.get("analisis_tac") or {}).get("tac_maximo", 0)
+    measured_tac = (job_data.get("analisis_tac") or {}).get("tac_maximo") or (job_data.get("job_summary") or {}).get("tac_measurement", {}).get("peak_percent", 0)
     allowed_tac = order_recipe.get("recommended_tac", 300)
     if measured_tac > allowed_tac:
         findings.append({

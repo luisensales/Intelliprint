@@ -552,9 +552,11 @@ def check_pdf(
         raise HTTPException(status_code=500, detail="No se pudo analizar el PDF.") from exc
 
     # Attach Job Metadata
+    page_count_val = report.get("job_summary", {}).get("pages", 1)
     report["job_meta"] = {
         "job_id": job_id,
         "filename": file.filename,
+        "page_count": page_count_val,
         "file_size_mb": file_size_mb,
         "sha256": pdf_sha256,
         "profile_id": profile_id,
@@ -723,6 +725,7 @@ def download_certificate_pdf(job_id: str):
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
 
+
     filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
     clean_name = filename.replace(".pdf", "")
     return FileResponse(
@@ -749,6 +752,7 @@ def download_client_report_pdf(job_id: str):
     if ensure_original_analysis(job_data, engine.run_preflight, (UPLOAD_DIR, APPROVED_DIR, REJECTED_DIR)):
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
+
 
     report_path = JOBS_DIR / f"{safe_id}_guia_cliente.pdf"
     try:
@@ -1048,7 +1052,8 @@ def verify_production_endpoint(job_id: str, request: Request, body: dict = Body(
     safe_id = safe_job_id(job_id)
     job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
-        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+        if not restore_cloud_job_snapshot(safe_id, JOBS_DIR, UPLOAD_DIR):
+            raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
@@ -1056,11 +1061,22 @@ def verify_production_endpoint(job_id: str, request: Request, body: dict = Body(
     meta = job_data.get("job_meta", {})
     target_pdf = get_latest_cumulative_pdf(meta) or meta.get("file_path")
     if not target_pdf or not Path(target_pdf).exists():
+        if restore_cloud_job_snapshot(safe_id, JOBS_DIR, UPLOAD_DIR):
+            target_pdf = get_latest_cumulative_pdf(meta) or meta.get("file_path")
+    if not target_pdf or not Path(target_pdf).exists():
         raise HTTPException(status_code=404, detail="Archivo PDF de origen no encontrado.")
 
     standard_id = body.get("standard_id", "gwg_2015_sheetfed")
     try:
         report = validate_pdf_gwg(target_pdf, standard_id=standard_id, job_data=job_data)
+
+        orig_filename = meta.get("filename", "documento.pdf")
+        has_fixes = bool(meta.get("applied_fixes_history") or meta.get("last_fixed_pdf_path"))
+        display_name = f"{orig_filename} ({'Versión Corregida para Imprenta' if has_fixes else 'Original Recibido'})"
+        report["original_filename"] = orig_filename
+        report["has_fixes"] = has_fixes
+        report["pdf_display_name"] = display_name
+        report["pdf_filename"] = display_name
 
         # Generar certificado PDF de conformidad
         cert_path = JOBS_DIR / f"{safe_id}_certificado_gwg.pdf"
@@ -1070,6 +1086,9 @@ def verify_production_endpoint(job_id: str, request: Request, body: dict = Body(
         job_data["production_validation_certificate_path"] = str(cert_path)
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+
+        save_cloud_job_snapshot(safe_id, job_data, target_pdf, JOBS_DIR)
 
         report["certificate_url"] = f"/api/validation/certificate/{job_id}"
         return report
@@ -1483,7 +1502,8 @@ def create_client_approval_endpoint(job_id: str, request: Request):
     safe_id = safe_job_id(job_id)
     job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
-        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+        if not restore_cloud_job_snapshot(safe_id, JOBS_DIR, UPLOAD_DIR):
+            raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
     base_url = str(request.base_url).rstrip("/")
     approval_data = generate_client_approval_link(safe_id, base_url=base_url)
@@ -1494,6 +1514,9 @@ def create_client_approval_endpoint(job_id: str, request: Request):
     job_data["client_approval"] = approval_data
     with open(job_json_path, "w", encoding="utf-8") as f:
         json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    meta = job_data.get("job_meta", {})
+    save_cloud_job_snapshot(safe_id, job_data, get_latest_cumulative_pdf(meta), JOBS_DIR)
 
     return approval_data
 
@@ -1508,24 +1531,41 @@ def get_client_approval_info_endpoint(token: str):
     safe_id = safe_job_id(approval["job_id"])
     job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
-        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+        if not restore_cloud_job_snapshot(safe_id, JOBS_DIR, UPLOAD_DIR):
+            raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
 
     meta = job_data.get("job_meta", {})
+    pdf_p = get_latest_cumulative_pdf(meta)
+    pages = (job_data.get("job_summary") or {}).get("pages") or meta.get("page_count")
+    if not pages and pdf_p and os.path.exists(pdf_p):
+        try:
+            with pymupdf.open(pdf_p) as doc_tmp:
+                pages = len(doc_tmp)
+        except Exception:
+            pages = 1
+    pages = pages or 1
+
+    current_sha = meta.get("current_sha256") or meta.get("sha256") or ""
+    v_tag = current_sha[:8] if current_sha else str(int(time.time()))
+    has_fixes = bool(meta.get("applied_fixes_history") or meta.get("last_fixed_pdf_path"))
+
     return {
         "token": token,
         "job_id": safe_id,
         "filename": meta.get("filename", "documento.pdf"),
-        "page_count": meta.get("page_count", 1),
+        "page_count": pages,
         "status": approval.get("status", "PENDING"),
         "created_at": approval.get("created_at"),
         "client_name": approval.get("client_name"),
         "decision": approval.get("decision"),
         "notes": approval.get("notes"),
         "decided_at": approval.get("decided_at"),
-        "preview_pdf_url": f"/api/download-pdf/{safe_id}",
+        "has_fixes": has_fixes,
+        "applied_fixes": [h.get("fix") for h in meta.get("applied_fixes_history", [])],
+        "preview_pdf_url": f"/api/download-pdf/{safe_id}?v={v_tag}",
     }
 
 
@@ -1539,18 +1579,70 @@ def client_approval_view_endpoint(token: str):
     safe_id = safe_job_id(approval["job_id"])
     job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
-        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+        if not restore_cloud_job_snapshot(safe_id, JOBS_DIR, UPLOAD_DIR):
+            raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
 
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
 
     meta = job_data.get("job_meta", {})
-    filename = html.escape(meta.get("filename", "documento.pdf"))
-    pages = meta.get("page_count", 1)
+    orig_filename = meta.get("filename", "documento.pdf")
+    filename = html.escape(orig_filename)
+
+    pdf_p = get_latest_cumulative_pdf(meta)
+    if not pdf_p or not os.path.exists(pdf_p):
+        restore_cloud_job_snapshot(safe_id, JOBS_DIR, UPLOAD_DIR)
+        pdf_p = get_latest_cumulative_pdf(meta)
+
+    pages = (job_data.get("job_summary") or {}).get("pages") or meta.get("page_count")
+    if not pages and pdf_p and os.path.exists(pdf_p):
+        try:
+            with pymupdf.open(pdf_p) as doc_tmp:
+                pages = len(doc_tmp)
+        except Exception:
+            pages = 1
+    pages = pages or 1
+
     status = approval.get("status", "PENDING")
     client_name = html.escape(approval.get("client_name") or "")
     notes = html.escape(approval.get("notes") or "")
     decided_at = approval.get("decided_at") or ""
+
+    fixes_history = meta.get("applied_fixes_history", [])
+    has_fixes = bool(fixes_history or meta.get("last_fixed_pdf_path"))
+    current_sha = meta.get("current_sha256") or meta.get("sha256") or ""
+    v_tag = current_sha[:8] if current_sha else str(int(time.time()))
+
+    stem = Path(orig_filename).stem
+    download_filename = f"{stem}_produccion_corregido.pdf" if has_fixes else f"IntelliPrint_{orig_filename}"
+
+    FIX_LABELS = {
+        "cmyk_converted": "Conversión CMYK",
+        "spot_converted": "Tintas Planas a CMYK",
+        "overprint_fixed": "Sobreimpresión 100% K",
+        "varnish_overprint": "Barnices y Tintas Técnicas",
+        "hairline_fixed": "Engrosado de Filetes Finos",
+        "icc_fixed": "OutputIntent ICC ISO Coated v2",
+        "bleed_fixed": "Cajas ISO y Sangrado 3 mm",
+        "mirror_bleed": "Sangrado Sintético (Mirror Bleed)",
+        "fonts_outlined": "Tipografías Vectorizadas",
+        "tac_limited": "Limitación TAC (≤ 300%)",
+        "printer_marks": "Marcas de Imprenta y Registro",
+        "batch_fixed": "Corrección Integral en Lote",
+        "barcode_fixed": "Código de Barras Conforme",
+    }
+    applied_badges_html = ""
+    if fixes_history:
+        badges = [
+            f'<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">✓ {html.escape(FIX_LABELS.get(h.get("fix"), h.get("fix", "")))}</span>'
+            for h in fixes_history
+        ]
+        applied_badges_html = f"""
+        <div class="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
+          <span class="text-xs font-bold text-slate-700">Correcciones técnicas aplicadas para máquina:</span>
+          {' '.join(badges)}
+        </div>
+        """
 
     status_banner = ""
     if status == "APPROVED":
@@ -1648,13 +1740,17 @@ def client_approval_view_endpoint(token: str):
     <!-- Header del trabajo -->
     <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
       <div>
-        <span class="text-[10px] font-bold text-sky-600 uppercase tracking-wider block">Revisión de Producción</span>
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-[10px] font-extrabold text-sky-600 uppercase tracking-wider block">Revisión de Producción · Control de Calidad</span>
+          {f'<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">✓ Versión Corregida para Imprenta</span>' if has_fixes else '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300">Archivo Original Recibido</span>'}
+        </div>
         <h2 class="text-lg font-black text-slate-900">{filename}</h2>
-        <p class="text-xs text-slate-500 mt-0.5">Documento preparado para imprenta · {pages} página(s)</p>
+        <p class="text-xs text-slate-500 mt-0.5">Documento preparado para imprenta · <strong>{pages}</strong> página(s) {f'· Hash SHA-256: <span class=\"font-mono text-[10px]\">{current_sha[:16]}...</span>' if current_sha else ''}</p>
+        {applied_badges_html}
       </div>
       <div class="flex items-center gap-3">
-        <a href="/api/download-pdf/{safe_id}" target="_blank" download class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 border border-slate-200">
-          📥 Descargar PDF
+        <a href="/api/download-pdf/{safe_id}?v={v_tag}" target="_blank" download="{download_filename}" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white text-xs font-bold transition flex items-center gap-2 shadow-sm">
+          📥 Descargar PDF para Revisión
         </a>
       </div>
     </div>
@@ -1669,7 +1765,7 @@ def client_approval_view_endpoint(token: str):
         <span class="text-xs text-slate-400 font-mono">ID: {safe_id[:8]}</span>
       </div>
       <div class="w-full bg-slate-900 rounded-xl overflow-hidden border border-slate-300 min-h-[600px] flex items-center justify-center">
-        <iframe src="/api/download-pdf/{safe_id}#toolbar=0" class="w-full h-[650px] border-0" title="Visor de PDF"></iframe>
+        <iframe src="/api/download-pdf/{safe_id}?v={v_tag}#toolbar=0" class="w-full h-[650px] border-0" title="Visor de PDF de Producción"></iframe>
       </div>
     </div>
   </main>
@@ -1717,7 +1813,14 @@ def client_approval_view_endpoint(token: str):
 </body>
 </html>
 """
-    return HTMLResponse(content=page_html)
+    return HTMLResponse(
+        content=page_html,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+    )
 
 
 @app.post("/api/client-approval/submit/{token}")
@@ -1784,8 +1887,20 @@ def get_latest_cumulative_pdf(job_meta: dict) -> Optional[str]:
     """
     if not job_meta:
         return None
+
+    # 1. Comprobar primero si last_fixed_pdf_path existe físicamente
+    last_fixed = job_meta.get("last_fixed_pdf_path")
+    if last_fixed and Path(last_fixed).is_file():
+        return str(last_fixed)
+
+    # 2. Comprobar historial acumulativo en orden inverso (más reciente primero)
+    for h in reversed(job_meta.get("applied_fixes_history", [])):
+        cand_p = h.get("path")
+        if cand_p and Path(cand_p).is_file():
+            return str(cand_p)
+
+    # 3. Comprobar claves de correcciones específicas
     candidates = [
-        job_meta.get("last_fixed_pdf_path"),
         job_meta.get("batch_fixed_pdf_path"),
         job_meta.get("barcode_fixed_pdf_path"),
         job_meta.get("tac_limited_pdf_path"),
@@ -1799,11 +1914,13 @@ def get_latest_cumulative_pdf(job_meta: dict) -> Optional[str]:
         job_meta.get("spot_converted_pdf_path"),
         job_meta.get("varnish_overprint_pdf_path"),
         job_meta.get("cmyk_converted_pdf_path"),
-        job_meta.get("pdf_path")
+        job_meta.get("pdf_path"),
+        job_meta.get("file_path"),
     ]
     for c in candidates:
-        if c and Path(c).exists():
+        if c and Path(c).is_file():
             return str(c)
+
     jid = job_meta.get("job_id")
     if jid and restore_cloud_job_snapshot(str(jid), JOBS_DIR, UPLOAD_DIR):
         restored = UPLOAD_DIR / str(jid) / "source.pdf"
@@ -1851,7 +1968,8 @@ def register_cumulative_fix(job_data: dict, output_path: str | Path, fix_name: s
         job_data["version_history_summary"] = public_history(job_data, JOBS_DIR)
     except Exception as exc:
         print(f"[register_cumulative_fix] Aviso versión: {exc}")
-    save_cloud_job_snapshot(job_meta.get("job_id", ""), job_data, output_path, JOBS_DIR)
+    jid = job_meta.get("job_id") or job_data.get("job_id") or ""
+    save_cloud_job_snapshot(jid, job_data, output_path, JOBS_DIR)
 
 
 def refresh_job_analysis(job_data: dict, pdf_path: str | Path) -> None:
@@ -1875,18 +1993,32 @@ def download_pdf_file(job_id: str):
     job_id = safe_job_id(job_id)
     job_json_path = get_job_json_path(job_id)
     if not job_json_path.exists():
-        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+        if not restore_cloud_job_snapshot(job_id, JOBS_DIR, UPLOAD_DIR):
+            raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
     with open(job_json_path, "r", encoding="utf-8") as f:
         job_data = json.load(f)
     meta = job_data.get("job_meta", {})
     pdf_p = get_latest_cumulative_pdf(meta)
-    filename = meta.get("filename", "documento.pdf")
+    if not pdf_p or not os.path.exists(pdf_p):
+        if restore_cloud_job_snapshot(job_id, JOBS_DIR, UPLOAD_DIR):
+            pdf_p = get_latest_cumulative_pdf(meta)
     if not pdf_p or not os.path.exists(pdf_p):
         raise HTTPException(status_code=404, detail="Archivo PDF no encontrado en el servidor.")
+
+    orig_filename = meta.get("filename", "documento.pdf")
+    stem = Path(orig_filename).stem
+    has_fixes = bool(meta.get("applied_fixes_history") or meta.get("last_fixed_pdf_path"))
+    out_filename = f"{stem}_produccion_corregido.pdf" if has_fixes else f"IntelliPrint_{orig_filename}"
+
     return FileResponse(
         path=pdf_p,
         media_type="application/pdf",
-        filename=f"IntelliPrint_{filename}"
+        filename=out_filename,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
     )
 
 @app.post("/api/convert-to-cmyk/{job_id}")
@@ -2840,6 +2972,7 @@ def download_mirror_bleed_pdf(job_id: str):
         register_cumulative_fix(job_data, output_path, "mirror_bleed")
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
+
         fixed_path = str(output_path)
 
     filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
@@ -3176,6 +3309,7 @@ def get_job_spot_colors(job_id: str):
         job_data.setdefault("job_summary", {})["spot_colors"] = spots
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
+
     except Exception:
         spots = []
 
@@ -3791,6 +3925,9 @@ def batch_fix_endpoint(
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
 
+        save_cloud_job_snapshot(safe_id, job_data, final_batch_path, JOBS_DIR)
+
+
         pending_errors = [
             {
                 "page": f.get("page"),
@@ -4149,6 +4286,7 @@ def generate_imposition_endpoint(job_id: str, request: Request, body: dict = Bod
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
 
+
         result["download_url"] = f"/api/imposition/download/{job_id}"
         result["preview_url"] = f"/api/imposition/preview/{job_id}?sheet_size={sheet_size}&orientation={orientation}&mode={mode}&gap_mm={gap_mm}&gap_x_mm={gap_x_mm}&gap_y_mm={gap_y_mm}&t={int(time.time())}"
         return result
@@ -4338,6 +4476,7 @@ def calculate_cip3_endpoint(job_id: str, request: Request, body: dict = Body(def
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
 
+
         return cip3_result
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
@@ -4457,6 +4596,7 @@ def inspect_barcodes_endpoint(job_id: str):
         job_meta["barcode_inspection"] = {"sha256": digest, "report": report}
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
+
         return report
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error inspeccionando códigos de barras: {e}")
@@ -4502,6 +4642,7 @@ def fix_barcodes_endpoint(job_id: str, request: Request, body: dict = Body(defau
         result["report"] = job_data
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
+
 
         return result
     except Exception as e:
@@ -4775,6 +4916,7 @@ def verify_press_operator_endpoint(job_id: str):
         update_pdf_identity(job_data, current_pdf)
         with open(job_json_path, "w", encoding="utf-8") as f:
             json.dump(job_data, f, ensure_ascii=False, indent=2)
+
     sheet_data = get_press_operator_data(job_data)
     html_content = render_press_operator_html(sheet_data)
     return HTMLResponse(content=html_content)
