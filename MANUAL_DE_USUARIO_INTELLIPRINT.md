@@ -300,22 +300,24 @@ Consulta páginas, imágenes, fuentes, sangrado y perfiles detectados. La tabla 
 
 Los bloques de sobreimpresión distinguen negro 100 % K, negros oscuros, blancos, negro enriquecido y tintas técnicas cuando el análisis los identifica. Los botones **Sobreimprimir 100 % K**, **Sobreimprimir barnices**, **Convertir a CMYK** y otros accesos contextualizados ejecutan acciones; consultar la tabla no cambia el PDF.
 
-El TAC se calcula como estimación y queda registrado en el informe. Si no puede estimarse, se comunica como no medido y requiere revisión adicional. Esta edición no incorpora un mapa de calor TAC seleccionable como herramienta independiente. No debe confundirse un resumen de cobertura o el visor de color con ese mapa.
+El TAC se calcula como estimación y queda registrado en el informe; además, desde la pestaña **Previsualización de Separaciones** puedes activar el **Mapa de Calor TAC** interactivo para localizar sobre el lienzo los píxeles que superan el umbral seleccionado. Si en un flujo puntual el TAC global no puede estimarse, se comunica como no medido y requiere revisión adicional.
 
-### Convertir imágenes desde las métricas
+### Convertir imágenes, textos y vectores RGB desde las métricas
 
 <!-- ui-controls: cmykProfileChoice -->
 <!-- ui-values: cmykProfileChoice=embedded,ISOcoated_v2_300_bas.icc,ISOcoated_v2_eci.icc,PSOcoated_v3.icc,PSOuncoated_v3_FOGRA52.icc -->
 
-Pulsa **Convertir a CMYK** para desplegar el panel. **Perfil destino** ofrece el perfil embebido en el PDF y cuatro destinos concretos: ISO Coated v2 300 % FOGRA39, ISO Coated v2 ECI, PSO Coated v3 FOGRA51 y PSO Uncoated v3 FOGRA52. La selección inicial es el embebido. Si no se encuentra un destino embebido utilizable, la operación aplica su alternativa disponible y debe revisarse el perfil informado en el resultado.
+Pulsa **Convertir a CMYK** para desplegar el panel cuando el PDF contiene imágenes, textos o trazados vectoriales RGB en un perfil de imprenta CMYK. **Perfil destino** ofrece el perfil embebido en el PDF y cuatro destinos concretos: ISO Coated v2 300 % FOGRA39, ISO Coated v2 ECI, PSO Coated v3 FOGRA51 y PSO Uncoated v3 FOGRA52. La selección inicial es el embebido. Si no se encuentra un destino embebido utilizable, la operación aplica su alternativa disponible y debe revisarse el perfil informado en el resultado.
 
-Pulsa **Convertir imágenes RGB a CMYK** y espera. El informe se vuelve a analizar; una imagen de baja resolución seguirá generando su incidencia aunque su color ya sea CMYK. Los textos y vectores RGB no se convierten por esta herramienta. Revisa pieles, colores corporativos, degradados y transparencias con especial atención.
+- **Convertir imágenes RGB a CMYK**: transforma las imágenes rasterizadas RGB al perfil CMYK elegido y re-analiza el trabajo. Una imagen de baja resolución seguirá generando su incidencia aunque su color ya sea CMYK. Revisa pieles, colores corporativos, degradados y transparencias con especial atención.
+- **Convertir textos y vectores RGB a CMYK / 100 % K**: transforma los flujos vectoriales y de texto en `DeviceRGB` o `CalRGB`. Los textos y trazados en negro o gris neutro RGB (como el negro `(0, 0, 0)` generado por Word, Canva o Google Docs) pasan directamente a negro puro **100 % K** o escala de K limpia (evitando negro enriquecido en cuatro tintas) con sobreimpresión automática en textos negros; los vectores cromáticos RGB se convierten al perfil CMYK de destino.
 
 ### Pestaña Previsualización de Separaciones
 
-<!-- ui-controls: sepPageInput sepSimProfileSelect sepChanC sepChanM sepChanY sepChanK sepSimulatePaperChk sepPaperTypeSelect sepSimulateBlackInkChk sepViewMode -->
+<!-- ui-controls: sepPageInput sepSimProfileSelect sepChanC sepChanM sepChanY sepChanK sepSimulatePaperChk sepPaperTypeSelect sepSimulateBlackInkChk sepTacHeatmapChk sepTacLimitSelect sepShowBoxesChk sepViewMode -->
 <!-- ui-values: sepSimProfileSelect=default,PSOuncoated_v3_FOGRA52.icc,PSOcoated_v3.icc,ISOcoated_v2_300_bas.icc,ISOcoated_v2_eci.icc -->
 <!-- ui-values: sepPaperTypeSelect=uncoated,coated,newsprint,kraft -->
+<!-- ui-values: sepTacLimitSelect=240,280,300,320,340 -->
 <!-- ui-values: sepViewMode=color,grayscale -->
 
 El visor ayuda a comprobar qué ocurre al activar o desactivar canales y cómo cambia la apariencia simulada. Trabaja sobre el documento disponible del trabajo, incluida su versión corregida cuando existe. Es una previsualización rasterizada; no es una prueba contractual ni una medida de densidad tomada en una prensa.
@@ -330,6 +332,8 @@ El visor ayuda a comprobar qué ocurre al activar o desactivar canales y cómo c
 | Sin Negro CMY | Desactiva K. Ayuda a localizar contribuciones CMY y a revisar un supuesto negro puro. |
 | Solo Plancha K | Aísla el canal negro. Resulta útil para textos y códigos. |
 | Solo Cian | Aísla C para inspeccionar esa contribución. Para M o Y, usa las casillas. |
+| Mapa de Calor TAC y Límite | Activa la superposición de alerta sobre zonas cuyo TAC excede el límite elegido (`240 %`, `280 %`, `300 %`, `320 %` o `340 %`), mostrando el exceso moderado en ámbar y el severo (`+30 %`) en rojo neón, junto con el pico máximo y el porcentaje de área afectada. |
+| Guías de Cajas PDF | Superpone líneas discontinuas en verde (`TrimBox`), rojo-naranja (`BleedBox`) y azul (`MediaBox`) con sus dimensiones reales en milímetros. |
 | Modo de vista | Simulación Color o Película RIP Gris. La vista en gris de una sola plancha representa su intensidad de tinta. No genera una película certificada de producción. |
 
 La familia del perfil de simulación debe ser CMYK. Una selección inicial RGB puede requerir una alternativa CMYK para poder mostrar una simulación de imprenta. La apariencia del monitor y el procesamiento del visor influyen en lo que se ve; comprueba el resultado de producción con el flujo de color real.
@@ -468,9 +472,9 @@ La medición TAC posterior es estimada. Utiliza los resultados como diagnóstico
 
 ### Opciones de Taller en 1 Clic
 
-<!-- ui-controls: batchChkTrapping batchChkHairlines batchChkFonts batchChkGeometry batchChkMirrorBleed batchChkCmyk batchChkSpots batchChkIcc batchChkTac batchChkMarks -->
+<!-- ui-controls: batchChkTrapping batchChkHairlines batchChkFonts batchChkGeometry batchChkMirrorBleed batchChkCmyk batchChkCmykVectors batchChkSpots batchChkIcc batchChkTac batchChkMarks -->
 
-Este panel corrige **un trabajo**, con sus opciones seleccionadas. No es la cola de varios PDFs. Abre el taller, revisa las diez casillas, pulsa **Aplicar correcciones seleccionadas** y espera el informe del lote de acciones. Cerrar el panel no revierte las operaciones que ya hayan terminado.
+Este panel corrige **un trabajo**, con sus opciones seleccionadas. No es la cola de varios PDFs. Abre el taller, revisa las once casillas, pulsa **Aplicar correcciones seleccionadas** y espera el informe del lote de acciones. Cerrar el panel no revierte las operaciones que ya hayan terminado.
 
 | Casilla | Estado inicial | Qué incluye o qué debe comprobarse |
 | --- | --- | --- |
@@ -479,7 +483,8 @@ Este panel corrige **un trabajo**, con sus opciones seleccionadas. No es la cola
 | Fuentes | Activada | Trazado de páginas con incidencias de fuentes; se omite el trabajo pesado si no hace falta. |
 | Geometría y cajas | Activada | Normalización de corte y espacio de sangrado. No crea por sí sola contenido exterior. |
 | Extender el fondo al sangrado | Activada en perfiles de imprenta con sangre mayor que cero | Reflejo de los bordes sin reducir el diseño ni cambiar sus tintas. Revisar imágenes y elementos cercanos al corte. |
-| Imágenes RGB a CMYK | Activada | Conversión de imágenes en los destinos CMYK; no es conversión de todos los objetos. |
+| Imágenes RGB a CMYK | Activada | Conversión de imágenes en los destinos CMYK mediante perfil ICC. |
+| Textos y vectores RGB a CMYK / 100 % K | Activada en perfiles CMYK | Convierte texto/vector negro o gris neutro RGB a negro 100 % K puro (con sobreimpresión en textos negros) y cromáticos RGB a CMYK vía ICC. |
 | Tintas planas a CMYK | Desactivada | Descomposición de tintas comerciales tratables preservando las técnicas identificadas. |
 | OutputIntent ICC | Activada | Declaración ICC de destino del flujo. Revisar cuál queda informado en el resultado. |
 | Limitación TAC | Activada | Limitación de imágenes CMYK según el perfil. No garantiza que desaparezca cualquier exceso vectorial. |

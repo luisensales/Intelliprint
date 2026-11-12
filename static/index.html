@@ -844,10 +844,11 @@
                   Conversión Gestionada RGB → CMYK
                 </h5>
                 <p class="text-[11px] text-orange-700">
-                  Convierte todas las imágenes RGB del PDF al espacio CMYK mediante perfiles ICC con intención RELATIVE_COLORIMETRIC.
+                  Convierte imágenes, textos y trazados vectoriales RGB al espacio CMYK mediante perfiles ICC (pasando negros y grises neutros RGB a <strong>100 % K puro</strong> con sobreimpresión).
                   El PDF original no se modifica; se genera un nuevo archivo convertido para descargar.
                 </p>
-                <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                <p id="rgbVectorSummaryText" class="text-[11px] font-medium text-slate-700 hidden"></p>
+                <div class="flex flex-wrap gap-2 items-center">
                   <div class="flex items-center gap-2">
                     <label class="text-[11px] font-semibold text-orange-800">Perfil destino:</label>
                     <select id="cmykProfileChoice" class="text-[11px] border border-orange-300 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-orange-400 outline-none">
@@ -861,6 +862,10 @@
                   <button id="btnConvertCmyk" onclick="convertImagesToCmyk()"
                     class="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-sm">
                     <i class="fa-solid fa-wand-magic-sparkles"></i> Convertir imágenes RGB → CMYK
+                  </button>
+                  <button id="btnConvertVectorsCmyk" onclick="convertVectorsToCmyk()"
+                    class="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-sm">
+                    <i class="fa-solid fa-vector-square text-amber-400"></i> Convertir textos y vectores RGB → CMYK / 100% K
                   </button>
                 </div>
                 <!-- Estado de la conversión -->
@@ -1105,6 +1110,59 @@
                   </div>
                 </div>
 
+                <!-- Mapa de Calor TAC (> límite %) -->
+                <div class="border border-slate-200 rounded-xl p-3 bg-white space-y-2.5">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <i class="fa-solid fa-fire text-rose-600"></i> Mapa de Calor TAC (Exceso de Tinta)
+                    </span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" id="sepTacHeatmapChk" onchange="toggleTacHeatmap()" class="sr-only peer">
+                      <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-rose-600"></div>
+                    </label>
+                  </div>
+                  <p class="text-[11px] text-slate-500 leading-tight">
+                    Resalta en ámbar y rojo neón las zonas que superan la cobertura máxima de tinta (C+M+Y+K).
+                  </p>
+                  <div class="space-y-1.5 pt-1 border-t border-slate-100">
+                    <div class="flex items-center justify-between gap-2">
+                      <label for="sepTacLimitSelect" class="text-[11px] font-semibold text-slate-700">Límite TAC:</label>
+                      <select id="sepTacLimitSelect" onchange="updateSeparationPreview()" class="text-[11px] border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 font-medium">
+                        <option value="240">240 % (Prensa / Poroso)</option>
+                        <option value="280">280 % (Offset Conservador)</option>
+                        <option value="300" selected>300 % (ISO Coated FOGRA39)</option>
+                        <option value="320">320 % (Estucado Alto)</option>
+                        <option value="340">340 % (Límite Máximo)</option>
+                      </select>
+                    </div>
+                    <div id="sepTacLiveBadge" class="text-[11px] px-2 py-1 rounded bg-slate-50 border border-slate-200 text-slate-600 flex items-center justify-between">
+                      <span>Pico página: —</span>
+                      <span class="font-mono font-bold">—</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Guías de Cajas PDF (TrimBox, BleedBox, MediaBox) -->
+                <div class="border border-slate-200 rounded-xl p-3 bg-white space-y-2">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <i class="fa-solid fa-vector-square text-emerald-600"></i> Guías de Cajas PDF
+                    </span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" id="sepShowBoxesChk" onchange="updateSeparationPreview()" class="sr-only peer">
+                      <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
+                  <p class="text-[11px] text-slate-500 leading-tight">
+                    Superpone las líneas de corte neto, sangrado exterior y formato de medio del PDF.
+                  </p>
+                  <div class="flex flex-wrap gap-2 text-[10px] font-semibold pt-1 border-t border-slate-100">
+                    <span class="inline-flex items-center gap-1 text-emerald-700"><span class="w-2.5 h-0.5 bg-emerald-500 inline-block"></span> TrimBox</span>
+                    <span class="inline-flex items-center gap-1 text-orange-700"><span class="w-2.5 h-0.5 bg-orange-600 inline-block"></span> BleedBox</span>
+                    <span class="inline-flex items-center gap-1 text-blue-700"><span class="w-2.5 h-0.5 bg-blue-600 inline-block"></span> MediaBox</span>
+                  </div>
+                </div>
+
                 <!-- Mode & Options -->
                 <div class="space-y-2 pt-1 border-t border-slate-200 text-xs">
                   <div class="flex items-center justify-between">
@@ -1138,6 +1196,9 @@
                   <img id="sepPreviewImg" src="" alt="Previsualización de separación" class="max-h-[560px] w-auto object-contain rounded shadow-lg transition-opacity duration-200 hidden">
                   <div id="sepSoftProofBadge" class="hidden absolute top-2 right-2 bg-amber-500/95 text-slate-950 font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-md shadow-md backdrop-blur-xs flex items-center gap-1.5 border border-amber-300">
                     <i class="fa-solid fa-scroll text-slate-900"></i> <span id="sepSoftProofBadgeText">Soft Proof: Offset natural</span>
+                  </div>
+                  <div id="sepTacCanvasBadge" class="hidden absolute bottom-2 right-2 bg-rose-600/95 text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-md shadow-md backdrop-blur-xs flex items-center gap-1.5 border border-rose-300">
+                    <i class="fa-solid fa-fire text-amber-200"></i> <span id="sepTacCanvasBadgeText">TAC Heatmap &gt; 300%</span>
                   </div>
                 </div>
                 <div id="sepEmptyNotice" class="text-slate-400 text-xs text-center py-12">
@@ -1457,6 +1518,17 @@
             </div>
           </div>
           <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-red-100 text-red-700 rounded border border-red-200 shrink-0 ml-2">Crítico</span>
+        </label>
+
+        <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="batchChkCmykVectors" checked class="rounded accent-emerald-600 w-4 h-4">
+            <div>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">6b. Textos y Vectores RGB → CMYK / 100% K Puro</p>
+              <p class="text-[11px] text-slate-500">Convierte negro RGB (0,0,0) en negro puro 100% K con sobreimpresión y cromáticos RGB mediante ICC</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded border border-orange-200 shrink-0 ml-2">Preimpresión</span>
         </label>
 
         <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
@@ -4644,10 +4716,25 @@
           imagesSummaryEl.innerHTML = `<strong>${inv.length}</strong> imágenes analizadas · <span class="${nonCmykCount > 0 ? 'text-amber-600 font-bold' : 'text-slate-500'}">${nonCmykCount} en RGB</span> · <span class="${lowResCount > 0 ? 'text-red-600 font-bold' : 'text-slate-500'}">${lowResCount} baja resolución</span>`;
         }
 
-        // Mostrar botón "Convertir a CMYK" si hay imágenes RGB
+        // Mostrar botón "Convertir a CMYK" si hay imágenes o textos/vectores RGB en perfil CMYK
+        const rgbVecStats = data.job_summary?.rgb_vector_stats || {};
+        const rgbVecTexts = Number(rgbVecStats.rgb_text_ops) || 0;
+        const rgbVecBlackTexts = Number(rgbVecStats.rgb_black_text_ops) || 0;
+        const rgbVecShapes = Number(rgbVecStats.rgb_vector_ops) || 0;
+        const rgbVecTotal = rgbVecTexts + rgbVecShapes;
+        const reqColorFamily = (data.job_summary?.required_color_family || 'CMYK').toUpperCase();
+        const rgbVecSummaryEl = document.getElementById('rgbVectorSummaryText');
+        if (rgbVecSummaryEl) {
+          if (rgbVecTotal > 0 && reqColorFamily === 'CMYK') {
+            rgbVecSummaryEl.textContent = `Vectores/textos RGB detectados: ${rgbVecTexts} op(s) de texto (${rgbVecBlackTexts} en negro RGB) y ${rgbVecShapes} trazado(s) vectorial(es).`;
+            rgbVecSummaryEl.classList.remove('hidden');
+          } else {
+            rgbVecSummaryEl.classList.add('hidden');
+          }
+        }
         const btnCmyk = document.getElementById('btnShowCmykPanel');
         if (btnCmyk) {
-          if (nonCmykCount > 0) {
+          if (nonCmykCount > 0 || (rgbVecTotal > 0 && reqColorFamily === 'CMYK')) {
             btnCmyk.classList.remove('hidden');
             btnCmyk.classList.add('flex');
           } else {
@@ -5951,6 +6038,94 @@
       }
     }
 
+    async function convertVectorsToCmyk() {
+      const operationJobId = currentJobId, operationReport = currentReport;
+      if (!currentJobId) {
+        alert('No hay ningún trabajo activo. Sube un PDF primero.');
+        return;
+      }
+
+      const profileChoice = document.getElementById('cmykProfileChoice').value;
+      const btn = document.getElementById('btnConvertVectorsCmyk');
+      const statusEl = document.getElementById('cmykConversionStatus');
+      const origHtml = btn.innerHTML;
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Convirtiendo vectores...';
+      statusEl.classList.remove('hidden');
+      statusEl.innerHTML = `
+        <div class="flex items-center gap-2 text-slate-700 text-xs">
+          <i class="fa-solid fa-spinner fa-spin"></i>
+          <span>Convirtiendo textos y vectores RGB a CMYK / 100 % K puro con sobreimpresión…</span>
+        </div>`;
+
+      const formData = new FormData();
+      if (profileChoice === 'embedded') {
+        formData.append('use_embedded_icc', 'true');
+      } else {
+        formData.append('use_embedded_icc', 'false');
+        formData.append('custom_icc', profileChoice);
+      }
+
+      try {
+        const res = await fetch(`/api/convert-vectors-cmyk/${operationJobId}`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (currentJobId !== operationJobId || currentReport !== operationReport) return;
+
+        if (!res.ok || data.status !== 'success') {
+          const errMsg = data.detail || 'Error desconocido';
+          statusEl.innerHTML = `
+            <div class="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+              <i class="fa-solid fa-circle-xmark mt-0.5 text-red-500"></i>
+              <div>
+                <p class="font-semibold">Error en la conversión vectorial</p>
+                <p class="mt-0.5">${escapeHtml(errMsg)}</p>
+              </div>
+            </div>`;
+          return;
+        }
+
+        statusEl.innerHTML = `
+          <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 space-y-1">
+            <p class="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+              <i class="fa-solid fa-circle-check text-emerald-600"></i>
+              Conversión vectorial CMYK completada: ${data.text_ops_converted} texto(s) y ${data.vector_ops_converted} trazado(s) (${data.pure_k_ops} en 100 % K puro, ${data.chromatic_cmyk_ops} cromáticos ICC)
+            </p>
+            <p class="text-[11px] text-emerald-700">
+              <i class="fa-solid fa-arrow-up mr-1"></i>
+              El botón de descarga arriba ya apunta al PDF vectorial actualizado.
+            </p>
+          </div>`;
+
+        const pdfBtn = document.getElementById('downloadPdfBtn');
+        const pdfBtnLabel = document.getElementById('downloadPdfBtnLabel');
+        if (pdfBtn) {
+          pdfBtn.href = data.download_url;
+          pdfBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+          pdfBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+        }
+        if (pdfBtnLabel) {
+          pdfBtnLabel.textContent = 'Descargar PDF CMYK';
+        }
+
+        currentReport = data.report;
+        renderResults(currentReport);
+        updateSeparationPreview();
+      } catch (err) {
+        statusEl.innerHTML = `
+          <div class="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+            <i class="fa-solid fa-circle-xmark mt-0.5"></i>
+            <span>Error de red o del servidor: ${escapeHtml(err.message)}</span>
+          </div>`;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+
     // -----------------------------------------------------------------------
     // Previsualizador de Separaciones de Color (Acrobat Output Preview)
     // -----------------------------------------------------------------------
@@ -6194,6 +6369,13 @@
       const profSel = document.getElementById('sepSimProfileSelect');
       if (profSel) profSel.value = 'default';
 
+      const tacSel = document.getElementById('sepTacLimitSelect');
+      const reportObj = typeof currentReport !== 'undefined' ? currentReport : null;
+      const profileTac = parseInt(reportObj?.job_summary?.max_tac_limit || 300, 10);
+      if (tacSel && Array.from(tacSel.options || []).some(o => parseInt(o.value, 10) === profileTac)) {
+        tacSel.value = String(profileTac);
+      }
+
       updateSepNavButtons();
       updateSeparationPreview();
     }
@@ -6278,6 +6460,10 @@
       updateSeparationPreview();
     }
 
+    function toggleTacHeatmap() {
+      updateSeparationPreview();
+    }
+
     function setSepPreset(preset) {
       const chC = document.getElementById('sepChanC');
       const chM = document.getElementById('sepChanM');
@@ -6323,15 +6509,20 @@
         const simulatePaper = document.getElementById('sepSimulatePaperChk')?.checked || false;
         const paperType = document.getElementById('sepPaperTypeSelect')?.value || 'uncoated';
         const simulateBlack = document.getElementById('sepSimulateBlackInkChk')?.checked ?? true;
+        const tacHeatmap = document.getElementById('sepTacHeatmapChk')?.checked || false;
+        const tacLimit = parseInt(document.getElementById('sepTacLimitSelect')?.value || '300', 10) || 300;
+        const showBoxes = document.getElementById('sepShowBoxesChk')?.checked || false;
 
         const overlay = document.getElementById('sepLoadingOverlay');
         const imgEl = document.getElementById('sepPreviewImg');
         const notice = document.getElementById('sepEmptyNotice');
         const badge = document.getElementById('sepSoftProofBadge');
         const badgeText = document.getElementById('sepSoftProofBadgeText');
+        const tacBadge = document.getElementById('sepTacCanvasBadge');
+        const tacBadgeText = document.getElementById('sepTacCanvasBadgeText');
 
         if (badge) {
-          if (simulatePaper && mode === 'color') {
+          if (simulatePaper && mode === 'color' && !tacHeatmap) {
             const paperLabels = {
               'uncoated': 'Soft Proof: Offset no estucado (FOGRA52)',
               'coated': 'Soft Proof: Estucado brillante (FOGRA39/51)',
@@ -6344,9 +6535,17 @@
             badge.classList.add('hidden');
           }
         }
+        if (tacBadge) {
+          if (tacHeatmap) {
+            if (tacBadgeText) tacBadgeText.textContent = `Mapa de Calor TAC > ${tacLimit}%`;
+            tacBadge.classList.remove('hidden');
+          } else {
+            tacBadge.classList.add('hidden');
+          }
+        }
 
         if (overlay) overlay.classList.remove('hidden');
-        let url = `/api/separations/${activeJob}?page=${page}&c=${c}&m=${m}&y=${y}&k=${k}&mode=${mode}&dpi=110&icc=${encodeURIComponent(selectedProfile)}&t=${Date.now()}`;
+        let url = `/api/separations/${activeJob}?page=${page}&c=${c}&m=${m}&y=${y}&k=${k}&mode=${mode}&dpi=110&icc=${encodeURIComponent(selectedProfile)}&tac_heatmap=${tacHeatmap}&tac_limit=${tacLimit}&show_boxes=${showBoxes}&t=${Date.now()}`;
         if (simulatePaper && mode === 'color') {
           url += `&simulate_paper=true&paper_type=${encodeURIComponent(paperType)}&simulate_black=${simulateBlack}`;
         }
@@ -6386,6 +6585,19 @@
           if (!isNaN(headerTotal) && headerTotal >= 1 && headerTotal !== sepTotalPageCount) {
             sepTotalPageCount = headerTotal;
             updateSepNavButtons();
+          }
+
+          const tacMaxHdr = res.headers?.get?.('x-tac-max-pct');
+          const tacOverHdr = res.headers?.get?.('x-tac-over-area-pct');
+          const tacLiveEl = document.getElementById('sepTacLiveBadge');
+          if (tacLiveEl && tacMaxHdr !== null && tacMaxHdr !== undefined) {
+            const maxVal = parseFloat(tacMaxHdr);
+            const overArea = parseFloat(tacOverHdr || '0');
+            const isOver = !isNaN(maxVal) && maxVal > tacLimit;
+            tacLiveEl.className = isOver
+              ? 'text-[11px] px-2 py-1 rounded bg-rose-50 border border-rose-200 text-rose-800 flex items-center justify-between'
+              : 'text-[11px] px-2 py-1 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-between';
+            tacLiveEl.innerHTML = `<span>Pico: <strong>${isNaN(maxVal) ? '—' : maxVal.toFixed(1) + ' %'}</strong></span><span class="font-mono font-bold">${overArea > 0 ? overArea.toFixed(2) + '% área >' + tacLimit + '%' : 'OK ≤ ' + tacLimit + '%'}</span>`;
           }
 
           const blob = await res.blob();
@@ -6581,6 +6793,8 @@
           }
         }
         document.getElementById('batchChkMarks').checked = isPrint;
+        const cmykVecChk = document.getElementById('batchChkCmykVectors');
+        if (cmykVecChk) cmykVecChk.checked = isPrint;
 
         // Inspección de OutputIntent original: si ya tiene un perfil CMYK válido, respetar por defecto
         const origIcc = currentReport?.job_meta?.original_icc_info || currentReport?.job_summary?.icc_detected || {};
@@ -6634,6 +6848,7 @@
       const geometry    = document.getElementById('batchChkGeometry')?.checked ?? true;
       const mirrorBleed = document.getElementById('batchChkMirrorBleed')?.checked ?? true;
       const cmyk        = document.getElementById('batchChkCmyk')?.checked ?? true;
+      const cmykVectors = document.getElementById('batchChkCmykVectors')?.checked ?? true;
       const spots       = document.getElementById('batchChkSpots')?.checked ?? false;
       const icc         = document.getElementById('batchChkIcc')?.checked ?? true;
       const tac         = document.getElementById('batchChkTac')?.checked ?? true;
@@ -6653,6 +6868,7 @@
           geometry,
           mirror_bleed: mirrorBleed,
           cmyk_images: cmyk,
+          cmyk_vectors: cmykVectors,
           spot_colors: spots,
           icc,
           tac,

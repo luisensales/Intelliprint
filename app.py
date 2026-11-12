@@ -31,8 +31,8 @@ from spellcheck_engine import save_word_to_glossary
 from report_generator import generate_preflight_certificate_pdf
 from client_report_generator import generate_client_educational_report_pdf
 from issue_viewer import inspect_finding, render_issue_page, StaleIssueAnalysis
-from color_converter import convert_rgb_images_to_cmyk, extract_embedded_icc_to_tempfile
-from separations_viewer import render_page_separation
+from color_converter import convert_rgb_images_to_cmyk, convert_rgb_vectors_to_cmyk, extract_embedded_icc_to_tempfile
+from separations_viewer import render_page_separation, render_page_separation_with_meta
 from overprint_fixer import apply_overprint_to_dark_text, apply_overprint_to_technical_inks, fix_white_overprint, fix_rich_black_small_text
 from spot_converter import convert_spot_colors_to_cmyk
 from hairline_fixer import fix_hairlines
@@ -1938,6 +1938,7 @@ def get_latest_cumulative_pdf(job_meta: dict) -> Optional[str]:
         job_meta.get("overprint_fixed_pdf_path"),
         job_meta.get("spot_converted_pdf_path"),
         job_meta.get("varnish_overprint_pdf_path"),
+        job_meta.get("cmyk_vectors_converted_pdf_path"),
         job_meta.get("cmyk_converted_pdf_path"),
         job_meta.get("pdf_path"),
         job_meta.get("file_path"),
@@ -1974,6 +1975,7 @@ def register_cumulative_fix(job_data: dict, output_path: str | Path, fix_name: s
     })
     FIX_LABELS = {
         "cmyk_converted": "Conversión de imágenes a CMYK",
+        "cmyk_vectors_converted": "Conversión de textos y vectores RGB a CMYK / 100% K",
         "spot_converted": "Conversión de tintas planas a CMYK",
         "overprint_fixed": "Sobreimpresión 100% K y calado",
         "varnish_overprint": "Sobreimpresión de barnices y tintas técnicas",
@@ -2046,6 +2048,51 @@ def download_pdf_file(job_id: str):
         }
     )
 
+async def _parse_icc_form_options(
+    request: Request,
+    use_embedded_icc: bool,
+    custom_icc: Optional[str],
+) -> tuple[bool, Optional[str]]:
+    """Read optional FormData ICC overrides while keeping query params working."""
+    form = await request.form()
+    if "use_embedded_icc" in form:
+        choice = str(form["use_embedded_icc"]).lower()
+        if choice not in ("true", "false"):
+            raise HTTPException(status_code=400, detail="Selección ICC no válida.")
+        use_embedded_icc = choice == "true"
+    if "custom_icc" in form:
+        custom_icc = str(form["custom_icc"])
+    return use_embedded_icc, custom_icc
+
+
+def _resolve_target_cmyk_icc(
+    job_data: dict,
+    pdf_path: str,
+    use_embedded_icc: bool,
+    custom_icc: Optional[str],
+) -> tuple[str, Optional[str]]:
+    """Resolve destination CMYK ICC path and optional temporary extracted file."""
+    icc_dir = BASE_DIR / "icc_profiles"
+    if use_embedded_icc:
+        temp_icc_file = extract_embedded_icc_to_tempfile(pdf_path)
+        if temp_icc_file:
+            return temp_icc_file, temp_icc_file
+        fallback_name = job_data.get("job_meta", {}).get("selected_icc") or "ISOcoated_v2_eci.icc"
+        fallback_path = icc_dir / fallback_name
+        if not fallback_path.exists():
+            fallback_path = icc_dir / "ISOcoated_v2_300_bas.icc"
+        return str(fallback_path), None
+    if not custom_icc:
+        raise HTTPException(status_code=400, detail="Se requiere un perfil ICC personalizado.")
+    try:
+        selected_path, family = resolve_icc_profile(custom_icc)
+        if family != "CMYK":
+            raise ValueError("Selecciona un perfil ICC CMYK para convertir a CMYK.")
+        return str(selected_path), None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/convert-to-cmyk/{job_id}")
 async def convert_images_to_cmyk(
     job_id: str,
@@ -2058,15 +2105,7 @@ async def convert_images_to_cmyk(
     - use_embedded_icc=true  → usa el OutputIntent embebido en el PDF (o fallback FOGRA39)
     - use_embedded_icc=false → usa custom_icc (nombre de archivo en icc_profiles/)
     """
-    # The web selector posts FormData; keep query parameters for API clients.
-    form = await request.form()
-    if "use_embedded_icc" in form:
-        choice = str(form["use_embedded_icc"]).lower()
-        if choice not in ("true", "false"):
-            raise HTTPException(status_code=400, detail="Selección ICC no válida.")
-        use_embedded_icc = choice == "true"
-    if "custom_icc" in form:
-        custom_icc = str(form["custom_icc"])
+    use_embedded_icc, custom_icc = await _parse_icc_form_options(request, use_embedded_icc, custom_icc)
     return await run_in_threadpool(_convert_images_to_cmyk_sync, job_id, use_embedded_icc, custom_icc)
 
 
@@ -2087,33 +2126,7 @@ def _convert_images_to_cmyk_sync(job_id, use_embedded_icc, custom_icc):
     if not pdf_path or not os.path.exists(pdf_path):
         raise HTTPException(status_code=404, detail="PDF de origen no encontrado en el servidor.")
 
-    ICC_PROFILES_DIR = BASE_DIR / "icc_profiles"
-    dst_icc_path = None
-    temp_icc_file = None
-
-    if use_embedded_icc:
-        # Intentar extraer el ICC embebido en el PDF
-        temp_icc_file = extract_embedded_icc_to_tempfile(pdf_path)
-        if temp_icc_file:
-            dst_icc_path = temp_icc_file
-        else:
-            # Si no hay ICC embebido, usar el seleccionado en el job o el predeterminado
-            fallback_name = job_data.get("job_meta", {}).get("selected_icc") or "ISOcoated_v2_eci.icc"
-            fallback_path = ICC_PROFILES_DIR / fallback_name
-            if not fallback_path.exists():
-                fallback_path = ICC_PROFILES_DIR / "ISOcoated_v2_300_bas.icc"
-            dst_icc_path = str(fallback_path)
-    else:
-        if not custom_icc:
-            raise HTTPException(status_code=400, detail="Se requiere un perfil ICC personalizado.")
-        try:
-            selected_path, family = resolve_icc_profile(custom_icc)
-            if family != "CMYK":
-                raise ValueError("Selecciona un perfil ICC CMYK para convertir las imágenes.")
-            dst_icc_path = str(selected_path)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
+    dst_icc_path, temp_icc_file = _resolve_target_cmyk_icc(job_data, pdf_path, use_embedded_icc, custom_icc)
     output_path = JOBS_DIR / f"{safe_id}_cmyk_converted.pdf"
 
     try:
@@ -2165,6 +2178,110 @@ def _convert_images_to_cmyk_sync(job_id, use_embedded_icc, custom_icc):
         "report": job_data,
         "target_icc": Path(dst_icc_path).name if dst_icc_path else "ISO Coated v2"
     }
+
+
+@app.post("/api/convert-vectors-cmyk/{job_id}")
+async def convert_vectors_to_cmyk_endpoint(
+    job_id: str,
+    request: Request,
+    use_embedded_icc: bool = True,
+    custom_icc: Optional[str] = None,
+):
+    """Convierte textos y gráficos vectoriales RGB a CMYK / 100% K puro con sobreimpresión."""
+    use_embedded_icc, custom_icc = await _parse_icc_form_options(request, use_embedded_icc, custom_icc)
+    return await run_in_threadpool(_convert_vectors_to_cmyk_sync, job_id, use_embedded_icc, custom_icc)
+
+
+def _convert_vectors_to_cmyk_sync(job_id: str, use_embedded_icc: bool, custom_icc: Optional[str]):
+    safe_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(safe_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+
+    job_meta = job_data.get("job_meta", {})
+    pdf_path = get_latest_cumulative_pdf(job_meta)
+    if not pdf_path or not os.path.exists(pdf_path):
+        raise HTTPException(status_code=404, detail="PDF de origen no encontrado en el servidor.")
+
+    dst_icc_path, temp_icc_file = _resolve_target_cmyk_icc(job_data, pdf_path, use_embedded_icc, custom_icc)
+    output_path = JOBS_DIR / f"{safe_id}_cmyk_vectors_converted.pdf"
+
+    try:
+        conv_result = convert_rgb_vectors_to_cmyk(
+            pdf_path=pdf_path,
+            dst_icc_path=dst_icc_path,
+            output_path=str(output_path),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error durante la conversión vectorial: {e}")
+    finally:
+        if temp_icc_file and os.path.exists(temp_icc_file):
+            try:
+                os.unlink(temp_icc_file)
+            except Exception:
+                pass
+
+    if not conv_result.get("success") or conv_result.get("errors"):
+        errors = conv_result.get("errors", [])
+        raise HTTPException(status_code=500, detail=f"La conversión vectorial falló: {'; '.join(errors)}")
+
+    job_meta["has_cmyk_vectors_converted"] = True
+    job_meta["cmyk_vectors_converted_pdf_path"] = str(output_path)
+    register_cumulative_fix(job_data, output_path, "cmyk_vectors_converted")
+    refresh_job_analysis(job_data, output_path)
+
+    cert_path = JOBS_DIR / f"{safe_id}_ficha_tecnica.pdf"
+    try:
+        generate_preflight_certificate_pdf(job_data, cert_path)
+    except Exception as e:
+        print(f"[convert-vectors-cmyk] Aviso: no se pudo regenerar el certificado: {e}")
+
+    with open(job_json_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False, indent=2)
+
+    return {
+        "status": "success",
+        "job_id": safe_id,
+        "text_ops_converted": conv_result["text_ops_converted"],
+        "vector_ops_converted": conv_result["vector_ops_converted"],
+        "pure_k_ops": conv_result["pure_k_ops"],
+        "neutral_k_ops": conv_result["neutral_k_ops"],
+        "chromatic_cmyk_ops": conv_result["chromatic_cmyk_ops"],
+        "black_text_overprinted": conv_result["black_text_overprinted"],
+        "pages_modified": conv_result["pages_modified"],
+        "download_url": f"/api/download-cmyk-vectors/{safe_id}",
+        "findings": job_data["findings"],
+        "triple_result": job_data["triple_result"],
+        "report": job_data,
+        "target_icc": Path(dst_icc_path).name if dst_icc_path else "ISO Coated v2",
+    }
+
+
+@app.get("/api/download-cmyk-vectors/{job_id}")
+def download_cmyk_vectors_pdf(job_id: str):
+    """Descarga el PDF con textos y vectores convertidos a CMYK / 100% K."""
+    job_id = safe_job_id(job_id)
+    job_json_path = get_job_json_path(job_id)
+    if not job_json_path.exists():
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
+
+    converted_path = JOBS_DIR / f"{job_id}_cmyk_vectors_converted.pdf"
+    if not converted_path.exists():
+        raise HTTPException(status_code=404, detail="PDF vectorial CMYK no encontrado. Ejecuta la conversión primero.")
+
+    with open(job_json_path, "r", encoding="utf-8") as f:
+        job_data = json.load(f)
+    filename = job_data.get("job_meta", {}).get("filename", "documento.pdf")
+    clean_name = filename.replace(".pdf", "")
+
+    return FileResponse(
+        path=str(converted_path),
+        media_type="application/pdf",
+        filename=f"IntelliPrint_CMYK_Vectores_{clean_name}.pdf",
+    )
 
 
 @app.get("/api/download-cmyk/{job_id}")
@@ -3357,6 +3474,9 @@ def get_page_separation(
     simulate_paper: bool = False,
     paper_type: str = "coated",
     simulate_black: bool = True,
+    tac_heatmap: bool = False,
+    tac_limit: int = Query(300, ge=180, le=400),
+    show_boxes: bool = False,
 ):
     """
     Renderiza la simulación de separaciones de color CMYK para la página seleccionada.
@@ -3438,7 +3558,7 @@ def get_page_separation(
         except Exception:
             pass
         eff_page_index = max(0, min(total_pages - 1, page - 1))
-        img_bytes = render_page_separation(
+        img_bytes, sep_meta = render_page_separation_with_meta(
             pdf_path=target_pdf,
             page_index=eff_page_index,
             show_c=c,
@@ -3452,6 +3572,9 @@ def get_page_separation(
             simulate_paper=simulate_paper,
             paper_type=paper_type,
             simulate_black_ink=simulate_black,
+            show_tac_heatmap=tac_heatmap,
+            tac_limit=tac_limit,
+            show_boxes=show_boxes,
         )
         return Response(
             content=img_bytes,
@@ -3459,6 +3582,9 @@ def get_page_separation(
             headers={
                 "X-Total-Pages": str(total_pages),
                 "X-Current-Page": str(eff_page_index + 1),
+                "X-Tac-Max-Pct": str(sep_meta.get("tac_max_pct", 0.0)),
+                "X-Tac-Over-Area-Pct": str(sep_meta.get("tac_over_area_pct", 0.0)),
+                "X-Tac-Limit": str(sep_meta.get("tac_limit", tac_limit)),
                 "Cache-Control": "private, max-age=120",
             },
         )
@@ -3609,6 +3735,7 @@ def batch_fix_endpoint(
     geometry: bool = True,
     mirror_bleed: bool = True,
     cmyk_images: bool = True,
+    cmyk_vectors: Optional[bool] = None,
     spot_colors: bool = False,
     fonts: bool = True,
     tac: bool = True,
@@ -3830,6 +3957,35 @@ def batch_fix_endpoint(
                         and "rgb" not in (f.get("title") or "").lower()
                         and "rgb" not in (f.get("message") or "").lower()
                     ]
+
+            # 4c-bis. Conversión de textos y vectores RGB a CMYK / 100% K puro
+            run_cmyk_vectors = cmyk_images if cmyk_vectors is None else cmyk_vectors
+            if run_cmyk_vectors and profile["color_family"] == "CMYK":
+                step_vec_out = JOBS_DIR / f"{safe_id}_bstep_cmyk_vectors.pdf"
+                temp_files.append(step_vec_out)
+                dst_icc = ICC_DIR / "ISOcoated_v2_eci.icc"
+                if not dst_icc.exists():
+                    dst_icc = ICC_DIR / "ISOcoated_v2_300_bas.icc"
+                vec_res = convert_rgb_vectors_to_cmyk(
+                    pdf_path=str(current_in),
+                    dst_icc_path=str(dst_icc),
+                    output_path=str(step_vec_out),
+                )
+                if vec_res.get("success") and step_vec_out.exists():
+                    current_in = step_vec_out
+                    total_ops = vec_res.get("text_ops_converted", 0) + vec_res.get("vector_ops_converted", 0)
+                    title_vec = (
+                        f"Textos y Vectores RGB → CMYK / 100% K ({total_ops} ops, {vec_res.get('pure_k_ops', 0)} en K puro)"
+                        if total_ops > 0
+                        else "Textos y Vectores CMYK (0 trazados RGB)"
+                    )
+                    steps_applied.append({
+                        "action": "cmyk_vectors",
+                        "title": title_vec,
+                        "details": vec_res,
+                    })
+                    if total_ops > 0:
+                        job_meta["has_cmyk_vectors_converted"] = True
 
             # 4d. Descomposición de Tintas Planas / Pantone a CMYK
             if spot_colors:

@@ -10,6 +10,12 @@ Utiliza:
 from __future__ import annotations
 
 import io
+from pdf_graphics import (
+    overprint_state_command,
+    painting_components,
+    rewrite_page_graphics,
+    TEXT_SHOW,
+)
 from pdf_utils import atomic_output, copy_pdf
 from security_limits import release_pdf_memory
 import tempfile
@@ -271,3 +277,148 @@ def extract_embedded_icc_to_tempfile(pdf_path: str | Path) -> Optional[str]:
         print(f"[color_converter] Error extrayendo ICC embebido: {e}")
 
     return None
+
+
+class _RgbColorConverter:
+    """Translate RGB fill/stroke tuples into prepress-safe CMYK / 100% K."""
+
+    def __init__(
+        self,
+        transform: ImageCms.ImageCmsTransform,
+        pure_black_threshold: float = 0.08,
+        neutral_tolerance: float = 0.025,
+    ) -> None:
+        self.transform = transform
+        self.pure_black_threshold = float(pure_black_threshold)
+        self.neutral_tolerance = float(neutral_tolerance)
+        self._cache: dict[tuple[int, int, int], tuple[list[float], str]] = {}
+
+    def convert(self, rgb: tuple[float, ...]) -> tuple[list[float], str]:
+        r = min(1.0, max(0.0, float(rgb[0])))
+        g = min(1.0, max(0.0, float(rgb[1])))
+        b = min(1.0, max(0.0, float(rgb[2])))
+
+        spread = max(r, g, b) - min(r, g, b)
+        if spread <= self.neutral_tolerance:
+            if max(r, g, b) <= self.pure_black_threshold:
+                return [0.0, 0.0, 0.0, 1.0], "pure_k"
+            if min(r, g, b) >= 0.995:
+                return [0.0, 0.0, 0.0, 0.0], "neutral_k"
+            lum = (r + g + b) / 3.0
+            k_val = round(min(1.0, max(0.0, 1.0 - lum)), 4)
+            return [0.0, 0.0, 0.0, k_val], "neutral_k"
+
+        key = (round(r * 255), round(g * 255), round(b * 255))
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+
+        pixel = Image.new("RGB", (1, 1), key)
+        cmyk_px = ImageCms.applyTransform(pixel, self.transform)
+        c, m, y, k = cmyk_px.getpixel((0, 0))
+        del pixel, cmyk_px
+        out = ([round(c / 255.0, 4), round(m / 255.0, 4), round(y / 255.0, 4), round(k / 255.0, 4)], "chromatic_cmyk")
+        self._cache[key] = out
+        return out
+
+
+def convert_rgb_vectors_to_cmyk(
+    pdf_path: str | Path,
+    dst_icc_path: str | Path,
+    src_icc_path: Optional[str | Path] = None,
+    output_path: Optional[str | Path] = None,
+    pure_black_threshold: float = 0.08,
+    neutral_tolerance: float = 0.025,
+    overprint_black_text: bool = True,
+) -> dict:
+    """Convert RGB vector fills/strokes and text in a PDF to CMYK and pure 100% K."""
+    pdf_path = Path(pdf_path)
+    out_path = Path(output_path) if output_path else pdf_path
+    src_icc = Path(src_icc_path) if src_icc_path else DEFAULT_SRC_ICC
+    dst_icc = Path(dst_icc_path)
+
+    result = {
+        "success": False,
+        "text_ops_converted": 0,
+        "vector_ops_converted": 0,
+        "pure_k_ops": 0,
+        "neutral_k_ops": 0,
+        "chromatic_cmyk_ops": 0,
+        "black_text_overprinted": 0,
+        "pages_modified": 0,
+        "errors": [],
+    }
+
+    if not src_icc.exists():
+        result["errors"].append(f"Perfil ICC fuente no encontrado: {src_icc}")
+        return result
+    if not dst_icc.exists():
+        result["errors"].append(f"Perfil ICC destino no encontrado: {dst_icc}")
+        return result
+
+    try:
+        transform = _build_transform(src_icc, dst_icc)
+    except Exception as exc:
+        result["errors"].append(f"Error cargando perfiles ICC: {exc}")
+        return result
+
+    converter = _RgbColorConverter(
+        transform=transform,
+        pure_black_threshold=pure_black_threshold,
+        neutral_tolerance=neutral_tolerance,
+    )
+
+    try:
+        with atomic_output(out_path) as temporary:
+            with pikepdf.open(str(pdf_path)) as pdf:
+                def convert_op(operands, op, state, resources):
+                    fill, stroke = painting_components(op, operands, state)
+                    if not (fill or stroke):
+                        return [], []
+
+                    before, after = [], []
+                    is_text = op in TEXT_SHOW
+                    converted_any = False
+                    set_fill_overprint = False
+
+                    if fill and state["fill_cs"][0] in ("DeviceRGB", "CalRGB") and len(state["fill_color"]) >= 3:
+                        orig_fill = [float(v) for v in state["fill_color"][:3]]
+                        cmyk_fill, kind = converter.convert(tuple(orig_fill))
+                        before.append((cmyk_fill, pikepdf.Operator("k")))
+                        after.append((orig_fill, pikepdf.Operator("rg")))
+                        result[kind + "_ops"] += 1
+                        converted_any = True
+                        if overprint_black_text and is_text and kind == "pure_k" and not state["op"]:
+                            set_fill_overprint = True
+
+                    if stroke and state["stroke_cs"][0] in ("DeviceRGB", "CalRGB") and len(state["stroke_color"]) >= 3:
+                        orig_stroke = [float(v) for v in state["stroke_color"][:3]]
+                        cmyk_stroke, kind = converter.convert(tuple(orig_stroke))
+                        before.append((cmyk_stroke, pikepdf.Operator("K")))
+                        after.append((orig_stroke, pikepdf.Operator("RG")))
+                        result[kind + "_ops"] += 1
+                        converted_any = True
+
+                    if set_fill_overprint:
+                        before.append(overprint_state_command(resources, True, state["OP"], 1))
+                        after.insert(0, overprint_state_command(resources, state["op"], state["OP"], state["OPM"]))
+                        result["black_text_overprinted"] += 1
+
+                    if converted_any:
+                        if is_text:
+                            result["text_ops_converted"] += 1
+                        else:
+                            result["vector_ops_converted"] += 1
+                    return before, after
+
+                for page in pdf.pages:
+                    if rewrite_page_graphics(pdf, page, convert_op):
+                        result["pages_modified"] += 1
+                pdf.save(str(temporary))
+                release_pdf_memory()
+        result["success"] = True
+    except Exception as exc:
+        result["errors"].append(f"Error convirtiendo vectores/textos RGB a CMYK: {exc}")
+        traceback.print_exc()
+
+    return result

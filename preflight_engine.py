@@ -256,6 +256,24 @@ def scan_content_stream(commands, resources, page_num, overprint_data, initial_s
                                 "message": f"Texto de {font_pt:.1f} pt con negro enriquecido (C:{int(fc*100)}% M:{int(fm*100)}% Y:{int(fy*100)}% K:{int(fk*100)}%) en pág {page_num}. En texto < 12 pt el negro enriquecido provoca halos de color por desajuste de registro. Debe usarse negro puro 0/0/0/100."
                             })
 
+            # Telemetría de texto en RGB (candidato a 100% K / conversión CMYK vectorial)
+            if _has_visible_text(op_str, operands):
+                if is_fill and state['fill_cs'][0] in ('DeviceRGB', 'CalRGB') and len(state['fill_color']) >= 3:
+                    overprint_data["rgb_text_ops"] = overprint_data.get("rgb_text_ops", 0) + 1
+                    fc_rgb = state['fill_color'][:3]
+                    if max(fc_rgb) <= 0.08 and (max(fc_rgb) - min(fc_rgb)) <= 0.025:
+                        overprint_data["rgb_black_text_ops"] = overprint_data.get("rgb_black_text_ops", 0) + 1
+                elif is_stroke and state['stroke_cs'][0] in ('DeviceRGB', 'CalRGB') and len(state['stroke_color']) >= 3:
+                    overprint_data["rgb_text_ops"] = overprint_data.get("rgb_text_ops", 0) + 1
+
+        # Vector fills & strokes (RGB telemetry + existing spot/white/hairline checks)
+        if op_str in ['f', 'F', 'f*', 's', 'S', 'b', 'b*', 'B', 'B*']:
+            is_v_fill, is_v_stroke = painting_components(op_str, operands, state)
+            if (is_v_fill and state['fill_cs'][0] in ('DeviceRGB', 'CalRGB')) or (
+                is_v_stroke and state['stroke_cs'][0] in ('DeviceRGB', 'CalRGB')
+            ):
+                overprint_data["rgb_vector_ops"] = overprint_data.get("rgb_vector_ops", 0) + 1
+
         # Vector fills
         if op_str in ['f', 'F', 'f*', 'b', 'b*', 'B', 'B*']:
             cs_type, spot_name = state['fill_cs']
@@ -906,6 +924,9 @@ class IntelliPrintEngine:
             "pantone_knockout": 0,
             "min_hairline_threshold": min_hairline_threshold,
             "hairlines_count": 0,
+            "rgb_text_ops": 0,
+            "rgb_black_text_ops": 0,
+            "rgb_vector_ops": 0,
             "incidents": []
         }
 
@@ -1057,6 +1078,11 @@ class IntelliPrintEngine:
                     "varnish_knockout": overprint_data["varnish_knockout"],
                     "pantone_overprint": overprint_data["pantone_overprint"],
                     "pantone_knockout": overprint_data["pantone_knockout"]
+                },
+                "rgb_vector_stats": {
+                    "rgb_text_ops": overprint_data.get("rgb_text_ops", 0),
+                    "rgb_black_text_ops": overprint_data.get("rgb_black_text_ops", 0),
+                    "rgb_vector_ops": overprint_data.get("rgb_vector_ops", 0),
                 }
             },
             "triple_result": {

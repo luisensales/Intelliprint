@@ -773,3 +773,59 @@ test('inline script initializes cleanly with real DOM IDs and executes full rend
   const sepActiveJob = vm.runInContext('sepActiveJobId', ctx);
   assert.equal(sepActiveJob, 'job_full_boot');
 });
+
+test('separations preview passes TAC heatmap, TAC limit, and box guides params and renders TAC telemetry badge', async () => {
+  const document = fakeDocument();
+  document.getElementById('sepTacHeatmapChk').checked = true;
+  document.getElementById('sepTacLimitSelect').value = '280';
+  document.getElementById('sepShowBoxesChk').checked = true;
+  document.getElementById('sepViewMode').value = 'color';
+
+  const requestedUrls = [];
+  const context = {
+    document,
+    currentJobId: 'job_tac_boxes',
+    currentReport: { job_summary: { max_tac_limit: 280 } },
+    selectedFile: null,
+    sepActiveJobId: null,
+    sepCurrentPage: 1,
+    sepTotalPageCount: 1,
+    sepAbortController: null,
+    sepRequestSeq: 0,
+    sepBlobUrl: null,
+    sepDebounce: null,
+    disabledSpotColors: new Set(),
+    setTimeout: (fn) => { fn(); return 1; },
+    clearTimeout: () => {},
+    URL: { createObjectURL: () => 'blob:mock', revokeObjectURL: () => {} },
+    fetch: async (url) => {
+      requestedUrls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (k) => {
+            const lk = k.toLowerCase();
+            if (lk === 'x-total-pages') return '1';
+            if (lk === 'x-tac-max-pct') return '342.5';
+            if (lk === 'x-tac-over-area-pct') return '14.25';
+            return null;
+          }
+        },
+        blob: async () => ({ size: 64 })
+      };
+    }
+  };
+
+  loadFunctions(context, ['updateSeparationPreview', 'updateSepNavButtons']);
+  context.updateSeparationPreview();
+  await new Promise(r => setImmediate(r));
+
+  assert.equal(requestedUrls.length, 1);
+  assert.ok(requestedUrls[0].includes('tac_heatmap=true'));
+  assert.ok(requestedUrls[0].includes('tac_limit=280'));
+  assert.ok(requestedUrls[0].includes('show_boxes=true'));
+  const badgeHtml = document.getElementById('sepTacLiveBadge').innerHTML;
+  assert.ok(badgeHtml.includes('342.5 %'));
+  assert.ok(badgeHtml.includes('14.25%'));
+});
