@@ -154,7 +154,7 @@ def validate_pdf_gwg(
     total_pages = len(doc)
 
     # 1. COMPROBACIÓN: ESTRUCTURA Y CAJAS DE PÁGINA (GEOMETRY & BOXES)
-    _check_geometry_and_boxes(doc, std, checks)
+    _check_geometry_and_boxes(doc, std, checks, job_data=job_data)
 
     # 2. COMPROBACIÓN: INTENCIÓN DE SALIDA Y PERFILES (OUTPUTINTENT & COLOR)
     _check_output_intent_and_color(doc, std, job_data, checks)
@@ -256,14 +256,19 @@ def validate_pdf_gwg(
 # SUBMÓDULOS DE COMPROBACIÓN INDIVIDUAL CON EVIDENCIAS
 # ---------------------------------------------------------------------------
 
-def _check_geometry_and_boxes(doc: pymupdf.Document, std: Dict[str, Any], checks: List[Dict[str, Any]]):
+def _check_geometry_and_boxes(doc: pymupdf.Document, std: Dict[str, Any], checks: List[Dict[str, Any]], job_data: Optional[Dict[str, Any]] = None):
     """Verifica cajas de página (TrimBox, BleedBox, MediaBox), sangrado y márgenes de seguridad."""
     has_explicit_trim = False
     bleed_errors = []
     safety_errors = []
+    has_any_bleed_req = False
 
     min_bleed_mm = std.get("min_bleed_mm", 3.0)
     min_safety_mm = std.get("min_safety_margin_mm", 4.0)
+
+    # Determinar si el trabajo completo fue evaluado previamente como sin necesidad de sangrado
+    job_summary = (job_data.get("job_summary") or {}) if job_data else {}
+    job_bleed_status = job_summary.get("bleed_status")
 
     for pno in range(len(doc)):
         page = doc[pno]
@@ -275,15 +280,29 @@ def _check_geometry_and_boxes(doc: pymupdf.Document, std: Dict[str, Any], checks
         if abs(t.width - m.width) > 1.0 or abs(t.height - m.height) > 1.0:
             has_explicit_trim = True
 
-        # Comprobar sangrado perimetral (diferencia entre BleedBox y TrimBox en mm)
-        left_bleed_mm = (t.x0 - b.x0) * 25.4 / 72.0
-        top_bleed_mm = (t.y0 - b.y0) * 25.4 / 72.0
-        right_bleed_mm = (b.x1 - t.x1) * 25.4 / 72.0
-        bot_bleed_mm = (b.y1 - t.y1) * 25.4 / 72.0
-        min_measured_bleed = min(left_bleed_mm, top_bleed_mm, right_bleed_mm, bot_bleed_mm)
+        # Comprobar si la página realmente requiere sangrado (tiene fondos o elementos al corte)
+        page_needs_bleed = True
+        if job_bleed_status == "NOT_REQUIRED":
+            page_needs_bleed = False
+        else:
+            try:
+                from preflight_engine import detect_page_edge_elements
+                page_edge_elems = detect_page_edge_elements(page)
+                page_needs_bleed = len(page_edge_elems) > 0
+            except Exception:
+                page_needs_bleed = True
 
-        if min_bleed_mm > 0.0 and min_measured_bleed < (min_bleed_mm - 0.5):
-            bleed_errors.append((pno + 1, round(max(0.0, min_measured_bleed), 1)))
+        if page_needs_bleed:
+            has_any_bleed_req = True
+            # Comprobar sangrado perimetral (diferencia entre BleedBox y TrimBox en mm)
+            left_bleed_mm = (t.x0 - b.x0) * 25.4 / 72.0
+            top_bleed_mm = (t.y0 - b.y0) * 25.4 / 72.0
+            right_bleed_mm = (b.x1 - t.x1) * 25.4 / 72.0
+            bot_bleed_mm = (b.y1 - t.y1) * 25.4 / 72.0
+            min_measured_bleed = min(left_bleed_mm, top_bleed_mm, right_bleed_mm, bot_bleed_mm)
+
+            if min_bleed_mm > 0.0 and min_measured_bleed < (min_bleed_mm - 0.5):
+                bleed_errors.append((pno + 1, round(max(0.0, min_measured_bleed), 1)))
 
     # Item 1: Definición de Cajas PDF/X (TrimBox y BleedBox)
     if has_explicit_trim or std["id"] == "gwg_newspaper":
@@ -318,19 +337,19 @@ def _check_geometry_and_boxes(doc: pymupdf.Document, std: Dict[str, Any], checks
         })
 
     # Item 2: Sangrado Perimetral de Producción
-    if min_bleed_mm == 0.0 or not bleed_errors:
+    if min_bleed_mm == 0.0 or not has_any_bleed_req or not bleed_errors:
         checks.append({
             "id": "CHK_BLEED",
             "category": "Geometría y Cajas de Página",
             "title": f"Sangrado Perimetral (Mínimo {min_bleed_mm} mm)",
             "status": "PASS",
-            "standard_criterion": f"Sangrado mínimo exigido por {std['name']}: {min_bleed_mm:.1f} mm en los 4 costados.",
+            "standard_criterion": f"Sangrado mínimo exigido por {std['name']}: {min_bleed_mm:.1f} mm en los 4 costados (blanco intencionado exento).",
             "evidence": {
-                "summary": f"Sangrado conforme verificado (≥ {min_bleed_mm:.1f} mm).",
-                "details": f"Margen de sangre suficiente para tolerancias de guillotina trilateral.",
+                "summary": "Sangrado no requerido (fondos y márgenes blancos intencionados)." if not has_any_bleed_req else f"Sangrado conforme verificado (≥ {min_bleed_mm:.1f} mm).",
+                "details": "El documento no presenta fondos ni elementos al corte que exijan sangrado exterior." if not has_any_bleed_req else "Margen de sangre suficiente para tolerancias de guillotina trilateral.",
             },
             "workshop_impact": "Corte limpio en guillotina sin aparición de filetes blancos en los cantos.",
-            "action_required": "Ninguna.",
+            "action_required": "Ninguna. Geometría y sangrado conformes para taller.",
             "action_type": "ok",
         })
     else:

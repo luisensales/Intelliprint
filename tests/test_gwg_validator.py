@@ -151,6 +151,36 @@ class GwgValidatorTests(unittest.TestCase):
         finally:
             app.JOBS_DIR = orig_jobs
 
+    def test_white_background_document_does_not_require_bleed(self):
+        """Verifica que documentos con fondo blanco y sin elementos a ras de corte no exigen sangrado."""
+        from preflight_engine import IntelliPrintEngine
+
+        white_pdf = self.jobs_dir / "white_doc.pdf"
+        doc = pymupdf.open()
+        p = doc.new_page(width=595.3, height=841.9)
+        # Añadir texto centrado con márgenes amplios (fondo blanco puro)
+        p.insert_text(pymupdf.Point(100, 100), "Documento comercial con fondo blanco", fontsize=14)
+        doc.save(str(white_pdf))
+        doc.close()
+
+        # 1. Preflight técnico
+        engine = IntelliPrintEngine()
+        preflight_report = engine.run_preflight(str(white_pdf), "OFFSET_300")
+        bleed_findings = [f for f in preflight_report.get("findings", []) if "BLEED" in f.get("rule_id", "")]
+        self.assertEqual(len(bleed_findings), 0, "No debe generar incidencias de sangrado en fondo blanco")
+        self.assertEqual(preflight_report.get("job_summary", {}).get("bleed_status"), "NOT_REQUIRED")
+
+        # 2. Validación GWG
+        gwg_report = gwg_validator.validate_pdf_gwg(
+            pdf_path=white_pdf,
+            standard_id="gwg_2015_sheetfed",
+            job_data=preflight_report
+        )
+        bleed_chk = next((c for c in gwg_report["checks"] if c["id"] == "CHK_BLEED"), None)
+        self.assertIsNotNone(bleed_chk)
+        self.assertEqual(bleed_chk["status"], "PASS")
+        self.assertIn("no requerido", bleed_chk["evidence"]["summary"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()

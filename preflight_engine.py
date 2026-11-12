@@ -365,12 +365,63 @@ def is_color_white(color):
     return False
 
 
+def check_trim_edges_ink(page, trim=None, dpi=72, threshold=246, margin_mm=1.5):
+    """
+    Renders a fast low-resolution (72 dpi) preview of the page inside its TrimBox
+    and inspects the perimeter strip (approx. 1.5 mm / ~4 px).
+    Returns a dict with bools indicating whether actual printed ink (> 2% coverage / non-white)
+    is present at each border ('top', 'bottom', 'left', 'right').
+    In prepress, a white background or margin does not require physical bleed (blanco intencionado).
+    """
+    try:
+        if trim is None:
+            trim = page.trimbox if (page.trimbox.width > 0 and page.trimbox.height > 0) else page.mediabox
+        pix = page.get_pixmap(dpi=dpi, clip=trim, alpha=False)
+        pw, ph, n = pix.width, pix.height, pix.n
+        if pw <= 0 or ph <= 0:
+            return {'left': True, 'top': True, 'right': True, 'bottom': True}
+
+        samples = pix.samples
+        stride = pw * n
+        band_px = max(1, int(round(margin_mm * dpi / 25.4)))
+
+        # Top band: first band_px rows
+        top_bytes = samples[:band_px * stride]
+        has_ink_top = min(top_bytes) < threshold if top_bytes else False
+
+        # Bottom band: last band_px rows
+        bot_bytes = samples[-(band_px * stride):]
+        has_ink_bot = min(bot_bytes) < threshold if bot_bytes else False
+
+        # Left and Right bands: slice per row
+        left_bytes = bytearray()
+        right_bytes = bytearray()
+        edge_width_bytes = band_px * n
+        for y in range(ph):
+            row_start = y * stride
+            left_bytes.extend(samples[row_start : row_start + edge_width_bytes])
+            right_bytes.extend(samples[row_start + stride - edge_width_bytes : row_start + stride])
+
+        has_ink_left = min(left_bytes) < threshold if left_bytes else False
+        has_ink_right = min(right_bytes) < threshold if right_bytes else False
+
+        return {
+            'top': bool(has_ink_top),
+            'bottom': bool(has_ink_bot),
+            'left': bool(has_ink_left),
+            'right': bool(has_ink_right)
+        }
+    except Exception:
+        return {'left': True, 'top': True, 'right': True, 'bottom': True}
+
+
 def detect_page_edge_elements(page, tol_pt=2.83):
     """
     Detects whether a PDF page contains images or non-white vector fills/backgrounds
     that touch or extend beyond the TrimBox edges (a ras de página / bleeding).
     tol_pt = 2.83 pt corresponds to ~1 mm tolerance.
     Calculates extension (mm) beyond TrimBox on each touching edge.
+    Verifies that printed ink actually reaches the TrimBox perimeter (excludes pure white margins).
     """
     trim = page.trimbox
     if trim.width <= 0 or trim.height <= 0:
@@ -457,7 +508,30 @@ def detect_page_edge_elements(page, tol_pt=2.83):
                 }
             })
 
-    return edge_elements
+    if not edge_elements:
+        return []
+
+    # 3. Verificación de tinta real en el perímetro de corte (excluye falsos positivos de márgenes blancos)
+    edges_ink = check_trim_edges_ink(page, trim)
+    verified_elements = []
+    for elem in edge_elements:
+        active_touches = {}
+        active_exts = {}
+        for edge in ('left', 'top', 'right', 'bottom'):
+            if elem['touches'].get(edge) and edges_ink.get(edge):
+                active_touches[edge] = True
+                active_exts[edge] = elem['exts'].get(edge)
+            else:
+                active_touches[edge] = False
+                active_exts[edge] = None
+        if any(active_touches.values()):
+            elem['touches'] = active_touches
+            elem['exts'] = active_exts
+            valid_exts = [e for e in active_exts.values() if e is not None]
+            elem['min_ext'] = max(0.0, min(valid_exts)) if valid_exts else 0.0
+            verified_elements.append(elem)
+
+    return verified_elements
 
 
 class IntelliPrintEngine:

@@ -1442,10 +1442,10 @@
             <input type="checkbox" id="batchChkMirrorBleed" checked class="rounded accent-emerald-600 w-4 h-4">
             <div>
               <p class="text-xs font-bold text-slate-900 group-hover:text-indigo-700 transition">5. Extender el fondo al sangrado (reflejo)</p>
-              <p class="text-[11px] text-slate-500">Prolonga los bordes del diseño sin reducirlo ni cambiar sus tintas. Revisa el resultado antes de imprimir.</p>
+              <p id="batchLblMirrorBleedDesc" class="text-[11px] text-slate-500">Prolonga los bordes del diseño sin reducirlo ni cambiar sus tintas. Revisa el resultado antes de imprimir.</p>
             </div>
           </div>
-          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded border border-indigo-200 shrink-0 ml-2">Taller</span>
+          <span id="batchBadgeMirrorBleed" class="text-[10px] font-semibold px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded border border-indigo-200 shrink-0 ml-2">Taller</span>
         </label>
 
         <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
@@ -6522,7 +6522,26 @@
         const profileId = currentReport?.job_meta?.profile_id || 'OFFSET_300';
         const profile = cachedTargetProfiles.find(p => p.id === profileId);
         const isPrint = profile ? profile.color_family === 'CMYK' : profileId !== 'PANTALLA_RGB';
-        document.getElementById('batchChkMirrorBleed').checked = isPrint && (profile?.min_bleed_mm ?? 3) > 0;
+        const bleedStatus = currentReport?.job_summary?.bleed_status;
+        const needsBleed = bleedStatus !== 'NOT_REQUIRED';
+
+        const mirrorBleedChk = document.getElementById('batchChkMirrorBleed');
+        if (mirrorBleedChk) {
+          mirrorBleedChk.checked = isPrint && (profile?.min_bleed_mm ?? 3) > 0 && needsBleed;
+        }
+        const mirrorBleedBadge = document.getElementById('batchBadgeMirrorBleed');
+        const mirrorBleedDesc = document.getElementById('batchLblMirrorBleedDesc');
+        if (mirrorBleedBadge && mirrorBleedDesc) {
+          if (!needsBleed) {
+            mirrorBleedBadge.textContent = 'No requerido';
+            mirrorBleedBadge.className = 'text-[10px] font-semibold px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded border border-slate-200 shrink-0 ml-2';
+            mirrorBleedDesc.textContent = 'No requerido: el documento tiene fondo blanco y márgenes amplios sin elementos al corte.';
+          } else {
+            mirrorBleedBadge.textContent = 'Taller';
+            mirrorBleedBadge.className = 'text-[10px] font-semibold px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded border border-indigo-200 shrink-0 ml-2';
+            mirrorBleedDesc.textContent = 'Prolonga los bordes del diseño sin reducirlo ni cambiar sus tintas. Revisa el resultado antes de imprimir.';
+          }
+        }
         document.getElementById('batchChkMarks').checked = isPrint;
 
         // Inspección de OutputIntent original: si ya tiene un perfil CMYK válido, respetar por defecto

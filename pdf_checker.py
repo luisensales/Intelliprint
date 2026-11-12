@@ -191,6 +191,46 @@ def is_color_white(color):
             return all(abs(c) < 0.02 for c in color)
     return False
 
+def check_trim_edges_ink(page, trim=None, dpi=72, threshold=246, margin_mm=1.5):
+    try:
+        if trim is None:
+            trim = page.trimbox if (page.trimbox.width > 0 and page.trimbox.height > 0) else page.mediabox
+        pix = page.get_pixmap(dpi=dpi, clip=trim, alpha=False)
+        pw, ph, n = pix.width, pix.height, pix.n
+        if pw <= 0 or ph <= 0:
+            return {'left': True, 'top': True, 'right': True, 'bottom': True}
+
+        samples = pix.samples
+        stride = pw * n
+        band_px = max(1, int(round(margin_mm * dpi / 25.4)))
+
+        top_bytes = samples[:band_px * stride]
+        has_ink_top = min(top_bytes) < threshold if top_bytes else False
+
+        bot_bytes = samples[-(band_px * stride):]
+        has_ink_bot = min(bot_bytes) < threshold if bot_bytes else False
+
+        left_bytes = bytearray()
+        right_bytes = bytearray()
+        edge_width_bytes = band_px * n
+        for y in range(ph):
+            row_start = y * stride
+            left_bytes.extend(samples[row_start : row_start + edge_width_bytes])
+            right_bytes.extend(samples[row_start + stride - edge_width_bytes : row_start + stride])
+
+        has_ink_left = min(left_bytes) < threshold if left_bytes else False
+        has_ink_right = min(right_bytes) < threshold if right_bytes else False
+
+        return {
+            'top': bool(has_ink_top),
+            'bottom': bool(has_ink_bot),
+            'left': bool(has_ink_left),
+            'right': bool(has_ink_right)
+        }
+    except Exception:
+        return {'left': True, 'top': True, 'right': True, 'bottom': True}
+
+
 def detect_page_edge_elements(page, tol_pt=2.83):
     trim = page.trimbox
     if trim.width <= 0 or trim.height <= 0:
@@ -203,8 +243,21 @@ def detect_page_edge_elements(page, tol_pt=2.83):
         for r in page.get_image_rects(xref):
             if r.width < 5 or r.height < 5:
                 continue
-            if (r.x0 <= trim.x0 + tol_pt) or (r.y0 <= trim.y0 + tol_pt) or (r.x1 >= trim.x1 - tol_pt) or (r.y1 >= trim.y1 - tol_pt):
-                edge_elements.append({"type": "image", "rect": [round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1)]})
+            touches_left = (r.x0 <= trim.x0 + tol_pt and r.x1 > trim.x0)
+            touches_top = (r.y0 <= trim.y0 + tol_pt and r.y1 > trim.y0)
+            touches_right = (r.x1 >= trim.x1 - tol_pt and r.x0 < trim.x1)
+            touches_bottom = (r.y1 >= trim.y1 - tol_pt and r.y0 < trim.y1)
+            if touches_left or touches_top or touches_right or touches_bottom:
+                edge_elements.append({
+                    "type": "image",
+                    "rect": [round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1)],
+                    "touches": {
+                        "left": touches_left,
+                        "top": touches_top,
+                        "right": touches_right,
+                        "bottom": touches_bottom
+                    }
+                })
 
     # 2. Fondos / vectores con relleno
     try:
@@ -219,10 +272,35 @@ def detect_page_edge_elements(page, tol_pt=2.83):
         r = d.get("rect")
         if not r or r.width < 5 or r.height < 5:
             continue
-        if (r.x0 <= trim.x0 + tol_pt) or (r.y0 <= trim.y0 + tol_pt) or (r.x1 >= trim.x1 - tol_pt) or (r.y1 >= trim.y1 - tol_pt):
-            edge_elements.append({"type": "vector_fill", "rect": [round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1)]})
+        touches_left = (r.x0 <= trim.x0 + tol_pt and r.x1 > trim.x0)
+        touches_top = (r.y0 <= trim.y0 + tol_pt and r.y1 > trim.y0)
+        touches_right = (r.x1 >= trim.x1 - tol_pt and r.x0 < trim.x1)
+        touches_bottom = (r.y1 >= trim.y1 - tol_pt and r.y0 < trim.y1)
+        if touches_left or touches_top or touches_right or touches_bottom:
+            edge_elements.append({
+                "type": "vector_fill",
+                "rect": [round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1)],
+                "touches": {
+                    "left": touches_left,
+                    "top": touches_top,
+                    "right": touches_right,
+                    "bottom": touches_bottom
+                }
+            })
 
-    return edge_elements
+    if not edge_elements:
+        return []
+
+    edges_ink = check_trim_edges_ink(page, trim)
+    verified = []
+    for elem in edge_elements:
+        touches = elem.get("touches", {})
+        active = {k: v for k, v in touches.items() if v and edges_ink.get(k)}
+        if any(active.values()):
+            elem["touches"] = active
+            verified.append(elem)
+
+    return verified
 
 def check_pdf(file_path, target_dpi=300):
     if not os.path.exists(file_path):
