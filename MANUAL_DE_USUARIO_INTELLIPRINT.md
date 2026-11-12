@@ -12,6 +12,61 @@ La decisión de imprimir corresponde al responsable del trabajo. Un resultado fa
 
 ## 1 Uso del manual y conceptos de trabajo
 
+*Itinerarios según perfil: Diseñador / Creativo (Caps. 1, 2, 3, 4, 8), Técnico de Taller (Caps. 1, 2, 3, 4, 5, 6, 8), Docente de FP (Caps. 1, 2, 3, 7, 8) y Alumno de FP (Caps. 1, 4, 5, 7, 8, 9).*
+
+### Introducción general para todos los usuarios
+
+IntelliPrint es una plataforma integral de preflight técnico, control de calidad editorial y preparación para artes gráficas y medios digitales. Su diseño responde tanto a las exigencias de un taller gráfico profesional de producción como a las necesidades formativas de los centros de Formación Profesional de Artes Gráficas.
+
+Cualquiera que sea tu perfil de uso, existen cuatro premisas fundamentales en IntelliPrint:
+1. El archivo PDF original nunca se destruye ni se sobreescribe en el servidor; cada corrección genera una variante derivada identificada.
+2. Un perfil de preflight determina qué tolerancias técnicas se exigen, mientras que el perfil ICC define cómo se interpreta o convierte el espacio de color.
+3. Un informe favorable no reemplaza la revisión humana experta del responsable ni las condiciones contractuales acordadas con el cliente.
+4. Las correcciones automáticas de taller deben aplicarse con criterio selectivo, resolviendo únicamente las anomalías que impidan la tirada real.
+
+### Perfiles de usuario y rutas recomendadas de lectura
+
+Para obtener el máximo rendimiento según tu responsabilidad técnica, el manual ofrece cuatro itinerarios específicos:
+
+| Perfil de usuario | Enfoque principal | Capítulos recomendados |
+| --- | --- | --- |
+| Diseñador / Creativo | Preparación de arte final, interpretación pedagógica del informe y Visto Bueno digital. | Capítulos 1, 2, 3, 4 y 8 |
+| Técnico de Taller | Preflight GWG profundo, correcciones en 1 clic, imposición de pliegos y curvas CIP3. | Capítulos 1, 2, 3, 4, 5, 6 y 8 |
+| Docente de FP | Planificación de retos formativos, diseño de perfiles a medida y rúbricas de taller. | Capítulos 1, 2, 3, 7 y 8 |
+| Alumno de FP | Metodología de resolución de retos, entrenamiento con cuestionario y simulador de máquina. | Capítulos 1, 4, 5, 7, 8 y 9 |
+
+#### Perfil 1: Diseñador gráfico, creativo y cliente
+
+Este itinerario está concebido para profesionales del diseño (InDesign, Illustrator, Photoshop, Canva) y clientes que preparan o aprueban artes finales para imprenta o soportes digitales.
+
+- **Preparación previa:** Configura el sangrado perimetral (habitualmente 3 mm en folletos y revistas) y respeta las cajas de corte (TrimBox) y sangrado (BleedBox). En trabajos para offset o digital comercial, evita textos en negro enriquecido de 4 tintas y trabaja en CMYK; en trabajos para pantallas o web, utiliza el espacio estándar sRGB.
+- **Interpretación del informe:** Consulta la *Guía de Arte Final* simplificada. No necesitas descifrar curvas técnicas complejas: el sistema resume el estado en cuatro áreas clave (Geometría, Color, Fuentes y Cobertura) con indicaciones pedagógicas de cómo corregir en tu programa de maquetación si fuera necesario.
+- **Portal de Visto Bueno digital:** Revisa en pantalla la prueba acumulativa generada, valida que los textos, paginación y colores correspondan al encargo y firma digitalmente la orden de impresión o describe los cambios requeridos.
+
+#### Perfil 2: Técnico de preimpresión y taller gráfico
+
+Este itinerario se dirige a los responsables de preimpresión y operarios de taller que reciben artes finales heterogéneos y deben garantizar una entrada limpia y sin paradas en máquina.
+
+- **Validación rigurosa GWG:** Comprobación estricta de estándares Ghent Workgroup según el soporte de salida: Offset comercial (300 % TAC), Impresión digital (200 % TAC), Prensa / Periódico (240 % TAC), Envase y packaging en cartoncillo y Gran Formato.
+- **Taller en 1 Clic:** Corrección de incidencias sin tener que devolver el archivo al cliente: generación geométrica de sangrado por efecto espejo perimetral, incrustación de tipografías del sistema, vectorización de fuentes problemáticas y limitación de cobertura excesiva TAC mediante algoritmos UCR/GCR conservando el canal negro (K).
+- **Módulos de producción:** Generación de imposición de pliegos normalizados (cabeza con cabeza, signaturas, marcas de corte y tiras de control FOGRA ISO 12647-2) y cálculo de curvas de apertura de tinteros CIP3 (formato PPF) para su carga directa en la mesa de control de la máquina de imprimir.
+
+#### Perfil 3: Docente de Formación Profesional
+
+Este itinerario está diseñado para el profesorado de los ciclos formativos de Grado Medio (Preimpresión Digital, Impresión Gráfica) y Grado Superior (Diseño y Gestión de la Producción Gráfica).
+
+- **Catálogo de 20 retos formativos:** Banco estructurado de escenarios didácticos clasificados por nivel de dificultad (Básico, Intermedio, Avanzado) con fallos reales de imprenta preparados para el aula: desde problemas geométricos elementales hasta trampas complejas de sobreimpresión, tintas planas no convertidas y perfiles cruzados.
+- **Perfiles de preflight personalizados:** Editor integrado para crear especificaciones de examen o de prácticas de taller con tolerancias a medida (resolución mínima, TAC límite, sangrado requerido, fuentes trazadas).
+- **Rúbricas y seguimiento pedagógico:** Pautas para evaluar la capacidad diagnóstica del alumnado, diferenciando la detección analítica del problema frente a la corrección mecánica no justificada.
+
+#### Perfil 4: Alumnado y estudiantes de artes gráficas
+
+Este itinerario acompaña al estudiante en su proceso de aprendizaje técnico y desarrollo de competencias profesionales de preimpresión.
+
+- **Metodología de resolución:** Aprende a interpretar el diagnóstico antes de pulsar botones de corrección. Identifica qué causa cada aviso o error y cómo afectaría al proceso de tirada en máquina.
+- **Cuestionario técnico y simuladores:** Módulo de autoevaluación interactivo con preguntas de taller, retroalimentación inmediata sobre la respuesta correcta y simulador gráfico de defectos de impresión (repintado por exceso de tinta, corte con filete blanco por falta de sangrado, fuera de registro por holguras mecánicas).
+- **Glosario y buenas prácticas:** Vocabulario técnico de la industria gráfica (ISO 12647, GWG, OutputIntent, UCR, GCR, tramado, ganancia de punto) para dominar el lenguaje del taller.
+
 ### Qué hace IntelliPrint
 
 IntelliPrint analiza documentos PDF y genera un informe con tres partes independientes: estado técnico, revisión editorial y autorización de salida. También ofrece herramientas para modificar una copia del documento y preparar determinados entregables del taller. Se accede desde [la aplicación web](https://intelliprint.onrender.com/) o desde una instalación local administrada por el centro.
@@ -49,6 +104,8 @@ La conversión automática RGB a CMYK trabaja sobre imágenes embebidas. No es u
 
 ## 2 Acceso y navegación de la interfaz
 
+*Perfiles recomendados: Diseñador / Creativo, Técnico de Taller, Docente de FP.*
+
 <!-- ui-controls: pdfFileInput -->
 
 ### Acceso y primera pantalla
@@ -83,6 +140,8 @@ Para un folleto offset: carga el PDF, selecciona Offset Comercial 300 %, conserv
 Para un documento de pantalla: selecciona Web, Pantalla y Documento Digital RGB. El perfil no exige sangrado y utiliza una referencia de 96 ppp. No conviertas imágenes a CMYK ni añadas marcas de imprenta simplemente porque esos botones estén disponibles. Conserva la legibilidad y la utilidad del PDF para su destino digital.
 
 ## 3 Archivo de entrada perfiles e ICC
+
+*Perfiles recomendados: Diseñador / Creativo, Técnico de Taller, Docente de FP.*
 
 ### Subir y comprobar un PDF
 
@@ -165,6 +224,8 @@ Los rangos que muestra el formulario son los recomendados por esa interfaz. El s
 Los perfiles creados por la aplicación llevan un identificador personalizado. Un JSON inventado sin identificador, con una familia no admitida o con valores fuera de rango no es una importación válida. Ante un rechazo, corrige una copia del JSON exportado y conserva el respaldo original.
 
 ## 4 Lectura y revisión del informe
+
+*Perfiles recomendados: Diseñador / Creativo, Técnico de Taller, Docente de FP, Alumno de FP.*
 
 ### Los tres estados independientes
 
@@ -290,6 +351,8 @@ El registro contiene nombre, decisión, fecha y notas. Es una constancia operati
 
 ## 5 Correcciones y Taller en 1 Clic
 
+*Perfiles recomendados: Técnico de Taller, Alumno de FP.*
+
 ### Cómo se acumulan las correcciones
 
 Cada corrección parte de la versión disponible más reciente del trabajo. El botón principal de descarga permite recuperar el PDF acumulado. Evita trabajar con una descarga antigua y asumir que incorpora cambios posteriores. Conserva una copia identificada del original y otra del resultado que finalmente autorices.
@@ -388,6 +451,8 @@ Al abrir el taller por primera vez para un trabajo de imprenta se proponen la ex
 El flujo sigue un orden de correcciones; no ejecuta necesariamente las casillas en el orden en que las pulsas. Normalizar cajas define espacio; Extender el fondo lo llena con contenido reflejado y Pautas de corte coloca las marcas por fuera. Revisa los pasos aplicados, errores pendientes, avisos y dictamen final. **Lote completado** indica que terminó el procesamiento, no una autorización de salida.
 
 ## 6 Módulos de producción
+
+*Perfiles recomendados: Técnico de Taller.*
 
 ### Imposición de pliegos
 
@@ -520,6 +585,8 @@ La ficha necesita que el trabajo siga existiendo en el servidor. Para un archivo
 
 ## 7 Modo didáctico para Formación Profesional
 
+*Perfiles recomendados: Docente de FP, Alumno de FP.*
+
 ### Las cuatro pestañas de Alumnos FP
 
 **Retos Prácticos FP** abre casos preparados. **Simulador Físico de Taller** permite variar modelos visuales. **Autoevaluación FP** presenta preguntas con corrección comentada. **Ficha Alumno PDF** genera una hoja de práctica con los datos introducidos y el resultado de cuestionario disponible.
@@ -624,6 +691,8 @@ Descarga la ficha y entrégala según el procedimiento del docente. Para documen
 
 ## 8 Descargas archivo de trabajos y manuales
 
+*Perfiles recomendados: Diseñador / Creativo, Técnico de Taller, Docente de FP, Alumno de FP.*
+
 ### Qué entrega cada documento
 
 | Entregable | Contenido y momento de uso |
@@ -666,6 +735,8 @@ El administrador gestiona almacenamiento, catálogo ICC, copias de perfiles, dep
 Hay rutas de diagnóstico y documentación de API para uso técnico. No sustituyen los controles explicados en este manual ni convierten una instalación pública en un sistema de gestión de usuarios, archivo seguro o control físico de una prensa. Coordina con el administrador las restricciones y el acceso adecuados para el centro.
 
 ## 9 Preguntas frecuentes y verificación final
+
+*Perfiles recomendados: Alumno de FP, Técnico de Taller.*
 
 ### He terminado una corrección y el archivo sigue rechazado
 
