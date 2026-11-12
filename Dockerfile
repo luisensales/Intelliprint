@@ -23,7 +23,8 @@ RUN pip install --no-cache-dir -r requirements.txt httpx
 COPY . .
 
 # Crear carpetas de trabajo con permisos
-RUN mkdir -p uploads jobs static icc_profiles worksheets didactic_scenarios hotfolder/in hotfolder/processing hotfolder/out_aprobados hotfolder/out_rechazados
+RUN mkdir -p uploads jobs static icc_profiles worksheets didactic_scenarios hotfolder/in hotfolder/processing hotfolder/out_aprobados hotfolder/out_rechazados data \
+    && chmod -R 777 uploads jobs data hotfolder
 
 EXPOSE 8000
 

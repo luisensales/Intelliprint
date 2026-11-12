@@ -1,5 +1,6 @@
 import os
 import io
+import html
 import zipfile
 import shutil
 import hashlib
