@@ -668,3 +668,108 @@ test('updateKioskThemeButton maintains compact padding and removes intrusive ml-
   assert.ok(btn.className.includes('whitespace-nowrap'));
   assert.ok(btn.innerHTML.includes('Cabina D50'));
 });
+
+test('inline script initializes cleanly with real DOM IDs and executes full renderResults without TDZ errors', () => {
+  const scriptStart = html.indexOf('<script>') + '<script>'.length;
+  const scriptEnd = html.indexOf('</script>', scriptStart);
+  const domPart = html.slice(0, scriptStart);
+  const script = html.slice(scriptStart, scriptEnd);
+
+  const domIds = new Set();
+  for (const m of domPart.matchAll(/id=["']([^"']+)["']/g)) {
+    domIds.add(m[1]);
+  }
+
+  function makeElement(id) {
+    return {
+      id,
+      value: '',
+      textContent: '',
+      innerHTML: '',
+      className: '',
+      disabled: false,
+      checked: true,
+      options: [{ text: 'Default' }],
+      selectedIndex: 0,
+      style: {},
+      classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+      addEventListener() {},
+      appendChild() {},
+      querySelector() { return makeElement(''); },
+      querySelectorAll() { return []; },
+      getAttribute() { return ''; },
+      setAttribute() {},
+      focus() {},
+      scrollIntoView() {}
+    };
+  }
+
+  const ctx = {
+    console,
+    window: { addEventListener() {}, location: { href: '', origin: 'http://localhost' } },
+    localStorage: { getItem() { return null; }, setItem() {} },
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get() { return null; } },
+      json: async () => ({ profiles: [], history: { versions: [] } }),
+      text: async () => '',
+      blob: async () => ({ size: 10 })
+    }),
+    setTimeout: () => 1,
+    clearTimeout: () => {},
+    setInterval: () => 1,
+    clearInterval: () => {},
+    URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
+    AbortController: class { abort() {} },
+    document: {
+      body: makeElement('body'),
+      documentElement: makeElement('html'),
+      getElementById(id) {
+        return domIds.has(id) ? makeElement(id) : null;
+      },
+      querySelector() { return makeElement(''); },
+      querySelectorAll() { return []; },
+      addEventListener() {},
+      createElement() { return makeElement(''); }
+    }
+  };
+  ctx.window.document = ctx.document;
+  ctx.globalThis = ctx;
+
+  vm.runInNewContext(script, ctx);
+
+  ctx.renderResults({
+    job_meta: {
+      job_id: 'job_full_boot',
+      filename: 'Diptico.pdf',
+      profile_id: 'OFFSET_300',
+      sha256: 'a'.repeat(64),
+      current_sha256: 'a'.repeat(64),
+      original_icc_info: { has_icc: false, has_output_intent: false },
+      icc_option: 'preserve'
+    },
+    job_summary: {
+      pages: 2,
+      trim_mm: '210 x 297 mm',
+      bleed_mm: 3.0,
+      max_tac_measured: 280,
+      spot_colors: [],
+      images: [],
+      fonts_summary: { total: 1, non_embedded: 0 }
+    },
+    triple_result: {
+      release: { status: 'PENDING', label: 'PENDIENTE' },
+      technical: { label: 'APTO', status: 'PASS', errors_count: 0, warnings_count: 0 },
+      content: { label: 'OK', suggestions_count: 0 }
+    },
+    proofreading: { suggestions: [] },
+    spell_suggestions: [],
+    fonts: [],
+    images: [],
+    findings: []
+  });
+
+  const sepActiveJob = vm.runInContext('sepActiveJobId', ctx);
+  assert.equal(sepActiveJob, 'job_full_boot');
+});

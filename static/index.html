@@ -493,9 +493,20 @@
                 <i class="fa-solid fa-box-archive text-amber-500 shrink-0"></i> <span class="truncate">Paquete ZIP</span>
               </a>
             </div>
+            <div class="flex items-center justify-between gap-1 pt-1 border-t border-slate-200/70 text-[10px]">
+              <a id="downloadCertBtn" href="#" target="_blank" class="inline-flex items-center gap-1 text-slate-600 hover:text-blue-700 font-medium transition truncate" title="Descargar Ficha Técnica PDF certificada">
+                <i class="fa-solid fa-file-shield text-blue-600"></i> <span>Ficha</span>
+              </a>
+              <span class="text-slate-300">·</span>
+              <a id="downloadClientReportBtn" href="#" target="_blank" class="inline-flex items-center gap-1 text-slate-600 hover:text-indigo-700 font-medium transition truncate" title="Exportar informe pedagógico de 1 página para cliente">
+                <i class="fa-solid fa-file-lines text-indigo-600"></i> <span>Inf. Cliente</span>
+              </a>
+              <span class="text-slate-300">·</span>
+              <button id="downloadJsonBtn" class="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 font-medium transition cursor-pointer truncate" title="Descargar auditoría completa en JSON">
+                <i class="fa-solid fa-code text-slate-500"></i> <span>JSON</span>
+              </button>
+            </div>
           </div>
-
-        </div>
 
         </div>
 
@@ -3657,6 +3668,16 @@
     let sepTotalPageCount = 1;
     let currentSpotColors = [];
     let disabledSpotColors = new Set();
+    let sepActiveJobId = null;
+    let sepAbortController = null;
+    let sepRequestSeq = 0;
+    let sepBlobUrl = null;
+    let sepRehydratingPromise = null;
+    let sepDebounce = null;
+    let compCurrentPage = 1;
+    let compTotalPageCount = 1;
+    let compSliderPct = 50;
+    let compDebounce = null;
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -4753,11 +4774,14 @@
     });
 
     // Download Report JSON
-    document.getElementById('downloadJsonBtn').addEventListener('click', () => {
-      if (currentJobId) {
-        window.location.href = `/api/report/${currentJobId}`;
-      }
-    });
+    const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+    if (downloadJsonBtn) {
+      downloadJsonBtn.addEventListener('click', () => {
+        if (currentJobId) {
+          window.location.href = `/api/report/${currentJobId}`;
+        }
+      });
+    }
 
     // -----------------------------------------------------------------------
     // Conversión RGB → CMYK
@@ -6067,12 +6091,6 @@
       updateSeparationPreview();
     }
 
-    let sepActiveJobId = null;
-    let sepAbortController = null;
-    let sepRequestSeq = 0;
-    let sepBlobUrl = null;
-    let sepRehydratingPromise = null;
-
     async function rehydrateJobFromSelectedFile(targetJobId) {
       if (!selectedFile || !targetJobId) return false;
       if (sepRehydratingPromise) return sepRehydratingPromise;
@@ -6232,7 +6250,6 @@
       updateSeparationPreview();
     }
 
-    let sepDebounce = null;
     function updateSeparationPreview(retryCount = 0) {
       if (!currentJobId) return;
       clearTimeout(sepDebounce);
@@ -6351,11 +6368,6 @@
     // =========================================================================
     // COMPARADOR VISUAL ANTES / DESPUES - Split View Slider (Fase 3 Item 4)
     // =========================================================================
-
-    let compCurrentPage = 1;
-    let compTotalPageCount = 1;
-    let compSliderPct = 50;
-    let compDebounce = null;
 
     function initComparison(pageCount) {
       compTotalPageCount = Math.max(1, pageCount || 1);
