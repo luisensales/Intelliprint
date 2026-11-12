@@ -116,22 +116,49 @@ El botón de inicio y el logotipo de IntelliPrint llevan a la aplicación. Los l
 
 ### Botones de la cabecera
 
+La barra superior de IntelliPrint agrupa las herramientas por bloques de trabajo (**Flujo**, **Taller**, **Aula FP**, **Entorno** y **Acceso Taller**):
+
 | Opción | Uso y efecto |
 | --- | --- |
+| Acceso Taller | Abre el panel de autenticación de usuarios y roles (RBAC), las cuentas demo de taller y el registro individual con código de grupo FP. |
 | Nuevo PDF | Limpia la selección y el informe mostrado para comenzar otro trabajo. Descarga antes los resultados que quieras conservar. No equivale a borrar los archivos del servidor. |
-| Alumnos FP | Abre los retos, simuladores, cuestionario y ficha del alumno. Se puede consultar sin cargar un trabajo propio. |
-| Manual de Usuario | Abre esta guía en la web y los enlaces de descarga en PDF, Word y Markdown. |
-| Perfiles Preflight | Abre la lista de perfiles y su editor. También se llega desde Gestionar Perfiles y Crear Perfil Personalizado. |
-| Cabina D50 | Cambia al tema oscuro de cabina y vuelve al modo de oficina al pulsarlo de nuevo. La elección se recuerda en ese navegador. |
-| Pantalla Completa | Solicita el modo de pantalla completa del navegador. Se sale con el mismo control o con la tecla Esc cuando el navegador lo permite. |
+| Trabajos | Abre el gestor de trabajos activos con filtros de búsqueda, estado de caducidad (24 h), recarga rápida de sesiones y descarga de Paquetes de Producción ZIP. |
+| Perfiles | Abre la lista de perfiles y su editor personalizado (crear, copiar, modificar, importar y exportar en JSON). También se llega desde Gestionar Perfiles. |
+| Orden Producción | Conecta el documento con recetas reales de producto, máquina, papel y acabados para calcular pliegos y emitir el Job Ticket oficial en PDF. |
+| Validación GWG | Lanza la auditoría normativa contra estándares GWG 2015 / ISO PDF/X sobre el PDF acumulado actual y descarga su certificado pericial. |
+| Simulador FP | Abre el módulo didáctico: catálogo de 20 retos prácticos, 4 simuladores físicos de máquina, autoevaluación y ficha del alumno PDF. |
+| Panel Docente | Abre el aula virtual de FP: gestión de grupos, códigos de clase, prácticas, evaluación por rúbricas ponderadas, gráficas de evolución, exportación CSV y administración de cuentas. |
+| Manual (PDF) | Abre este manual en el lector web interactivo con filtro por perfil y permite descargar el manual oficial en PDF. |
+| Cabina D50 | Cambia al tema oscuro antirreflejo de cabina de prensa y vuelve al modo de oficina al pulsarlo de nuevo. La elección se recuerda en ese navegador. |
+| Pantalla Completa | Solicita el modo kiosko o pantalla completa del navegador. Se sale con el mismo control o con la tecla Esc cuando el navegador lo permite. |
 
-El modo Cabina D50 reduce el brillo visual de la interfaz. No calibra el monitor, no instala un perfil de pantalla ni controla la iluminación física D50. Para juzgar color hay que disponer de un monitor y unas condiciones de observación adecuados.
+El modo Cabina D50 reduce el brillo visual de la interfaz para pupitres de prensa. No calibra el monitor, no instala un perfil de pantalla ni controla la iluminación física D50. Para juzgar color hay que disponer de un monitor y unas condiciones de observación adecuados.
+
+### Acceso Taller, roles del sistema y sesión única
+
+El botón **Acceso Taller** permite identificarse mediante usuario o correo electrónico y contraseña, acceder mediante **cuentas demo** rápidas (*Jefe Taller*, *CTP / Preimpresión*, *Profesor FP*, *Diseñadora*, *Alumno FP* y *Admin*) o crear una cuenta individual en la pestaña **Crear Cuenta (Email)**.
+
+| Rol del sistema | Permisos y responsabilidades principales |
+| --- | --- |
+| `admin` | Acceso completo al sistema, gestión de usuarios, aprobación de solicitudes de rol y auditoría general. |
+| `responsable` | Jefe de taller: autorización final de pase a producción, gestión de perfiles, control del Hot-Folder y versiones. |
+| `preimpresion` | Técnico CTP / preimpresión: correcciones en 1 clic, imposición de pliegos, curvas CIP3, órdenes de producción, validación GWG y enlaces de Visto Bueno cliente. |
+| `docente` | Profesorado FP: creación de grupos y códigos de clase, publicación de prácticas, evaluación con rúbricas y seguimiento del alumnado. |
+| `diseñador` | Creativo o cliente: subida de archivos, preflight, lectura de informes pedagógicos y entrega de trabajos. |
+| `alumno` | Estudiante de FP: matriculación mediante código de clase, resolución de retos, simuladores, cuestionario y entregas al docente. |
+
+El registro individual activa al instante las cuentas básicas (*Alumno/a FP* y *Diseñador/a*). Si durante el alta el estudiante introduce un **Código de Grupo FP** válido, queda matriculado automáticamente en ese grupo. Las solicitudes de roles sensibles (*Docente*, *Preimpresión* o *Responsable*) quedan pendientes hasta su validación administrativa. Por seguridad, el sistema aplica una política de **sesión única activa** por cuenta: al iniciar sesión desde un nuevo navegador se cierra la sesión anterior de esa misma cuenta.
 
 ### Herramientas después de analizar
 
-La zona superior del informe agrupa **Prensa**, **Ajustes técnicos** y **Entregables**, además de accesos directos. Sus botones abren Imposición Pliego, Tinteros CIP3, Ficha Maquinista, Marcas FOGRA, Limitar TAC, Códigos & QR, Margen & Lomo y Hot-Folder. Taller en 1 Clic abre las correcciones seleccionables del trabajo actual. Los enlaces de descarga pueden aparecer o habilitarse cuando se ha generado su resultado.
+La zona superior del informe organiza las operaciones del documento activo en cuatro bloques diferenciados:
 
-Las ventanas se cierran con su botón Cerrar, con la cruz de la cabecera o pulsando el fondo oscuro cuando ese panel lo permite. Cerrar un panel no deshace una corrección ya terminada. Si una acción está procesándose, espera su resultado antes de lanzar otra corrección sobre el mismo trabajo.
+1. **1. Correcciones:** Acceso directo a **Taller en 1 Clic** para aplicar correcciones acumuladas en lote sobre el PDF activo.
+2. **2. Geometría & Códigos:** Abre los inspectores de **Códigos & QR** y **Margen & Lomo**.
+3. **3. Validación y Entrega:** Reúne **Validar GWG**, **VºBº Cliente** (enlace seguro de aprobación externa), **Entregar a FP** (envío de práctica de alumno) y **Hot-Folder**.
+4. **4. Pliego & Salida:** Incluye **Imposición**, **Tinteros CIP3**, **Hoja Máquina**, descarga de **Paquete ZIP** completo y accesos directos a **Ficha**, **Inf. Cliente** y **JSON**.
+
+Inmediatamente debajo figura la **Línea Temporal de Versiones**, que muestra la versión activa (`v0001`, `v0002`, etc.) y ofrece controles de **Deshacer**, **Rehacer**, **Comparar Versiones** y descarga de **PDF Aprobado**. Las ventanas modales se cierran con su botón Cerrar o la cruz de la cabecera; cerrar un panel no deshace una corrección ya terminada. Si una acción está procesándose, espera su resultado antes de lanzar otra sobre el mismo trabajo.
 
 ### Dos recorridos breves
 
@@ -167,7 +194,7 @@ No se establece aquí un tamaño máximo universal: la viabilidad depende de las
 | Packaging y Cartoncillo | 300 ppp; 5 mm; TAC máximo 300 %. | CMYK; filete 0,25 pt; seguridad 4 mm; admite directas; exige fuentes incrustadas. |
 | Gran Formato y Cartelería | 150 ppp; 5 mm; TAC máximo 320 %. | CMYK; filete 0,35 pt; seguridad 5 mm; admite directas; exige fuentes incrustadas. |
 
-Estos valores son los perfiles incluidos en la aplicación, no una receta válida para todas las prensas o soportes. Acuerda con el taller el ICC, la cobertura, la resolución y la geometría reales. El sangrado se comprueba en relación con los elementos que llegan al corte; un documento con márgenes blancos no necesita que se invente contenido exterior sin motivo.
+Estos valores son los perfiles incluidos en la aplicación, no una receta válida para todas las prensas o soportes. Acuerda con el taller el ICC, la cobertura, la resolución y la geometría reales. El sangrado se comprueba analizando las zonas de corte mediante detección de contenido en los bordes: si el diseño tiene fondo blanco limpio y ningún elemento cromático o gráfico toca los márgenes, el motor no exige sangre innecesariamente.
 
 La zona de seguridad guardada en un perfil sirve de referencia de configuración. El inspector **Margen & Lomo** dispone de sus propios campos de corte y medianil: comprueba y ajusta allí los valores que quieras inspeccionar. No supongas que cambiar un perfil mueve textos o aplica automáticamente ese margen en el diseño.
 
@@ -236,6 +263,8 @@ La **revisión editorial** indica si quedan sugerencias pendientes. La **autoriz
 ### Pestaña Incidencias técnicas
 
 Cada tarjeta contiene categoría, página, título y explicación. Lee la explicación antes de pulsar el botón de corrección. Algunos avisos tienen una herramienta contextual; otros requieren volver a InDesign, Illustrator u otra aplicación de origen. No todas las incidencias son corregibles automáticamente.
+
+Cuando un hallazgo dispone del botón **Ver en PDF**, al pulsarlo se abre el **Visor de incidencias** sobre la página real del documento acumulado. Este visor permite recorrer las páginas afectadas y resalta visualmente la ubicación exacta de los objetos detectados (o la zona geométrica correspondiente) para agilizar la localización del problema.
 
 | Hallazgo habitual | Qué revisar y qué herramienta puede ayudar |
 | --- | --- |
@@ -334,6 +363,14 @@ El comparador superpone dos imágenes de página y permite desplazar su divisió
 
 Si no hay correcciones registradas, se informa de vista idéntica o de ausencia de cambios. Una coincidencia visual no demuestra que no hayan cambiado fuentes, perfiles o sobreimpresiones. Del mismo modo, una diferencia de tamaño o posición puede deberse a nuevas cajas, sangrado o marcas: revisa la geometría y las dimensiones además de la apariencia.
 
+### Línea temporal y comparador visual de versiones
+
+Bajo los bloques de herramientas del informe se encuentra la **Línea Temporal de Versiones**, que registra cada cambio realizado (`v0001` original, `v0002` tras cada corrección) junto con su descripción.
+
+- **Deshacer (`Ctrl+Z`) y Rehacer (`Ctrl+Y`):** Permiten retroceder o avanzar en la cadena de correcciones sin perder el historial de análisis. El panel de nodos cronológicos expandible permite restaurar cualquier versión intermedia guardada.
+- **Comparar Versiones:** Abre el comparador avanzado de versiones, donde puedes elegir cualquier par de versiones (`v0001` frente a `v0003`, por ejemplo) para inspeccionarlas en modo lado a lado o activar el **mapa visual de diferencias (Diff)** y verificar alteraciones de píxeles o geometría.
+- **PDF Aprobado:** Cuando existe una autorización válida para producción, se habilita la descarga directa de la entrega oficial aprobada.
+
 ### Pestaña Autorización de Salida
 
 <!-- ui-controls: operatorNameInput releaseDecisionSelect releaseNotesInput -->
@@ -348,6 +385,8 @@ Introduce el **Nombre del Operario o Responsable**, escoge una **Decisión de Sa
 | Rechazar archivo Requiere nuevo arte final | El PDF necesita otra exportación, contenido nuevo o una corrección que no puede aprobarse en el estado actual. |
 
 El registro contiene nombre, decisión, fecha y notas. Es una constancia operativa de la aplicación, no una firma electrónica criptográfica que certifique la identidad del firmante. Tras modificar el PDF, revisa y autoriza la copia corregida. La ficha del maquinista necesita un estado técnico compatible y autorización registrada para presentarlo como listo para impresión.
+
+Para comunicar los resultados al cliente o diseñador sin tecnicismos de RIP, utiliza el enlace **Inf. Cliente (Guía de Arte Final)**, que genera un informe pedagógico de una página adaptado automáticamente al destino elegido: para imprenta muestra el estado **LISTO PARA IMPRESIÓN** bajo estándar ISO 12647-2 (CMYK, +3 mm de sangrado y límite TAC); para documentos de pantalla (**Web, Pantalla y Documento Digital RGB**) muestra **LISTO PARA PANTALLA** bajo estándar **Pantalla / Documento Digital (sRGB)** validando la legibilidad digital sin exigir CMYK ni sangrado.
 
 ## 5 Correcciones y Taller en 1 Clic
 
@@ -583,18 +622,41 @@ Los generadores de pliegos pueden incorporar un QR que conduce a esa ficha. Esca
 
 La ficha necesita que el trabajo siga existiendo en el servidor. Para un archivo de producción duradero, conserva los PDFs e informes descargados; no dependas únicamente del QR. Comprueba la vigencia de los datos después de corregir, generar una nueva versión o registrar una nueva decisión.
 
+### Orden de producción y hoja de ruta de taller
+
+El módulo **Orden Producción** conecta el documento PDF con los parámetros reales de fabricación del taller gráfico para calcular recetas de tirada y emitir una hoja de ruta técnica (**Job Ticket**).
+
+- **Selección de parámetros:** Permite definir tirada de ejemplares, tipo de producto (folleto, díptico, revista, tarjeta, cartel o envase), prensa o máquina de impresión, formato de pliego, papel/gramaje, tipo de impresión (1 o 2 caras), juego de tintas y acabados (plegado, grapado, troquelado o barnizado).
+- **Cálculo y vinculación:** Calcula automáticamente el aprovechamiento del pliego, poses por cara y pliegos brutos necesarios (incluyendo merma estimada de puesta en marcha) y puede vincularse al preflight e imposición del trabajo activo.
+- **Hoja de ruta PDF:** Genera y descarga el **Job Ticket PDF** con las instrucciones completas para preimpresión, máquina de imprimir y postimpresión.
+
+### Validación de producción GWG 2015 e ISO PDF/X
+
+**Validación GWG** (accesible desde la cabecera o desde el botón **Validar GWG** del bloque de validación) ejecuta una auditoría pericial independiente sobre la **versión acumulada más reciente** del trabajo activo (incorporando todas las correcciones realizadas).
+
+- **Estándares disponibles:** Evalúa conforme a las especificaciones del Ghent Workgroup y normas ISO: GWG 2015 Offset Comercial (`Sheetfed Offset`), Impresión Digital, Prensa (`Newspaper`), Packaging o variantes **PDF/X-1a** y **PDF/X-4**.
+- **Evidencias y certificado:** Presenta el listado de reglas evaluadas con evidencia técnica, número real de páginas verificadas e impacto en máquina. Si cumple o tras documentar su estado, permite descargar el **Certificado Oficial de Validación GWG** en formato PDF.
+
+### Portal de visto bueno del cliente
+
+Desde el bloque **3. Validación y Entrega**, el botón **VºBº Cliente** genera un enlace único e infalsificable para enviar al cliente o diseñador, sin necesidad de que el destinatario tenga usuario ni contraseña en IntelliPrint.
+
+- **Revisión fiel de la versión corregida:** El portal muestra en pantalla la **versión acumulada más reciente corregida** del PDF junto con su conteo real de páginas y botón de descarga directa para revisión final.
+- **Decisión documentada:** El cliente introduce su nombre/empresa, su correo electrónico opcional (para justificante) y observaciones de tirada. Puede pulsar **Dar Visto Bueno (OK para Imprimir)** para aprobar la entrada en máquina o **Solicitar Cambios / Rechazar** registrando qué debe modificarse antes de producir.
+
 ## 7 Modo didáctico para Formación Profesional
 
 *Perfiles recomendados: Docente de FP, Alumno de FP.*
 
 ### Aula virtual de FP: grupos, códigos de clase y rúbricas
 
-El módulo docente de IntelliPrint permite gestionar el flujo completo de enseñanza y aprendizaje en el taller de Artes Gráficas:
+El módulo docente de IntelliPrint (**Panel Docente** en la cabecera o **Entregar a FP** desde un trabajo activo) permite gestionar el flujo completo de enseñanza y aprendizaje en el taller de Artes Gráficas:
 
-1. **Creación de grupos y códigos de matrícula:** Desde la pestaña de gestión docente, el profesor define sus módulos y grupos (por ejemplo, *2º GS Preimpresión Digital*). El sistema genera de forma automática un código de matrícula único con el formato `FP-XXXX` (letras y dígitos aleatorios).
-2. **Matriculación ágil del alumnado:** El profesor comunica el código al grupo. Durante el registro individual en la aplicación o desde el panel de estudiante, el alumno introduce dicho código en la casilla correspondiente, quedando matriculado al instante en el grupo de su profesor.
-3. **Publicación de prácticas y retos:** El docente puede asignar ejercicios vinculados a cualquiera de los 20 retos formativos del catálogo o proponer prácticas libres sobre PDFs reales de imprenta, definiendo el perfil técnico objetivo (Offset, Digital, Prensa, Packaging).
-4. **Evaluación mediante rúbricas ponderadas:** Cada práctica incorpora una rúbrica de evaluación técnica con criterios ponderados sobre 10 puntos (diagnóstico inicial 20 %, criterio en correcciones 30 %, calidad técnica final 30 % y preparación para taller 20 %). Al recibir la entrega del alumno, el motor compara el PDF inicial con el corregido y propone una nota automática justificada. El docente revisa la propuesta, ajusta la puntuación y aporta observaciones pedagógicas de mejora.
+1. **Creación de grupos y códigos de matrícula:** Desde la pestaña **Grupos y Prácticas**, el profesor define sus módulos y grupos (por ejemplo, *2º GS Preimpresión Digital*). El sistema genera de forma automática un código de matrícula único con el formato `FP-XXXX` (letras y dígitos aleatorios).
+2. **Matriculación ágil del alumnado:** El profesor comunica el código al grupo. Durante el registro individual en la aplicación o desde la pestaña **Mis Prácticas (Alumno)**, el estudiante introduce dicho código en la casilla correspondiente, quedando matriculado al instante en el grupo de su profesor.
+3. **Publicación y entrega directa de prácticas:** El docente puede asignar ejercicios vinculados a cualquiera de los 20 retos formativos del catálogo o proponer prácticas libres sobre PDFs reales de imprenta, definiendo el perfil técnico objetivo. El alumno resuelve el PDF en IntelliPrint y pulsa **Entregar a FP** para enviar automáticamente tanto su diagnóstico inicial como la versión corregida final y sus operaciones registradas.
+4. **Evaluación mediante rúbricas ponderadas:** Cada práctica incorpora una rúbrica de evaluación técnica con criterios ponderados sobre 10 puntos (diagnóstico inicial 20 %, criterio en correcciones 30 %, calidad técnica final 30 % y preparación para taller 20 %). Al recibir la entrega del alumno, el motor compara el PDF inicial con el corregido y propone una nota automática justificada. El docente revisa la comparativa, ajusta la puntuación de cada criterio y aporta observaciones pedagógicas.
+5. **Informes, evolución, CSV y administración:** El docente puede descargar un **Informe PDF de Evaluación** individual por entrega, exportar el libro completo de calificaciones en **CSV**, analizar la evolución gráfica de sus grupos y (si cuenta con rol de administrador o responsable) aprobar cuentas docentes/técnicas pendientes y asignar roles desde la pestaña **Usuarios y Roles**.
 
 ### Las cuatro pestañas de Alumnos FP
 
@@ -708,24 +770,35 @@ Descarga la ficha y entrégala según el procedimiento del docente. Para documen
 | --- | --- |
 | PDF del trabajo | La versión disponible del documento. Descarga la acumulada después de revisar las correcciones. |
 | Certificado o ficha técnica de preflight PDF | Resumen técnico, incidencias y datos de la decisión de salida cuando se ha registrado. No es por sí solo una certificación externa de conformidad. |
-| Informe pedagógico para cliente o diseñador PDF | Explica problemas y recomendaciones para comunicar qué debe corregirse y por qué. |
+| Informe pedagógico para cliente o diseñador PDF | Guía de Arte Final que explica problemas y recomendaciones para comunicar qué debe corregirse y por qué, adaptada a imprenta o pantalla sRGB. |
+| Certificado de validación GWG PDF | Auditoría normativa sobre estándares GWG 2015 o ISO PDF/X con evidencias de cumplimiento y conteo real de páginas. |
+| Hoja de ruta de taller Job Ticket PDF | Orden de producción calculada con parámetros de máquina, pliegos brutos, papel, tintas y acabados. |
+| Paquete de producción ZIP completo | Archivo consolidado con el PDF final, ficha técnica, certificado GWG, informe cliente, pliego de imposición, CIP3 PPF y manifiesto JSON. |
 | Informe JSON | Datos estructurados del análisis y metadatos del trabajo; útil para archivo técnico o integración. No equivale a un catálogo de perfiles. |
 | Pliego de imposición PDF | Montaje generado con los parámetros de imposición. Revisa caras, marcas y medidas. |
 | PPF CIP3 | Datos para un flujo de preajuste compatible. Requiere cálculo previo y validación en el receptor. |
 | Ficha de tinteros PDF | Coberturas y valores de preajuste para revisión del operario. |
 | Lámina técnica FOGRA PDF | Material de consulta sobre la tira de control. No altera el trabajo abierto. |
-| Ficha del alumno PDF | Hoja de práctica y resultado educativo disponible, con los datos introducidos. |
+| Ficha del alumno PDF o Informe evaluación FP | Hoja de práctica del estudiante o informe detallado por rúbrica ponderada emitido por el docente. |
 | ZIP de lote o de hotfolder | Recopilación de archivos disponibles de la cola o categoría correspondiente. Revisar su contenido al recibirlo. |
 
 Una descarga de una acción concreta puede identificar ese resultado de corrección. Si después se realizan más acciones, utiliza el botón principal o el entregable final revisado para evitar enviar una versión antigua. Asigna nombres de archivo o carpetas que distingan entrada, corrección, imposición y versión autorizada.
 
+### Gestión de trabajos activos y paquete de producción ZIP
+
+Desde el botón **Trabajos** de la cabecera se accede al listado de documentos procesados actualmente en el servidor:
+
+- **Búsqueda y estado:** Permite filtrar por nombre o identificador, consultar el estado técnico y de autorización, y ver el contador regresivo hasta la caducidad automática (24 h).
+- **Recarga de sesión:** Permite reabrir cualquier trabajo activo en pantalla con su historial completo de versiones y seguir aplicando herramientas sin volver a subir el PDF.
+- **Paquete ZIP completo:** Desde el gestor de trabajos o desde el bloque de salida del informe principal se puede descargar en un solo clic el **Paquete de Producción ZIP** con todos los entregables generados para ese trabajo.
+
 ### Las cuatro versiones del manual
 
-**Manual web** permite leer y navegar por capítulos dentro de la aplicación o en su página propia. **Markdown** es la fuente de texto consultable y editable. **Word DOCX** es la edición ofimática. **PDF** es la edición de lectura o impresión. Comparten el contenido de esta edición y deben actualizarse juntas.
+**Manual web** permite leer y navegar por capítulos dentro de la aplicación o en su página propia, incorporando un filtro interactivo para resaltar los capítulos recomendados según tu perfil (*Diseñador*, *Taller*, *Docente* o *Alumno*). **Markdown** es la fuente de texto canónica consultable y editable. **Word DOCX** es la edición ofimática. **PDF** es la edición de lectura e impresión. Todas comparten el contenido de esta edición y se mantienen sincronizadas.
 
-Los botones **Descargar PDF**, **Descargar Word** y **Descargar Markdown** recuperan los formatos correspondientes. **Leer manual completo** abre la edición web. La lámina FOGRA tiene su propio enlace y no es una cuarta versión de este manual. Una ficha de tinteros o una ficha del alumno tampoco lo es.
+En la aplicación web actual (botón **Manual (PDF)** y página web `/manual`), se ofrece exclusivamente la lectura interactiva y el enlace **Descargar PDF** (junto al botón **Imprimir**). Las versiones fuente en Markdown y Word DOCX se mantienen en el repositorio técnico del proyecto. La lámina FOGRA tiene su propio enlace y no es una versión de este manual.
 
-Utiliza el índice y la búsqueda del navegador, del lector PDF o de Word para localizar un control por su nombre visible. En Word, el panel de navegación utiliza los títulos del documento. La fecha de edición distingue este contenido ampliado de una copia antigua que se haya quedado en Descargas o en la caché del navegador.
+Utiliza el índice, el selector por perfil de lectura y la búsqueda del navegador, del lector PDF o de Word para localizar un control por su nombre visible. En Word, el panel de navegación utiliza los títulos del documento. La fecha de edición distingue este contenido ampliado de una copia antigua que se haya quedado en Descargas o en la caché del navegador.
 
 ### Conservación temporal y reinicios
 
@@ -874,5 +947,10 @@ Conserva el mensaje y el identificador del trabajo para el administrador. Antes 
 | Trazado de fuentes | Conversión de glifos de texto en formas; afecta a edición y búsqueda. |
 | Soft proof | Simulación visual de una condición de reproducción; requiere interpretar sus límites. |
 | SHA 256 | Huella calculada a partir de los bytes de un archivo de referencia. |
+| GWG 2015 / PDF/X | Especificaciones internacionales del Ghent Workgroup e ISO 15930 para intercambio fiable en artes gráficas. |
+| Job Ticket | Hoja de ruta técnica u orden de producción con especificaciones de máquina, soporte, pliegos y acabados. |
+| Rúbrica FP | Matriz ponderada de evaluación por competencias utilizada en el aula virtual docente. |
+| Diff visual | Comparación píxel a píxel entre dos versiones del documento para localizar modificaciones o desplazamientos. |
+| RBAC | Control de acceso basado en roles de taller y docencia (diseñador, alumno, preimpresión, responsable, docente y administrador). |
 
 **Fin del manual · Edición 2026.11.2**
