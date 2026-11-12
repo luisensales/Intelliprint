@@ -184,6 +184,10 @@ class RequestLimitsMiddleware:
                 path.startswith("/api/fp/")
                 and not path.endswith(("/student/submit", "/report-pdf"))
             )
+            or (
+                path.startswith("/api/history/")
+                and path.count("/") == 3
+            )
             or path in (
                 "/api/icc-catalog",
                 "/api/storage-status",

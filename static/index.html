@@ -936,6 +936,7 @@
                   <div class="flex items-center gap-1 px-1 text-xs">
                     <span class="text-slate-500 font-medium">Pág.</span>
                     <input type="number" id="sepPageInput" min="1" max="1" value="1"
+                      oninput="onSepPageInputChange(this.value)"
                       onchange="onSepPageInputChange(this.value)"
                       onkeydown="if(event.key==='Enter') onSepPageInputChange(this.value)"
                       class="w-12 text-center bg-white border border-slate-300 rounded px-1 py-0.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none">
@@ -4540,14 +4541,18 @@
       }
 
       // Inicializar Previsualizador de Separaciones de Color
-      initSeparations(summ.pages || 1);
+      const totalPagesCount = Math.max(
+        1,
+        Number(summ.pages || summ.page_count || data.paginas?.total_paginas || data.job_meta?.page_count || 1)
+      );
+      initSeparations(totalPagesCount);
 
       // Inicializar Comparador Antes / Despues
-      initComparison(summ.pages || 1);
+      initComparison(totalPagesCount);
 
       // Renderizar placas de tintas planas (Pantone / Especiales)
       const spotColors = summ.spot_colors;
-      if (spotColors && spotColors.length > 0) {
+      if (Array.isArray(spotColors)) {
         renderSpotPlates(spotColors);
       } else if (currentJobId) {
         fetch(`/api/spot-colors/${currentJobId}`)
@@ -4657,6 +4662,12 @@
 
         btn.classList.add('tab-active');
         document.getElementById(btn.dataset.tab).classList.remove('hidden');
+        if (btn.dataset.tab === 'tab-separations' && currentJobId) {
+          const sepImg = document.getElementById('sepPreviewImg');
+          if (!sepImg || sepImg.classList.contains('hidden') || !sepImg.getAttribute('src')) {
+            updateSeparationPreview();
+          }
+        }
       });
     });
 
@@ -6069,9 +6080,48 @@
       updateSeparationPreview();
     }
 
+    let sepActiveJobId = null;
+    let sepAbortController = null;
+    let sepRequestSeq = 0;
+    let sepBlobUrl = null;
+    let sepRehydratingPromise = null;
+
+    async function rehydrateJobFromSelectedFile(targetJobId) {
+      if (!selectedFile || !targetJobId) return false;
+      if (sepRehydratingPromise) return sepRehydratingPromise;
+      sepRehydratingPromise = (async () => {
+        try {
+          const profile = currentReport?.job_meta?.profile_id || document.querySelector('input[name="profile"]:checked')?.value || 'OFFSET_300';
+          const iccOption = currentReport?.job_meta?.icc_option || document.querySelector('input[name="icc_option"]:checked')?.value || 'preserve';
+          const selectedIcc = currentReport?.job_meta?.selected_icc || iccCatalogSelect?.value || '';
+          const formData = new FormData();
+          formData.append('file', selectedFile);
+          formData.append('profile_id', profile);
+          formData.append('icc_option', iccOption);
+          formData.append('reuse_job_id', targetJobId);
+          if (iccOption === 'custom_selection' && selectedIcc) {
+            formData.append('selected_icc', selectedIcc);
+          }
+          const resp = await fetch('/api/check', { method: 'POST', body: formData });
+          return resp.ok;
+        } catch (_err) {
+          return false;
+        } finally {
+          sepRehydratingPromise = null;
+        }
+      })();
+      return sepRehydratingPromise;
+    }
+
     function initSeparations(pageCount) {
-      sepTotalPageCount = Math.max(1, pageCount || 1);
-      sepCurrentPage = 1;
+      const parsedTotal = Math.max(1, parseInt(pageCount, 10) || 1);
+      sepTotalPageCount = parsedTotal;
+      if (sepActiveJobId === currentJobId && sepCurrentPage >= 1 && sepCurrentPage <= sepTotalPageCount) {
+        sepCurrentPage = Math.max(1, Math.min(sepTotalPageCount, parseInt(sepCurrentPage, 10) || 1));
+      } else {
+        sepCurrentPage = 1;
+        sepActiveJobId = currentJobId;
+      }
 
       const totalSpan = document.getElementById('sepTotalPages');
       if (totalSpan) totalSpan.textContent = sepTotalPageCount;
@@ -6080,7 +6130,7 @@
       if (pageInput) {
         pageInput.min = 1;
         pageInput.max = sepTotalPageCount;
-        pageInput.value = 1;
+        pageInput.value = sepCurrentPage;
       }
 
       const profSel = document.getElementById('sepSimProfileSelect');
@@ -6091,18 +6141,31 @@
     }
 
     function updateSepNavButtons() {
+      const cur = Math.max(1, parseInt(sepCurrentPage, 10) || 1);
+      const tot = Math.max(1, parseInt(sepTotalPageCount, 10) || 1);
+      sepCurrentPage = cur;
+      sepTotalPageCount = tot;
       const prevBtn = document.getElementById('sepPrevPageBtn');
       const nextBtn = document.getElementById('sepNextPageBtn');
-      if (prevBtn) prevBtn.disabled = (sepCurrentPage <= 1);
-      if (nextBtn) nextBtn.disabled = (sepCurrentPage >= sepTotalPageCount);
+      if (prevBtn) prevBtn.disabled = (cur <= 1);
+      if (nextBtn) nextBtn.disabled = (cur >= tot);
+
+      const totalSpan = document.getElementById('sepTotalPages');
+      if (totalSpan) totalSpan.textContent = tot;
 
       const pageInput = document.getElementById('sepPageInput');
-      if (pageInput) pageInput.value = sepCurrentPage;
+      if (pageInput) {
+        pageInput.max = tot;
+        pageInput.value = cur;
+      }
     }
 
     function changeSepPage(delta) {
-      const newPage = sepCurrentPage + delta;
-      if (newPage >= 1 && newPage <= sepTotalPageCount) {
+      const cur = Math.max(1, parseInt(sepCurrentPage, 10) || 1);
+      const tot = Math.max(1, parseInt(sepTotalPageCount, 10) || 1);
+      const step = parseInt(delta, 10) || 0;
+      const newPage = cur + step;
+      if (newPage >= 1 && newPage <= tot) {
         sepCurrentPage = newPage;
         updateSepNavButtons();
         updateSeparationPreview();
@@ -6110,9 +6173,15 @@
     }
 
     function onSepPageInputChange(val) {
+      if (val === '' || val === null || val === undefined) return;
+      const tot = Math.max(1, parseInt(sepTotalPageCount, 10) || 1);
       let pageNum = parseInt(val, 10);
-      if (isNaN(pageNum)) pageNum = 1;
-      pageNum = Math.max(1, Math.min(sepTotalPageCount, pageNum));
+      if (isNaN(pageNum)) return;
+      pageNum = Math.max(1, Math.min(tot, pageNum));
+      if (pageNum === sepCurrentPage) {
+        updateSepNavButtons();
+        return;
+      }
       sepCurrentPage = pageNum;
       updateSepNavButtons();
       updateSeparationPreview();
@@ -6177,11 +6246,16 @@
     }
 
     let sepDebounce = null;
-    function updateSeparationPreview() {
+    function updateSeparationPreview(retryCount = 0) {
       if (!currentJobId) return;
       clearTimeout(sepDebounce);
-      sepDebounce = setTimeout(() => {
-        const page = sepCurrentPage || 1;
+      const reqSeq = ++sepRequestSeq;
+      if (sepAbortController) {
+        try { sepAbortController.abort(); } catch (_e) {}
+      }
+      sepDebounce = setTimeout(async () => {
+        const activeJob = currentJobId;
+        const page = Math.max(1, parseInt(sepCurrentPage, 10) || 1);
         const c = document.getElementById('sepChanC')?.checked ?? true;
         const m = document.getElementById('sepChanM')?.checked ?? true;
         const y = document.getElementById('sepChanY')?.checked ?? true;
@@ -6215,7 +6289,7 @@
         }
 
         if (overlay) overlay.classList.remove('hidden');
-        let url = `/api/separations/${currentJobId}?page=${page}&c=${c}&m=${m}&y=${y}&k=${k}&mode=${mode}&dpi=110&icc=${encodeURIComponent(selectedProfile)}&t=${Date.now()}`;
+        let url = `/api/separations/${activeJob}?page=${page}&c=${c}&m=${m}&y=${y}&k=${k}&mode=${mode}&dpi=110&icc=${encodeURIComponent(selectedProfile)}&t=${Date.now()}`;
         if (simulatePaper && mode === 'color') {
           url += `&simulate_paper=true&paper_type=${encodeURIComponent(paperType)}&simulate_black=${simulateBlack}`;
         }
@@ -6223,20 +6297,67 @@
           url += `&disabled_spots=${encodeURIComponent(Array.from(disabledSpotColors).join(','))}`;
         }
 
-        const tempImg = new Image();
-        tempImg.onload = () => {
-          if (imgEl) {
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        sepAbortController = controller;
+
+        try {
+          const res = await fetch(url, controller ? { signal: controller.signal } : undefined);
+          if (reqSeq !== sepRequestSeq || currentJobId !== activeJob) return;
+
+          if (res.status === 429 && retryCount < 3) {
+            setTimeout(() => {
+              if (reqSeq === sepRequestSeq && currentJobId === activeJob) {
+                updateSeparationPreview(retryCount + 1);
+              }
+            }, 900);
+            return;
+          }
+
+          if (res.status === 404 && retryCount < 1 && selectedFile) {
+            const rehydrated = await rehydrateJobFromSelectedFile(activeJob);
+            if (rehydrated && reqSeq === sepRequestSeq && currentJobId === activeJob) {
+              updateSeparationPreview(retryCount + 1);
+              return;
+            }
+          }
+
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+
+          const headerTotal = parseInt(res.headers?.get?.('x-total-pages') || '', 10);
+          if (!isNaN(headerTotal) && headerTotal >= 1 && headerTotal !== sepTotalPageCount) {
+            sepTotalPageCount = headerTotal;
+            updateSepNavButtons();
+          }
+
+          const blob = await res.blob();
+          if (reqSeq !== sepRequestSeq || currentJobId !== activeJob) return;
+
+          if (typeof URL !== 'undefined' && URL.createObjectURL) {
+            if (sepBlobUrl && URL.revokeObjectURL) {
+              try { URL.revokeObjectURL(sepBlobUrl); } catch (_e) {}
+            }
+            sepBlobUrl = URL.createObjectURL(blob);
+            if (imgEl) {
+              imgEl.src = sepBlobUrl;
+              imgEl.classList.remove('hidden');
+            }
+          } else if (imgEl) {
             imgEl.src = url;
             imgEl.classList.remove('hidden');
           }
           if (notice) notice.classList.add('hidden');
           if (overlay) overlay.classList.add('hidden');
-        };
-        tempImg.onerror = () => {
+        } catch (err) {
+          if (err && err.name === 'AbortError') return;
+          if (reqSeq !== sepRequestSeq) return;
           if (overlay) overlay.classList.add('hidden');
-        };
-        tempImg.src = url;
-      }, 100);
+          if (notice && (!imgEl || imgEl.classList.contains('hidden'))) {
+            notice.classList.remove('hidden');
+          }
+        }
+      }, 80);
     }
 
 
@@ -9137,19 +9258,23 @@
       restoreVersion(selA.value);
     }
 
-    // Atajos de teclado: Ctrl+Z (Undo) y Ctrl+Y (Redo)
+    // Atajos de teclado: Ctrl+Z (Undo), Ctrl+Y (Redo) y flechas ←/→ en Separaciones
     window.addEventListener('keydown', (e) => {
+      const activeTag = document.activeElement ? document.activeElement.tagName : '';
+      if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        const activeTag = document.activeElement ? document.activeElement.tagName : '';
-        if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
-          e.preventDefault();
-          undoVersion();
-        }
+        e.preventDefault();
+        undoVersion();
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-        const activeTag = document.activeElement ? document.activeElement.tagName : '';
-        if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+        e.preventDefault();
+        redoVersion();
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        const sepTab = document.getElementById('tab-separations');
+        const issueModal = document.getElementById('issueViewerModal');
+        const issueOpen = issueModal && !issueModal.classList.contains('hidden');
+        if (sepTab && !sepTab.classList.contains('hidden') && !issueOpen && currentJobId) {
           e.preventDefault();
-          redoVersion();
+          changeSepPage(e.key === 'ArrowRight' ? 1 : -1);
         }
       }
     });

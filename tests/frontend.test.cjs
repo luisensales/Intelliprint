@@ -585,3 +585,68 @@ test('renderResults updates expiration TTL notice and production package link', 
   assert.equal(context.document.getElementById('resJobTtlText').textContent, 'Retención 24 h (Caduca en 21 h 40 min)');
   assert.equal(context.document.getElementById('btnProductionPackage').href, '/api/production-package/job_test_77');
 });
+
+test('Separations preview advances pages, preserves current page on same-job re-init, and syncs X-Total-Pages', async () => {
+  const document = fakeDocument();
+  const requestedUrls = [];
+  const context = {
+    document,
+    currentJobId: 'job_sep_1',
+    selectedFile: null,
+    sepActiveJobId: null,
+    sepCurrentPage: 1,
+    sepTotalPageCount: 1,
+    sepAbortController: null,
+    sepRequestSeq: 0,
+    sepBlobUrl: null,
+    sepDebounce: null,
+    disabledSpotColors: new Set(),
+    setTimeout: (fn) => { fn(); return 1; },
+    clearTimeout: () => {},
+    URL: {
+      createObjectURL: () => 'blob:mock-sep-preview',
+      revokeObjectURL: () => {}
+    },
+    fetch: async (url) => {
+      requestedUrls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: (k) => (k.toLowerCase() === 'x-total-pages' ? '4' : null) },
+        blob: async () => ({ size: 128 })
+      };
+    }
+  };
+
+  loadFunctions(context, [
+    'initSeparations',
+    'updateSepNavButtons',
+    'changeSepPage',
+    'onSepPageInputChange',
+    'updateSeparationPreview'
+  ]);
+
+  context.initSeparations(2);
+  await new Promise(r => setImmediate(r));
+  // Header X-Total-Pages=4 should sync total pages to 4
+  assert.equal(document.getElementById('sepTotalPages').textContent, 4);
+  assert.equal(document.getElementById('sepPrevPageBtn').disabled, true);
+  assert.equal(document.getElementById('sepNextPageBtn').disabled, false);
+  assert.ok(requestedUrls[0].includes('/api/separations/job_sep_1?page=1'));
+
+  context.changeSepPage(1);
+  await new Promise(r => setImmediate(r));
+  assert.equal(document.getElementById('sepPageInput').value, 2);
+  assert.equal(document.getElementById('sepPrevPageBtn').disabled, false);
+  assert.ok(requestedUrls[requestedUrls.length - 1].includes('page=2'));
+
+  context.onSepPageInputChange('3');
+  await new Promise(r => setImmediate(r));
+  assert.equal(document.getElementById('sepPageInput').value, 3);
+  assert.ok(requestedUrls[requestedUrls.length - 1].includes('page=3'));
+
+  // Re-initializing separations for the same job should preserve page 3
+  context.initSeparations(4);
+  await new Promise(r => setImmediate(r));
+  assert.equal(document.getElementById('sepPageInput').value, 3);
+});

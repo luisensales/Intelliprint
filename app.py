@@ -143,6 +143,7 @@ from auth_manager import (
     submit_client_decision,
     get_db_status,
 )
+from db_store import restore_cloud_job_snapshot, save_cloud_job_snapshot
 from fp_classroom import (
     create_group as fp_create_group,
     list_groups as fp_list_groups,
@@ -316,6 +317,8 @@ def get_job_json_path(job_id: str) -> Path:
                 rehydrate_didactic_job(safe_id, sc_id)
             except Exception as e:
                 print(f"[rehydrate] Error rehidratando reto {sc_id}: {e}")
+        if not job_json_path.exists():
+            restore_cloud_job_snapshot(safe_id, JOBS_DIR, UPLOAD_DIR)
 
     return job_json_path
 
@@ -508,7 +511,8 @@ def check_pdf(
     file: UploadFile = File(...),
     profile_id: str = Form("OFFSET_300"),
     icc_option: str = Form("preserve"),
-    selected_icc: Optional[str] = Form(None)
+    selected_icc: Optional[str] = Form(None),
+    reuse_job_id: Optional[str] = Form(None),
 ):
     try:
         validate_pdf_filename(file.filename)
@@ -516,6 +520,11 @@ def check_pdf(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     job_id = str(uuid.uuid4())[:8]
+    if reuse_job_id:
+        try:
+            job_id = validate_job_id(reuse_job_id)
+        except ValueError:
+            pass
     job_folder = UPLOAD_DIR / job_id
     job_folder.mkdir(parents=True, exist_ok=True)
     
@@ -565,6 +574,7 @@ def check_pdf(
     job_json_path = get_job_json_path(job_id)
     with open(job_json_path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
+    save_cloud_job_snapshot(job_id, report, file_path, JOBS_DIR)
 
     return report
 
@@ -1789,6 +1799,11 @@ def get_latest_cumulative_pdf(job_meta: dict) -> Optional[str]:
     for c in candidates:
         if c and Path(c).exists():
             return str(c)
+    jid = job_meta.get("job_id")
+    if jid and restore_cloud_job_snapshot(str(jid), JOBS_DIR, UPLOAD_DIR):
+        restored = UPLOAD_DIR / str(jid) / "source.pdf"
+        if restored.is_file():
+            return str(restored)
     return None
 
 
@@ -1831,6 +1846,7 @@ def register_cumulative_fix(job_data: dict, output_path: str | Path, fix_name: s
         job_data["version_history_summary"] = public_history(job_data, JOBS_DIR)
     except Exception as exc:
         print(f"[register_cumulative_fix] Aviso versión: {exc}")
+    save_cloud_job_snapshot(job_meta.get("job_id", ""), job_data, output_path, JOBS_DIR)
 
 
 def refresh_job_analysis(job_data: dict, pdf_path: str | Path) -> None:
@@ -3251,9 +3267,16 @@ def get_page_separation(
         disabled_spots_list = [s.strip() for s in disabled_spots.split(",") if s.strip()]
 
     try:
+        total_pages = int((job_data.get("job_summary") or {}).get("pages") or 1)
+        try:
+            with pymupdf.open(str(target_pdf)) as _pdoc:
+                total_pages = max(1, len(_pdoc))
+        except Exception:
+            pass
+        eff_page_index = max(0, min(total_pages - 1, page - 1))
         img_bytes = render_page_separation(
             pdf_path=target_pdf,
-            page_index=max(0, page - 1),
+            page_index=eff_page_index,
             show_c=c,
             show_m=m,
             show_y=y,
@@ -3266,7 +3289,15 @@ def get_page_separation(
             paper_type=paper_type,
             simulate_black_ink=simulate_black,
         )
-        return Response(content=img_bytes, media_type="image/jpeg")
+        return Response(
+            content=img_bytes,
+            media_type="image/jpeg",
+            headers={
+                "X-Total-Pages": str(total_pages),
+                "X-Current-Page": str(eff_page_index + 1),
+                "Cache-Control": "private, max-age=120",
+            },
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error renderizando separación: {e}")
     finally:

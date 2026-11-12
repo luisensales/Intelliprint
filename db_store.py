@@ -8,10 +8,13 @@ SQLite when running locally or inside isolated unit tests.
 from __future__ import annotations
 
 from contextlib import contextmanager
+import json
 import os
 from pathlib import Path
 import sqlite3
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+import sys
+import time
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 try:
     import psycopg
@@ -200,4 +203,135 @@ def get_connection(db_path: Optional[Path] = None):
         raise
     finally:
         conn.close()
+
+
+_CLOUD_SNAPSHOT_TABLE_READY: Set[str] = set()
+_MAX_CLOUD_PDF_BYTES = 18 * 1024 * 1024
+
+
+def _should_use_cloud_job_snapshots(jobs_dir: Optional[Path] = None) -> bool:
+    """Enable Neon job snapshots in production/default storage, skipping unit test temp dirs."""
+    if not is_postgres_configured() or "unittest" in sys.modules:
+        return False
+    if jobs_dir is not None:
+        default_jobs = (_PROJECT_ROOT / "jobs").resolve()
+        if Path(jobs_dir).resolve() != default_jobs and not os.environ.get("RENDER"):
+            return False
+    return True
+
+
+def _ensure_cloud_job_table(conn: DBConnection) -> None:
+    dsn_key = get_database_url()
+    if dsn_key in _CLOUD_SNAPSHOT_TABLE_READY:
+        return
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS cloud_job_snapshots (
+            job_id TEXT PRIMARY KEY,
+            filename TEXT,
+            report_json TEXT NOT NULL,
+            pdf_bytes BYTEA,
+            updated_at BIGINT NOT NULL
+        )
+    """)
+    conn.commit()
+    _CLOUD_SNAPSHOT_TABLE_READY.add(dsn_key)
+
+
+def save_cloud_job_snapshot(
+    job_id: str,
+    job_data: Dict[str, Any],
+    pdf_path: Optional[str | Path] = None,
+    jobs_dir: Optional[Path] = None,
+) -> bool:
+    """Persist a job JSON and its active PDF in Neon PostgreSQL so Render restarts never lose active jobs."""
+    if not job_id or not _should_use_cloud_job_snapshots(jobs_dir):
+        return False
+    try:
+        pdf_bytes: Optional[bytes] = None
+        if pdf_path:
+            p = Path(pdf_path)
+            if p.is_file() and p.stat().st_size <= _MAX_CLOUD_PDF_BYTES:
+                pdf_bytes = p.read_bytes()
+        filename = (job_data.get("job_meta") or {}).get("filename") or "source.pdf"
+        report_str = json.dumps(job_data, ensure_ascii=False)
+        now_ts = int(time.time())
+        cutoff_ts = now_ts - 86400
+
+        with get_connection() as conn:
+            _ensure_cloud_job_table(conn)
+            if pdf_bytes is not None:
+                conn.execute("""
+                    INSERT INTO cloud_job_snapshots (job_id, filename, report_json, pdf_bytes, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT (job_id) DO UPDATE SET
+                        filename = EXCLUDED.filename,
+                        report_json = EXCLUDED.report_json,
+                        pdf_bytes = EXCLUDED.pdf_bytes,
+                        updated_at = EXCLUDED.updated_at
+                """, (job_id, filename, report_str, pdf_bytes, now_ts))
+            else:
+                conn.execute("""
+                    INSERT INTO cloud_job_snapshots (job_id, filename, report_json, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT (job_id) DO UPDATE SET
+                        filename = EXCLUDED.filename,
+                        report_json = EXCLUDED.report_json,
+                        updated_at = EXCLUDED.updated_at
+                """, (job_id, filename, report_str, now_ts))
+            conn.execute("DELETE FROM cloud_job_snapshots WHERE updated_at < ?", (cutoff_ts,))
+            conn.execute("""
+                DELETE FROM cloud_job_snapshots
+                WHERE job_id NOT IN (
+                    SELECT job_id FROM cloud_job_snapshots ORDER BY updated_at DESC LIMIT 20
+                )
+            """)
+            conn.commit()
+        return True
+    except Exception as exc:
+        print(f"[db_store] Aviso guardando snapshot de job {job_id}: {exc}")
+        return False
+
+
+def restore_cloud_job_snapshot(
+    job_id: str,
+    jobs_dir: Path,
+    upload_dir: Path,
+) -> bool:
+    """Restore a job JSON and its active PDF from Neon PostgreSQL if wiped by a container restart."""
+    if not job_id or not _should_use_cloud_job_snapshots(jobs_dir):
+        return False
+    try:
+        with get_connection() as conn:
+            _ensure_cloud_job_table(conn)
+            row = conn.execute(
+                "SELECT filename, report_json, pdf_bytes FROM cloud_job_snapshots WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+        if not row:
+            return False
+
+        job_data = json.loads(row["report_json"])
+        pdf_bytes = row.get("pdf_bytes")
+        job_folder = Path(upload_dir) / job_id
+        job_folder.mkdir(parents=True, exist_ok=True)
+        restored_pdf = job_folder / "source.pdf"
+
+        if pdf_bytes:
+            raw_bytes = bytes(pdf_bytes)
+            restored_pdf.write_bytes(raw_bytes)
+            meta = job_data.setdefault("job_meta", {})
+            meta["pdf_path"] = str(restored_pdf)
+            for k in list(meta.keys()):
+                if k.endswith("_pdf_path") and k != "pdf_path":
+                    cand = meta.get(k)
+                    if cand and not Path(cand).exists():
+                        meta[k] = str(restored_pdf)
+
+        Path(jobs_dir).mkdir(parents=True, exist_ok=True)
+        job_json_path = Path(jobs_dir) / f"{job_id}.json"
+        job_json_path.write_text(json.dumps(job_data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return True
+    except Exception as exc:
+        print(f"[db_store] Aviso restaurando snapshot de job {job_id}: {exc}")
+        return False
 
