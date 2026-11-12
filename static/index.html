@@ -207,8 +207,8 @@
 
         <!-- Bloque 4: Entorno, Cabina & Ayuda (Siempre anclado a la derecha sin saltar de línea) -->
         <div class="inline-flex items-center gap-1 bg-slate-950/70 border border-slate-800 rounded-xl px-1.5 py-1 shrink-0 ml-auto">
-          <button onclick="openManualModal()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Manual Oficial de Usuario y Guía de Operación (PDF / Word)">
-            <i class="fa-solid fa-book-bookmark text-amber-300"></i> <span>Manual</span>
+          <button onclick="openManualModal()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Manual Oficial de Usuario y Guía de Operación (PDF)">
+            <i class="fa-solid fa-file-pdf text-red-400"></i> <span>Manual (PDF)</span>
           </button>
           <div class="h-3.5 w-px bg-slate-800"></div>
           <button id="themeToggleBtn" onclick="toggleKioskTheme()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Conmutar Modo Cabina de Máquina D50 (Fondo oscuro antirreflejo para pupitres de prensa ISO 3664)">
@@ -2682,16 +2682,15 @@
       <div class="flex items-center justify-between gap-4 px-5 py-3 bg-slate-900 text-white shrink-0">
         <div>
           <h3 id="manualModalTitle" class="font-bold">Manual completo de usuario de IntelliPrint</h3>
-          <p class="text-xs text-slate-300">Edición 2026.11.1 · Todas las herramientas, opciones y actividades de FP</p>
+          <p class="text-xs text-slate-300">Edición 2026.11.2 · Todas las herramientas, opciones y actividades de FP</p>
         </div>
         <button onclick="closeManualModal()" aria-label="Cerrar manual" class="p-2 rounded-lg hover:bg-white/10"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
       <div class="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-3 bg-slate-50 border-b border-slate-200 text-sm shrink-0">
-        <a href="/api/manual/download/pdf" download class="text-red-700 font-semibold"><i class="fa-solid fa-file-pdf mr-1"></i>Descargar PDF</a>
-        <a href="/api/manual/download/docx" download class="text-blue-700 font-semibold"><i class="fa-solid fa-file-word mr-1"></i>Descargar Word</a>
-        <a href="/api/manual/download/md" download class="text-slate-700 font-semibold">Descargar Markdown</a>
-        <a href="/manual" target="_blank" rel="noopener" class="text-indigo-700 font-semibold">Leer manual completo en otra pestaña</a>
-        <a href="/api/fogra/download" download class="text-teal-700">Lámina técnica FOGRA</a>
+        <a href="/api/manual/download/pdf" download class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-sm"><i class="fa-solid fa-file-pdf"></i> Descargar Manual en PDF</a>
+        <a href="/api/manual/download/pdf" target="_blank" class="text-red-700 hover:text-red-800 font-semibold text-xs flex items-center gap-1"><i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir PDF</a>
+        <a href="/manual" target="_blank" rel="noopener" class="text-indigo-700 hover:text-indigo-800 font-semibold text-xs flex items-center gap-1">Ver en pestaña nueva</a>
+        <a href="/api/fogra/download" download class="text-teal-700 hover:text-teal-800 text-xs flex items-center gap-1">Lámina técnica FOGRA</a>
       </div>
       <iframe id="manualReader" title="Manual completo de usuario de IntelliPrint" data-src="/manual?embed=1" class="w-full flex-1 min-h-0 border-0 bg-slate-50"></iframe>
       <div class="flex items-center justify-between gap-3 px-5 py-2 bg-white border-t border-slate-200 shrink-0">
@@ -3636,7 +3635,7 @@
           <p class="text-slate-400 text-[11px]">
             Proyecto de Innovación Aplicada y Transferencia del Conocimiento en Formación Profesional · 
             <span onclick="openManualModal(); event.preventDefault(); event.stopPropagation();" class="text-indigo-600 hover:text-indigo-700 font-semibold underline ml-1 cursor-pointer">
-              <i class="fa-solid fa-book-bookmark"></i> Manual de Usuario (PDF / Word)
+              <i class="fa-solid fa-file-pdf"></i> Manual de Usuario (PDF)
             </span>
           </p>
         </div>

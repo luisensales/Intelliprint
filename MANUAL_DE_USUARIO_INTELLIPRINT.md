@@ -1,6 +1,6 @@
 # Manual de usuario de IntelliPrint
 
-**Edición 2026.11.1 · Actualizado el 9 de noviembre de 2026**
+**Edición 2026.11.2 · Actualizado el 12 de noviembre de 2026**
 
 Guía de operación para preimpresión, taller gráfico y Formación Profesional.
 
@@ -795,4 +795,4 @@ Conserva el mensaje y el identificador del trabajo para el administrador. Antes 
 | Soft proof | Simulación visual de una condición de reproducción; requiere interpretar sus límites. |
 | SHA 256 | Huella calculada a partir de los bytes de un archivo de referencia. |
 
-**Fin del manual · Edición 2026.11.1**
+**Fin del manual · Edición 2026.11.2**

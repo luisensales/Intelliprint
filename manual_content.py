@@ -7,8 +7,8 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
 MANUAL_SOURCE = BASE_DIR / 'MANUAL_DE_USUARIO_INTELLIPRINT.md'
-MANUAL_EDITION = '2026.11.1'
-MANUAL_UPDATED = '2026-11-09'
+MANUAL_EDITION = '2026.11.2'
+MANUAL_UPDATED = '2026-11-12'
 MANUAL_TITLE = 'Manual de usuario de IntelliPrint'
 
 
@@ -154,6 +154,6 @@ tbody tr:nth-child(even){{background:#f7f9fc}}code{{font-size:.9em;background:#f
 @media print{{body{{background:white;font:10.5pt/1.4 Arial,sans-serif}}header,nav{{display:none!important}}.layout{{display:block;margin:0;padding:0;max-width:none}}article{{border:0;padding:0}}h2,h3,h4{{break-after:avoid}}tr{{break-inside:avoid}}thead{{display:table-header-group}}.table-scroll{{overflow:visible}}a{{color:inherit}}@page{{size:A4;margin:18mm}}}}
 </style></head><body class="{embedded_class.strip()}">
 <header><img src="/assets/Logo-intelliprint-imago.png" alt=""><strong>{MANUAL_TITLE}</strong><div class="actions">
-<a href="/">Volver a la aplicación</a><a href="/api/manual/download/pdf">PDF</a><a href="/api/manual/download/docx">Word</a><a href="/api/manual/download/md">Markdown</a><button onclick="window.print()">Imprimir</button></div></header>
+<a href="/">Volver a la aplicación</a><a href="/api/manual/download/pdf">Descargar PDF</a><button onclick="window.print()">Imprimir</button></div></header>
 <div class="layout"><nav aria-label="Índice del manual"><strong>Edición {MANUAL_EDITION}</strong><ol>{toc}</ol><p>Usa la búsqueda del navegador para localizar un control.</p></nav>
 <article aria-label="Manual completo">{render_manual_article()}</article></div></body></html>'''
