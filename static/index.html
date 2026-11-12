@@ -378,6 +378,9 @@
     <!-- Results Section -->
     <section id="resultsSection" class="hidden space-y-6">
 
+      <!-- Active FP Practice Banner -->
+      <div id="activeFpPracticeBanner" class="hidden rounded-xl border p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs"></div>
+
       <!-- Job Banner & Triple Result Header -->
       <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
         <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-4">
@@ -2606,13 +2609,25 @@
 
         <!-- TAB 3: AUTOEVALUACIÓN FP -->
         <div id="didTabQuiz" class="hidden space-y-4">
-          <div class="bg-purple-50 border border-purple-200 rounded-xl p-4 flex items-start gap-3">
-            <i class="fa-solid fa-graduation-cap text-purple-600 text-lg mt-0.5"></i>
-            <div>
-              <h4 class="text-xs font-bold text-purple-900">Cuestionario Técnico de Autoevaluación en Preimpresión</h4>
-              <p class="text-xs text-purple-800 mt-0.5">
-                Demuestra tus conocimientos técnicos respondiendo a las siguientes preguntas clave de producción gráfica. Al finalizar, obtendrás tu nota de 0 a 10 con justificación basada en normas ISO.
-              </p>
+          <div class="bg-purple-50 border border-purple-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-start gap-3">
+              <i class="fa-solid fa-graduation-cap text-purple-600 text-lg mt-0.5"></i>
+              <div>
+                <h4 class="text-xs font-bold text-purple-900">Cuestionario Técnico de Autoevaluación en Preimpresión</h4>
+                <p class="text-xs text-purple-800 mt-0.5">
+                  Demuestra tus conocimientos técnicos sobre el banco de 12 preguntas FP por competencias. Al finalizar, obtendrás nota de 0 a 10, desglose competencial y justificación ISO.
+                </p>
+              </div>
+            </div>
+            <div class="shrink-0 flex items-center gap-2">
+              <label for="quizTopicSelect" class="text-[11px] font-bold text-purple-900 whitespace-nowrap">Bloque FP:</label>
+              <select id="quizTopicSelect" onchange="loadQuizQuestions()" class="rounded-lg border border-purple-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none">
+                <option value="all">Todas las áreas (12 preguntas)</option>
+                <option value="color">Color, Tintas y TAC (3)</option>
+                <option value="geometria">Geometría, Sangrado e Imposición (3)</option>
+                <option value="tipografia">Tipografía, Fuentes y Legibilidad (3)</option>
+                <option value="normativa">PDF/X, Preflight y Calidad (3)</option>
+              </select>
             </div>
           </div>
 
@@ -3595,6 +3610,18 @@
           </div>
 
           <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <i class="fa-solid fa-clipboard-list text-violet-600"></i> Prácticas Abiertas y Retos Asignados
+              </h4>
+              <span class="text-[11px] text-slate-500">Pulsa <strong>Empezar Práctica</strong> para cargar el reto o activar el Modo Examen</span>
+            </div>
+            <div id="fpStudentAssignmentsCards" class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs"></div>
+          </div>
+
+          <div id="fpStudentCompetenciesBox" class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-2.5 hidden"></div>
+
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
             <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700">Historial de Mis Entregas y Evaluaciones</h4>
             <div id="fpStudentSubmissionsList" class="space-y-2 text-xs"></div>
           </div>
@@ -3649,11 +3676,58 @@
                 <select data-id="fpNewAssignRubric" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none"></select>
               </div>
               <textarea data-id="fpNewAssignDesc" rows="2" placeholder="Instrucciones y criterios de entrega para el alumnado..." class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none"></textarea>
+              <label class="flex items-start gap-2 p-2.5 rounded-lg border border-amber-200 bg-amber-50/70 text-[11px] text-amber-950 cursor-pointer">
+                <input type="checkbox" data-id="fpNewAssignExamMode" class="mt-0.5 accent-amber-600 rounded">
+                <span><strong>Modo Examen (sin "Taller en 1 Clic"):</strong> bloquea el botón de auto-corrección masiva para exigir diagnóstico y corrección paso a paso.</span>
+              </label>
               <button onclick="createFpAssignment()" class="w-full py-2 bg-fuchsia-600 hover:bg-fuchsia-700 text-white rounded-lg text-xs font-bold cursor-pointer">
                 Publicar Práctica en el Grupo
               </button>
               <div id="fpTeacherAssignmentsList" class="space-y-1.5 pt-2 text-xs max-h-48 overflow-y-auto"></div>
             </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <i class="fa-solid fa-scale-balanced text-indigo-600"></i> Rúbricas de Evaluación Ponderadas
+                </h4>
+                <p class="text-[11px] text-slate-500 mt-0.5">Crea criterios propios y pesos personalizados (%) para tus prácticas FP.</p>
+              </div>
+              <button onclick="toggleFpRubricBuilder()" class="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 text-xs font-bold cursor-pointer">
+                <i class="fa-solid fa-plus mr-1"></i> Nueva Rúbrica Ponderada
+              </button>
+            </div>
+            <div id="fpRubricBuilderPanel" class="hidden p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <input type="text" data-id="fpRubricTitle" placeholder="Título de la rúbrica (Ej. Rúbrica Examen Packaging)" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none">
+                <input type="text" data-id="fpRubricDesc" placeholder="Descripción breve para el profesorado/alumnado" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none">
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div class="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
+                  <input type="text" data-id="fpCritName1" value="Gestión del Color / CMYK / TAC" class="w-full text-xs text-slate-800 outline-none">
+                  <input type="number" data-id="fpCritWeight1" value="35" min="5" max="100" class="w-16 rounded border border-slate-300 px-2 py-1 text-xs font-bold text-right">%
+                </div>
+                <div class="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
+                  <input type="text" data-id="fpCritName2" value="Geometría, Sangrado e Imposición" class="w-full text-xs text-slate-800 outline-none">
+                  <input type="number" data-id="fpCritWeight2" value="25" min="5" max="100" class="w-16 rounded border border-slate-300 px-2 py-1 text-xs font-bold text-right">%
+                </div>
+                <div class="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
+                  <input type="text" data-id="fpCritName3" value="Tipografía, Fuentes y Legibilidad" class="w-full text-xs text-slate-800 outline-none">
+                  <input type="number" data-id="fpCritWeight3" value="20" min="5" max="100" class="w-16 rounded border border-slate-300 px-2 py-1 text-xs font-bold text-right">%
+                </div>
+                <div class="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
+                  <input type="text" data-id="fpCritName4" value="Normativa PDF/X y Trazabilidad" class="w-full text-xs text-slate-800 outline-none">
+                  <input type="number" data-id="fpCritWeight4" value="20" min="5" max="100" class="w-16 rounded border border-slate-300 px-2 py-1 text-xs font-bold text-right">%
+                </div>
+              </div>
+              <div class="flex items-center justify-end gap-2">
+                <button onclick="toggleFpRubricBuilder(false)" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-semibold cursor-pointer">Cancelar</button>
+                <button onclick="createFpRubric()" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer">Guardar Rúbrica</button>
+              </div>
+            </div>
+            <div id="fpTeacherRubricsList" class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs"></div>
           </div>
         </div>
 
@@ -3976,6 +4050,7 @@
     // Resetear todo para comenzar un nuevo análisis desde el principio
     function resetToNewAnalysis() {
       if (typeof closeIssueViewer === 'function') closeIssueViewer(false);
+      if (typeof clearActiveFpPractice === 'function') clearActiveFpPractice(false);
       // 1. Resetear variables de trabajo
       selectedFile = null;
       currentJobId = null;
@@ -4199,6 +4274,7 @@
       if (typeof closeIssueViewer === 'function') closeIssueViewer(false);
       currentJobId = data.job_meta.job_id;
       currentReport = data;
+      if (typeof syncActiveFpPracticeUi === 'function') syncActiveFpPracticeUi();
       if (typeof loadJobHistory === 'function') loadJobHistory();
       const release = data.triple_result?.release || {};
       const meta = data.job_meta || {};
@@ -6766,6 +6842,10 @@
     // =========================================================================
 
     function openBatchFixModal() {
+      if (typeof activeFpAssignment !== 'undefined' && activeFpAssignment && activeFpAssignment.exam_mode) {
+        alert(`Modo Examen activo en "${activeFpAssignment.title}": el Taller en 1 Clic está bloqueado para evaluar tu capacidad de corrección manual paso a paso.`);
+        return;
+      }
       if (!currentJobId) { alert('No hay ningun trabajo activo. Sube y analiza un PDF primero.'); return; }
       const modal = document.getElementById('batchFixModal');
       if (modal && modal.dataset.jobId !== currentJobId) {
@@ -8498,10 +8578,13 @@
 
     async function loadQuizQuestions() {
       try {
-        const res = await fetch('/api/didactic/quiz/questions');
+        const topic = document.getElementById('quizTopicSelect')?.value || 'all';
+        const res = await fetch(`/api/didactic/quiz/questions?topic=${encodeURIComponent(topic)}`);
         const data = await res.json();
         cachedQuizQuestions = data.questions || [];
         renderQuizQuestions(cachedQuizQuestions);
+        const resultsEl = document.getElementById('quizResultsContainer');
+        if (resultsEl) resultsEl.classList.add('hidden');
       } catch (err) {
         console.error('Error cargando preguntas del quiz:', err);
       }
@@ -8518,8 +8601,11 @@
               ${qIdx + 1}
             </span>
             <div class="flex-1">
-              <h5 class="text-xs font-bold text-slate-800">${q.question}</h5>
-              <span class="text-[10px] text-slate-400 font-medium">Referencia: ${q.iso_ref}</span>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <h5 class="text-xs font-bold text-slate-800">${escapeHtml(q.question)}</h5>
+                ${q.topic_label ? `<span class="px-2 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-[10px] font-bold text-purple-700 shrink-0">${escapeHtml(q.topic_label)}</span>` : ''}
+              </div>
+              <span class="text-[10px] text-slate-400 font-medium">Referencia: ${escapeHtml(q.iso_ref)}</span>
             </div>
           </div>
 
@@ -8527,7 +8613,7 @@
             ${q.options.map((opt, optIdx) => `
               <label class="flex items-start gap-2 text-xs text-slate-700 p-2 rounded-lg hover:bg-slate-50 cursor-pointer border border-transparent hover:border-slate-200 transition">
                 <input type="radio" name="quiz_${q.id}" value="${optIdx}" class="mt-0.5 accent-purple-600">
-                <span>${opt}</span>
+                <span>${escapeHtml(opt)}</span>
               </label>
             `).join('')}
           </div>
@@ -8542,7 +8628,7 @@
       cachedQuizQuestions.forEach(q => {
         const checked = document.querySelector(`input[name="quiz_${q.id}"]:checked`);
         if (checked) {
-          answers[q.id] = parseInt(checked.value);
+          answers[q.id] = parseInt(checked.value, 10);
           answeredCount++;
         }
       });
@@ -8552,11 +8638,12 @@
         return;
       }
 
+      const topic = document.getElementById('quizTopicSelect')?.value || 'all';
       try {
         const res = await fetch('/api/didactic/quiz/evaluate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ answers })
+          body: JSON.stringify({ answers, topic })
         });
         const data = await res.json();
         lastQuizResult = data;
@@ -8566,7 +8653,7 @@
         if (notice) {
           notice.innerHTML = `
             <i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>
-            <span class="font-bold text-emerald-800">Calificación registrada: ${data.score} / 10 (${data.level}). Se incluirá en la ficha oficial.</span>
+            <span class="font-bold text-emerald-800">Calificación registrada: ${data.score} / 10 (${escapeHtml(data.level)}). Se incluirá en la ficha oficial.</span>
           `;
           notice.className = 'p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900';
         }
@@ -8585,6 +8672,29 @@
       const isPass = results.score >= 5.0;
       const scoreColor = isPass ? 'text-emerald-600' : 'text-rose-600';
       const bgHeader = isPass ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200';
+      const compBreakdown = results.competency_breakdown || [];
+      const compHtml = compBreakdown.length ? `
+        <div class="p-3.5 rounded-xl bg-white border border-slate-200 space-y-2">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-600">Desglose por Competencias FP</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            ${compBreakdown.map((c) => {
+              const pct = Number(c.pct ?? c.score_pct ?? 0);
+              const barColor = pct >= 70 ? 'bg-emerald-500' : (pct >= 50 ? 'bg-amber-500' : 'bg-rose-500');
+              return `
+                <div class="space-y-1">
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="font-semibold text-slate-700">${escapeHtml(c.label || c.topic || c.id)}</span>
+                    <span class="font-bold text-slate-900">${c.correct}/${c.total} (${pct.toFixed(0)}%)</span>
+                  </div>
+                  <div class="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div class="h-full ${barColor}" style="width: ${Math.min(100, Math.max(4, pct))}%"></div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : '';
 
       container.innerHTML = `
         <div class="p-4 rounded-xl border ${bgHeader} flex flex-col md:flex-row items-center justify-between gap-4">
@@ -8593,14 +8703,16 @@
               ${results.score.toFixed(1)} <span class="text-xs font-medium text-slate-500">/ 10</span>
             </div>
             <div>
-              <h4 class="text-sm font-bold text-slate-900">${results.level}</h4>
-              <p class="text-xs text-slate-600">Aciertos: ${results.correct_answers} de ${results.total_questions} preguntas · Evaluado: ${results.evaluated_at}</p>
+              <h4 class="text-sm font-bold text-slate-900">${escapeHtml(results.level)}</h4>
+              <p class="text-xs text-slate-600">Aciertos: ${results.correct_answers} de ${results.total_questions} preguntas · Evaluado: ${escapeHtml(results.evaluated_at)}</p>
             </div>
           </div>
           <button onclick="switchDidacticTab('worksheet')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow transition flex items-center gap-2 cursor-pointer">
             <i class="fa-solid fa-file-pdf"></i> Emitir Ficha Alumno en PDF
           </button>
         </div>
+
+        ${compHtml}
 
         <div class="space-y-3 pt-2">
           <h5 class="text-xs font-bold uppercase tracking-wider text-slate-600">Desglose Técnico y Justificación Pedagógica:</h5>
@@ -8609,14 +8721,14 @@
               <div class="flex items-start justify-between gap-2">
                 <span class="text-xs font-bold ${fb.is_correct ? 'text-emerald-800' : 'text-rose-800'} flex items-center gap-1.5">
                   <i class="fa-solid ${fb.is_correct ? 'fa-circle-check text-emerald-600' : 'fa-circle-xmark text-rose-600'}"></i>
-                  ${fb.question}
+                  ${escapeHtml(fb.question)}
                 </span>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded ${fb.is_correct ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
                   ${fb.is_correct ? 'CORRECTO' : 'REVISAR'}
                 </span>
               </div>
-              <p class="text-xs text-slate-700 pl-5 leading-relaxed">${fb.explanation}</p>
-              <div class="text-[10px] text-slate-400 pl-5">Normativa aplicable: ${fb.iso_ref}</div>
+              <p class="text-xs text-slate-700 pl-5 leading-relaxed">${escapeHtml(fb.explanation)}</p>
+              <div class="text-[10px] text-slate-400 pl-5">Normativa aplicable: ${escapeHtml(fb.iso_ref)}</div>
             </div>
           `).join('')}
         </div>
@@ -10382,7 +10494,123 @@
 
     let fpTeacherCache = null;
     let fpActiveSubmissionId = null;
+    let activeFpAssignment = null;
+    let fpStudentAssignmentsCache = [];
     const FP_ALL_TABS = ['student', 'groups', 'submissions', 'evolution', 'users'];
+
+    function renderCompetencyBarsHtml(competencies, compact = false) {
+      if (!Array.isArray(competencies) || !competencies.length) return '';
+      const cols = compact ? 'grid-cols-2 gap-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5';
+      return `
+        <div class="grid ${cols}">
+          ${competencies.map((c) => {
+            const rawPct = c.score_pct !== undefined ? c.score_pct : c.avg_pct;
+            const pct = rawPct !== null && rawPct !== undefined ? Number(rawPct) : null;
+            const evCount = c.evidences !== undefined ? c.evidences : (c.evidence_count || 0);
+            const barColor = pct === null
+              ? 'bg-slate-300'
+              : (pct >= 75 ? 'bg-emerald-500' : (pct >= 50 ? 'bg-amber-500' : 'bg-rose-500'));
+            return `
+              <div class="p-2 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
+                <div class="flex items-center justify-between gap-1 text-[11px]">
+                  <span class="font-bold text-slate-700 truncate" title="${escapeHtml(c.label || c.id || c.topic)}">${escapeHtml(c.label || c.id || c.topic)}</span>
+                  <span class="font-extrabold text-slate-900 shrink-0">${pct !== null ? `${pct.toFixed(0)}%` : '--'}</span>
+                </div>
+                <div class="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                  <div class="h-full ${barColor}" style="width: ${pct !== null ? Math.min(100, Math.max(4, pct)) : 0}%"></div>
+                </div>
+                <div class="text-[10px] text-slate-400">${evCount ? `${evCount} evidencias` : 'Sin evidencias'}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function syncActiveFpPracticeUi() {
+      const banner = document.getElementById('activeFpPracticeBanner');
+      const btnBatch = document.getElementById('btnBatchFix');
+      const isExam = Boolean(activeFpAssignment && activeFpAssignment.exam_mode);
+
+      if (btnBatch) {
+        btnBatch.disabled = isExam;
+        btnBatch.classList.toggle('opacity-50', isExam);
+        btnBatch.classList.toggle('cursor-not-allowed', isExam);
+        btnBatch.classList.toggle('hover:bg-emerald-700', !isExam);
+        const labelSpan = btnBatch.querySelector('span');
+        if (labelSpan) {
+          labelSpan.textContent = isExam ? '1 Clic Bloqueado (Modo Examen)' : 'Taller en 1 Clic';
+        }
+        btnBatch.title = isExam
+          ? 'Deshabilitado durante el Modo Examen: corrige cada incidencia paso a paso.'
+          : 'Aplica en lote las correcciones estándar recomendadas para imprenta (Trapping, Sangrado, TAC, Curvas, CMYK e ICC)';
+      }
+
+      if (!banner) return;
+      if (!activeFpAssignment) {
+        banner.classList.add('hidden');
+        banner.innerHTML = '';
+        return;
+      }
+
+      banner.classList.remove('hidden');
+      banner.className = isExam
+        ? 'rounded-xl border border-amber-300 bg-amber-50 p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs text-amber-950'
+        : 'rounded-xl border border-violet-300 bg-violet-50 p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs text-violet-950';
+
+      banner.innerHTML = `
+        <div class="flex items-start gap-2.5">
+          <i class="fa-solid ${isExam ? 'fa-shield-halved text-amber-600' : 'fa-graduation-cap text-violet-600'} text-base mt-0.5"></i>
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="font-extrabold">${escapeHtml(activeFpAssignment.title)}</span>
+              ${isExam
+                ? '<span class="px-2 py-0.5 rounded-full bg-amber-200 text-amber-950 text-[10px] font-black uppercase">Modo Examen · Sin 1-Clic</span>'
+                : '<span class="px-2 py-0.5 rounded-full bg-violet-200 text-violet-900 text-[10px] font-bold uppercase">Práctica Guiada</span>'}
+            </div>
+            <div class="text-[11px] opacity-85 mt-0.5">
+              Grupo: <strong>${escapeHtml(activeFpAssignment.group_name || '')}</strong> · Perfil objetivo: <strong>${escapeHtml(activeFpAssignment.target_profile || 'OFFSET_300')}</strong>
+              ${isExam ? ' · Corrige las incidencias manualmente desde las tarjetas de preflight.' : ''}
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button onclick="openFpClassroomModal('student')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer">
+            <i class="fa-solid fa-paper-plane mr-1"></i> Entregar Práctica
+          </button>
+          <button onclick="clearActiveFpPractice()" class="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer">
+            Salir de Práctica
+          </button>
+        </div>
+      `;
+    }
+
+    function clearActiveFpPractice() {
+      activeFpAssignment = null;
+      syncActiveFpPracticeUi();
+    }
+
+    async function startFpAssignment(assignId) {
+      const assign = fpStudentAssignmentsCache.find((a) => Number(a.id) === Number(assignId));
+      if (!assign) return;
+
+      activeFpAssignment = assign;
+      const assignSel = document.querySelector('[data-id="studentSubmitAssignmentSelect"]');
+      if (assignSel) assignSel.value = String(assign.id);
+
+      const profileRadio = document.querySelector(`input[name="profile"][value="${assign.target_profile}"]`);
+      if (profileRadio) profileRadio.checked = true;
+
+      closeFpClassroomModal();
+      syncActiveFpPracticeUi();
+
+      if (assign.scenario_id) {
+        await loadDidacticScenario(assign.scenario_id, null);
+        syncActiveFpPracticeUi();
+      } else if (!currentJobId) {
+        alert(`Práctica "${assign.title}" activada${assign.exam_mode ? ' en MODO EXAMEN (sin Taller en 1 Clic)' : ''}. Sube y analiza ahora tu archivo PDF con el perfil ${assign.target_profile}.`);
+      }
+    }
 
     function openFpClassroomModal(preferredTab = null) {
       const modal = document.getElementById('fpClassroomModal');
@@ -10485,11 +10713,62 @@
         }
 
         const assignSel = document.querySelector('[data-id="studentSubmitAssignmentSelect"]');
+        const assigns = dash.assignments || [];
+        fpStudentAssignmentsCache = assigns;
         if (assignSel) {
-          const assigns = dash.assignments || [];
           assignSel.innerHTML = assigns.length
-            ? assigns.map((a) => `<option value="${a.id}">${escapeHtml(a.group_name)} — ${escapeHtml(a.title)} (${escapeHtml(a.target_profile)})</option>`).join('')
+            ? assigns.map((a) => `<option value="${a.id}">${escapeHtml(a.group_name)} — ${escapeHtml(a.title)} (${escapeHtml(a.target_profile)})${a.exam_mode ? ' [MODO EXAMEN]' : ''}</option>`).join('')
             : '<option value="">No hay prácticas abiertas en tus grupos</option>';
+          if (activeFpAssignment && assigns.some((a) => Number(a.id) === Number(activeFpAssignment.id))) {
+            assignSel.value = String(activeFpAssignment.id);
+          }
+        }
+
+        const cardsBox = document.getElementById('fpStudentAssignmentsCards');
+        if (cardsBox) {
+          cardsBox.innerHTML = assigns.length
+            ? assigns.map((a) => {
+                const isActive = activeFpAssignment && Number(activeFpAssignment.id) === Number(a.id);
+                return `
+                  <div class="p-3 rounded-xl border ${isActive ? 'border-violet-500 bg-violet-50/70 ring-1 ring-violet-300' : 'border-slate-200 bg-slate-50/70'} flex flex-col justify-between gap-2.5">
+                    <div class="space-y-1">
+                      <div class="flex flex-wrap items-center justify-between gap-1.5">
+                        <span class="font-bold text-slate-900">${escapeHtml(a.title)}</span>
+                        <div class="flex items-center gap-1">
+                          ${a.exam_mode ? '<span class="px-1.5 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-black uppercase">Modo Examen</span>' : ''}
+                          <span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 text-[10px] font-semibold">${escapeHtml(a.target_profile)}</span>
+                        </div>
+                      </div>
+                      <div class="text-[11px] text-slate-500">${escapeHtml(a.group_name)} · ${escapeHtml(a.assignment_type === 'reto' ? 'Reto Didáctico' : a.assignment_type)}${a.due_at ? ` · Límite: ${escapeHtml(String(a.due_at).slice(0, 10))}` : ''}</div>
+                      ${a.description ? `<p class="text-[11px] text-slate-700 leading-snug">${escapeHtml(a.description)}</p>` : ''}
+                    </div>
+                    <div class="flex items-center justify-end gap-2">
+                      <button onclick="startFpAssignment(${a.id})" class="px-3 py-1.5 rounded-lg ${isActive ? 'bg-violet-700 text-white' : 'bg-violet-600 hover:bg-violet-700 text-white'} text-[11px] font-bold cursor-pointer">
+                        <i class="fa-solid ${a.scenario_id ? 'fa-flask' : 'fa-play'} mr-1"></i> ${a.scenario_id ? 'Cargar Reto y Empezar' : 'Activar Práctica'}
+                      </button>
+                    </div>
+                  </div>
+                `;
+              }).join('')
+            : '<p class="text-slate-500 col-span-full">Aún no hay prácticas asignadas en tus grupos.</p>';
+        }
+
+        const compBox = document.getElementById('fpStudentCompetenciesBox');
+        if (compBox) {
+          const comps = dash.competencies || [];
+          const hasAnyEvidence = comps.some((c) => ((c.evidences !== undefined ? c.evidences : c.evidence_count) || 0) > 0);
+          if (comps.length && hasAnyEvidence) {
+            compBox.classList.remove('hidden');
+            compBox.innerHTML = `
+              <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <i class="fa-solid fa-chart-simple text-indigo-600"></i> Mi Perfil Competencial FP (Prácticas + Autoevaluación)
+              </h4>
+              ${renderCompetencyBarsHtml(comps, false)}
+            `;
+          } else {
+            compBox.classList.add('hidden');
+            compBox.innerHTML = '';
+          }
         }
 
         const subsBox = document.getElementById('fpStudentSubmissionsList');
@@ -10665,13 +10944,35 @@
           rubSel.innerHTML = rubrics.map((r) => `<option value="${r.id}">${escapeHtml(r.title)}</option>`).join('');
         }
 
+        const rubList = document.getElementById('fpTeacherRubricsList');
+        if (rubList) {
+          rubList.innerHTML = rubrics.length
+            ? rubrics.map((r) => {
+                const crits = (r.criteria || []).map((c) => `${escapeHtml(c.name)} (${c.weight}%)`).join(' · ');
+                return `
+                  <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 space-y-1">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="font-bold text-slate-800">${escapeHtml(r.title)}</span>
+                      <span class="px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-bold">${(r.criteria || []).length} criterios</span>
+                    </div>
+                    ${r.description ? `<div class="text-[11px] text-slate-500">${escapeHtml(r.description)}</div>` : ''}
+                    <div class="text-[10px] text-slate-600">${crits}</div>
+                  </div>
+                `;
+              }).join('')
+            : '<p class="text-slate-500 col-span-full">No hay rúbricas registradas.</p>';
+        }
+
         const assignList = document.getElementById('fpTeacherAssignmentsList');
         if (assignList) {
           assignList.innerHTML = assignments.length
             ? assignments.map((a) => `
                 <div class="p-2 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
                   <div>
-                    <div class="font-bold text-slate-800">${escapeHtml(a.title)}</div>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="font-bold text-slate-800">${escapeHtml(a.title)}</span>
+                      ${a.exam_mode ? '<span class="px-1.5 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-black uppercase">Modo Examen</span>' : ''}
+                    </div>
                     <div class="text-[11px] text-slate-500">${escapeHtml(a.group_name)} · ${escapeHtml(a.assignment_type)} · ${escapeHtml(a.target_profile)}</div>
                   </div>
                   <span class="px-2 py-0.5 rounded bg-fuchsia-50 border border-fuchsia-200 text-fuchsia-700 text-[10px] font-bold">${a.submission_count || 0} entregas</span>
@@ -10739,6 +11040,7 @@
                     <div class="text-[11px] text-slate-600">
                       Progresión notas: ${series.length ? series.join(' ➔ ') : 'Pendiente de calificación'}
                     </div>
+                    ${renderCompetencyBarsHtml(st.competencies, true)}
                   </div>
                 `;
                 }).join('')}
@@ -10755,6 +11057,54 @@
       const typeSel = document.querySelector('[data-id="fpNewAssignType"]');
       const wrap = document.getElementById('fpScenarioPickerWrap');
       if (wrap) wrap.classList.toggle('hidden', !typeSel || typeSel.value !== 'reto');
+    }
+
+    function toggleFpRubricBuilder(forceState = null) {
+      const panel = document.getElementById('fpRubricBuilderPanel');
+      if (!panel) return;
+      if (forceState === true) panel.classList.remove('hidden');
+      else if (forceState === false) panel.classList.add('hidden');
+      else panel.classList.toggle('hidden');
+    }
+
+    async function createFpRubric() {
+      const title = document.querySelector('[data-id="fpRubricTitle"]')?.value.trim() || '';
+      const description = document.querySelector('[data-id="fpRubricDesc"]')?.value.trim() || '';
+      if (!title) {
+        alert('Introduce un título para la rúbrica ponderada.');
+        return;
+      }
+
+      const criteria = [];
+      let totalWeight = 0;
+      for (let i = 1; i <= 4; i++) {
+        const name = document.querySelector(`[data-id="fpCritName${i}"]`)?.value.trim() || '';
+        const weight = parseFloat(document.querySelector(`[data-id="fpCritWeight${i}"]`)?.value || '0') || 0;
+        if (name && weight > 0) {
+          criteria.push({ id: `crit_${i}`, name, weight, max_score: 10, description: name });
+          totalWeight += weight;
+        }
+      }
+      if (!criteria.length || totalWeight <= 0) {
+        alert('Define al menos un criterio con peso mayor que 0%.');
+        return;
+      }
+
+      try {
+        const resp = await fetch('/api/fp/teacher/rubrics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, description, criteria })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Error creando rúbrica');
+        document.querySelector('[data-id="fpRubricTitle"]').value = '';
+        document.querySelector('[data-id="fpRubricDesc"]').value = '';
+        toggleFpRubricBuilder(false);
+        await loadTeacherOverview();
+      } catch (err) {
+        alert(err.message);
+      }
     }
 
     async function createFpGroup() {
@@ -10788,6 +11138,7 @@
       const target_profile = document.querySelector('[data-id="fpNewAssignProfile"]')?.value || 'OFFSET_300';
       const rubric_id = parseInt(document.querySelector('[data-id="fpNewAssignRubric"]')?.value || '0', 10) || null;
       const description = document.querySelector('[data-id="fpNewAssignDesc"]')?.value.trim() || '';
+      const exam_mode = Boolean(document.querySelector('[data-id="fpNewAssignExamMode"]')?.checked);
 
       if (!group_id || !title) {
         alert('Selecciona un grupo y escribe el título de la práctica.');
@@ -10797,12 +11148,14 @@
         const resp = await fetch('/api/fp/teacher/assignments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ group_id, title, description, assignment_type, scenario_id, target_profile, rubric_id })
+          body: JSON.stringify({ group_id, title, description, assignment_type, scenario_id, target_profile, rubric_id, exam_mode })
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || 'Error creando práctica');
         document.querySelector('[data-id="fpNewAssignTitle"]').value = '';
         document.querySelector('[data-id="fpNewAssignDesc"]').value = '';
+        const examChk = document.querySelector('[data-id="fpNewAssignExamMode"]');
+        if (examChk) examChk.checked = false;
         await loadTeacherOverview();
       } catch (err) {
         alert(err.message);
@@ -10879,7 +11232,11 @@
           pane.innerHTML = `
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
               <div>
-                <h4 class="text-sm font-extrabold text-slate-900">${escapeHtml(sub.student_name)} — ${escapeHtml(sub.assignment_title)}</h4>
+                <div class="flex flex-wrap items-center gap-2">
+                  <h4 class="text-sm font-extrabold text-slate-900">${escapeHtml(sub.student_name)} — ${escapeHtml(sub.assignment_title)}</h4>
+                  ${sub.exam_mode ? '<span class="px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-black uppercase">Modo Examen</span>' : ''}
+                  ${decs.used_batch_fix ? '<span class="px-2 py-0.5 rounded bg-indigo-100 border border-indigo-200 text-indigo-800 text-[10px] font-bold">Uso 1-Clic</span>' : '<span class="px-2 py-0.5 rounded bg-emerald-100 border border-emerald-200 text-emerald-800 text-[10px] font-bold">Paso a paso</span>'}
+                </div>
                 <p class="text-[11px] text-slate-500">${escapeHtml(sub.student_email || '')} · Grupo: ${escapeHtml(sub.group_name)} · PDF: <strong>${escapeHtml(sub.filename || '')}</strong></p>
               </div>
               <a href="/api/fp/teacher/submissions/${sub.id}/report-pdf" target="_blank" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold inline-flex items-center gap-1.5">

@@ -659,9 +659,9 @@ El módulo docente de IntelliPrint (**Panel Docente** en la cabecera o **Entrega
 
 1. **Creación de grupos y códigos de matrícula:** Desde la pestaña **Grupos y Prácticas**, el profesor define sus módulos y grupos (por ejemplo, *2º GS Preimpresión Digital*). El sistema genera de forma automática un código de matrícula único con el formato `FP-XXXX` (letras y dígitos aleatorios).
 2. **Matriculación ágil del alumnado:** El profesor comunica el código al grupo. Durante el registro individual en la aplicación o desde la pestaña **Mis Prácticas (Alumno)**, el estudiante introduce dicho código en la casilla correspondiente, quedando matriculado al instante en el grupo de su profesor.
-3. **Publicación y entrega directa de prácticas:** El docente puede asignar ejercicios vinculados a cualquiera de los 20 retos formativos del catálogo o proponer prácticas libres sobre PDFs reales de imprenta, definiendo el perfil técnico objetivo. El alumno resuelve el PDF en IntelliPrint y pulsa **Entregar a FP** para enviar automáticamente tanto su diagnóstico inicial como la versión corregida final y sus operaciones registradas.
-4. **Evaluación mediante rúbricas ponderadas:** Cada práctica incorpora una rúbrica de evaluación técnica con criterios ponderados sobre 10 puntos (diagnóstico inicial 20 %, criterio en correcciones 30 %, calidad técnica final 30 % y preparación para taller 20 %). Al recibir la entrega del alumno, el motor compara el PDF inicial con el corregido y propone una nota automática justificada. El docente revisa la comparativa, ajusta la puntuación de cada criterio y aporta observaciones pedagógicas.
-5. **Informes, evolución, CSV y administración:** El docente puede descargar un **Informe PDF de Evaluación** individual por entrega, exportar el libro completo de calificaciones en **CSV**, analizar la evolución gráfica de sus grupos y (si cuenta con rol de administrador o responsable) aprobar cuentas docentes/técnicas pendientes y asignar roles desde la pestaña **Usuarios y Roles**.
+3. **Publicación, Modo Examen y tarjetas interactivas de práctica:** El docente puede asignar ejercicios vinculados a cualquiera de los 20 retos formativos del catálogo o proponer prácticas libres sobre PDFs reales de imprenta, definiendo el perfil técnico objetivo y activando opcionalmente la casilla **Modo Examen (sin "Taller en 1 Clic")**, que bloquea el botón de autocorrección masiva y obliga a resolver las incidencias paso a paso. El alumnado dispone en **Mis Prácticas (Alumno)** de tarjetas interactivas con el botón **Cargar Reto y Empezar** / **Activar Práctica** y una barra superior persistente en el espacio de trabajo mientras la práctica está activa. El motor verifica automáticamente en la entrega si el estudiante trabajó paso a paso o utilizó 1-Clic.
+4. **Constructor de rúbricas ponderadas y evaluación comparativa:** Además de la rúbrica estándar por defecto, el docente cuenta en **Grupos y Prácticas** con el **Constructor de Rúbricas Ponderadas** (**Nueva Rúbrica Ponderada**) para crear criterios propios y porcentajes personalizados (%). Al recibir la entrega del alumno, el motor compara el PDF inicial con el corregido, registra la trazabilidad de acciones y propone una nota automática justificada que el docente puede ajustar antes de guardar.
+5. **Perfil competencial por 4 áreas FP, informes, CSV y administración:** Tanto el panel del alumno (**Mi Perfil Competencial FP**) como la pestaña docente **Evolución del Alumnado** desglosan el desempeño acumulado en 4 competencias técnicas (*Color, Tintas y TAC*; *Geometría, Sangrado e Imposición*; *Tipografía, Fuentes y Legibilidad*; y *PDF/X, Preflight y Calidad*), combinando entregas prácticas y cuestionarios. El docente puede descargar actas PDF individuales, exportar calificaciones en **CSV** y aprobar roles desde **Usuarios y Roles**.
 
 ### Las cuatro pestañas de Alumnos FP
 
@@ -747,13 +747,14 @@ La imagen ayuda a comprender por qué conviene revisar filetes y detalles. No mo
 
 ### Autoevaluación FP
 
-<!-- ui-controls: quiz -->
+<!-- ui-controls: quiz quizTopicSelect -->
+<!-- ui-values: quizTopicSelect=all,color,geometria,tipografia,normativa -->
 
-Marca una respuesta por pregunta. **Calificar Autoevaluación** envía las respuestas elegidas y devuelve nota sobre 10, aciertos, nivel y una explicación por pregunta. Es posible enviar una parte del cuestionario, pero las no contestadas no equivalen a respuestas correctas; conviene completarlo antes de emitir una ficha.
+El banco técnico integra **12 preguntas oficiales de preimpresión FP** estructuradas en 4 bloques competenciales mediante el selector **Bloque FP**: *Todas las áreas (12 preguntas)* (`all`), *Color, Tintas y TAC (3)* (`color`), *Geometría, Sangrado e Imposición (3)* (`geometria`), *Tipografía, Fuentes y Legibilidad (3)* (`tipografia`) y *PDF/X, Preflight y Calidad (3)* (`normativa`).
 
-Lee la justificación y las referencias después de corregir. El botón **Reiniciar Cuestionario** permite comenzar otro intento en la interfaz. No confundas ese reinicio con borrar un PDF de ficha ya descargado o con modificar un informe técnico del trabajo.
+Marca una respuesta por pregunta. **Calificar Autoevaluación** envía las respuestas elegidas y devuelve nota sobre 10, aciertos, nivel, un **Desglose por Competencias FP** con barras porcentuales y la justificación normativa ISO pregunta por pregunta. Es posible enviar una parte del cuestionario, pero las no contestadas no equivalen a respuestas correctas; conviene completar el bloque elegido antes de emitir una ficha.
 
-El resultado disponible en la sesión se puede incorporar a la ficha del alumno. Si cierras o recargas la página, comprueba de nuevo que el resultado sigue seleccionado antes de generar la hoja. La aplicación no presenta aquí un libro de calificaciones permanente ni una gestión completa de identidades de alumnos.
+Lee la justificación y las referencias después de corregir. El botón **Reiniciar Cuestionario** permite comenzar otro intento en la interfaz. Si has iniciado sesión como alumno FP, el intento se guarda automáticamente por temática para actualizar tu **Perfil Competencial FP** en el Aula virtual.
 
 ### Ficha Alumno PDF
 

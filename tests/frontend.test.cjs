@@ -829,3 +829,31 @@ test('separations preview passes TAC heatmap, TAC limit, and box guides params a
   assert.ok(badgeHtml.includes('342.5 %'));
   assert.ok(badgeHtml.includes('14.25%'));
 });
+
+test('FP exam_mode locks Taller en 1 Clic button and blocks openBatchFixModal', () => {
+  const document = fakeDocument();
+  let alerted = '';
+  const context = {
+    document,
+    currentJobId: 'job_exam_1',
+    activeFpAssignment: { id: 42, title: 'Examen Offset', group_name: '2GS', target_profile: 'OFFSET_300', exam_mode: true },
+    cachedTargetProfiles: [],
+    alert: (msg) => { alerted = msg; },
+    escapeHtml: (s) => String(s),
+  };
+  const btnBatch = document.getElementById('btnBatchFix');
+  btnBatch.querySelector = () => ({ textContent: 'Taller en 1 Clic' });
+
+  loadFunctions(context, ['syncActiveFpPracticeUi', 'clearActiveFpPractice', 'openBatchFixModal']);
+
+  context.syncActiveFpPracticeUi();
+  assert.equal(btnBatch.disabled, true);
+  assert.ok(document.getElementById('activeFpPracticeBanner').innerHTML.includes('Modo Examen'));
+
+  context.openBatchFixModal();
+  assert.ok(alerted.includes('Modo Examen'), 'Exam mode should alert and prevent batch fix modal');
+
+  context.clearActiveFpPractice();
+  assert.equal(context.activeFpAssignment, null);
+  assert.equal(btnBatch.disabled, false);
+});

@@ -80,6 +80,8 @@ from traceability_engine import (
 from didactic_engine import (
     SCENARIOS_CATALOG,
     QUESTIONS_FP,
+    QUIZ_TOPICS,
+    get_quiz_questions,
     generate_scenario_pdf,
     simulate_register_misalignment,
     simulate_setoff_stain,
@@ -1369,6 +1371,7 @@ def fp_teacher_create_assignment_endpoint(request: Request, body: dict = Body(de
             target_profile=body.get("target_profile", "OFFSET_300"),
             rubric_id=int(body["rubric_id"]) if body.get("rubric_id") else None,
             due_date=body.get("due_date"),
+            exam_mode=bool(body.get("exam_mode", False)),
         )
         return {"status": "ok", "assignment": assignment}
     except (ValueError, KeyError) as exc:
@@ -5251,24 +5254,30 @@ def simulate_ctp_endpoint(stroke_pt: float = 0.08):
 
 
 @app.get("/api/didactic/quiz/questions")
-def get_quiz_questions_endpoint():
-    """Retorna las preguntas del cuestionario de autoevaluación FP."""
-    clean_questions = []
-    for q in QUESTIONS_FP:
-        clean_questions.append({
+def get_quiz_questions_endpoint(topic: Optional[str] = None):
+    """Retorna las preguntas del cuestionario de autoevaluación FP filtradas por bloque si se indica."""
+    active = get_quiz_questions(topic)
+    clean_questions = [
+        {
             "id": q["id"],
+            "topic": q.get("topic", "general"),
+            "topic_label": q.get("topic_label", ""),
             "question": q["question"],
             "options": q["options"],
-            "iso_ref": q["iso_ref"]
-        })
-    return {"questions": clean_questions}
+            "iso_ref": q["iso_ref"],
+        }
+        for q in active
+    ]
+    return {"questions": clean_questions, "topics": QUIZ_TOPICS, "topic": topic or "all"}
 
 
 @app.post("/api/didactic/quiz/evaluate")
 def evaluate_quiz_endpoint(request: Request, payload: dict):
     """Evalúa las respuestas del alumno, guarda intento en Panel FP si hay sesión y devuelve nota."""
     answers = payload.get("answers", {})
-    results = evaluate_student_quiz(answers)
+    topic = payload.get("topic")
+    question_ids = payload.get("question_ids")
+    results = evaluate_student_quiz(answers, topic=topic, question_ids=question_ids)
     auth_user = get_authenticated_user(request)
     if auth_user:
         try:
@@ -5280,7 +5289,11 @@ def evaluate_quiz_endpoint(request: Request, payload: dict):
                 correct_count=int(results.get("correct_answers", 0)),
                 total_count=int(results.get("total_questions", 0)),
                 assignment_id=int(payload["assignment_id"]) if payload.get("assignment_id") else None,
-                details={"level": results.get("level"), "score_10": results.get("score")},
+                details={
+                    "level": results.get("level"),
+                    "score_10": results.get("score"),
+                    "competency_breakdown": results.get("competency_breakdown", []),
+                },
             )
             results["recorded_in_fp_classroom"] = True
         except Exception as exc:

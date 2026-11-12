@@ -1165,9 +1165,19 @@ def simulate_ctp_hairline(stroke_pt: float = 0.08) -> io.BytesIO:
 # MOTOR DE AUTOEVALUACIÓN / QUIZ TÉCNICO FP
 # ---------------------------------------------------------------------------
 
+QUIZ_TOPICS = {
+    "all": "Todas las competencias FP (12 preguntas)",
+    "color": "Colorimetría, CMYK y Cobertura de Tinta (TAC)",
+    "geometria": "Geometría, Cajas PDF y Sangrado",
+    "tipografia": "Tipografía, Trazos Finos y Sobreimpresión",
+    "normativa": "Normativa PDF/X, GWG y Control de Calidad",
+}
+
 QUESTIONS_FP = [
     {
         "id": "q_rich_black",
+        "topic": "tipografia",
+        "topic_label": "Tipografía y Sobreimpresión",
         "question": "¿Por qué motivo NO se debe utilizar Negro Enriquecido (Rich Black / 4 tintas) en tipografías menudas (≤ 8 pt)?",
         "options": [
             "Porque consume más memoria RAM al rasterizar en el RIP.",
@@ -1181,6 +1191,8 @@ QUESTIONS_FP = [
     },
     {
         "id": "q_bleed_margin",
+        "topic": "geometria",
+        "topic_label": "Geometría y Sangrado",
         "question": "¿Cuál es la función principal del Sangrado exterior de 3 mm en un documento gráfico destinado a corte?",
         "options": [
             "Dejar espacio suficiente para colocar la firma del diseñador gráfico.",
@@ -1194,6 +1206,8 @@ QUESTIONS_FP = [
     },
     {
         "id": "q_tac_limit",
+        "topic": "color",
+        "topic_label": "Colorimetría y TAC",
         "question": "¿Qué consecuencia física grave provoca en taller superar el límite de Cobertura Total de Tinta (TAC > 300%-320%)?",
         "options": [
             "La plancha CTP se quema debido al exceso de calor del láser térmico.",
@@ -1207,6 +1221,8 @@ QUESTIONS_FP = [
     },
     {
         "id": "q_hairline_ctp",
+        "topic": "tipografia",
+        "topic_label": "Tipografía y Sobreimpresión",
         "question": "¿Por qué las líneas de espesor inferior a 0.25 pt (Hairlines) son un problema crítico en preimpresión?",
         "options": [
             "Porque la tinta offset se expande tanto que se convierten en líneas de 5 mm de ancho.",
@@ -1220,6 +1236,8 @@ QUESTIONS_FP = [
     },
     {
         "id": "q_barcode_k",
+        "topic": "normativa",
+        "topic_label": "Normativa y Control",
         "question": "¿Por qué los códigos de barras comerciales (EAN-13, QR) deben imprimirse en 100% K y no en cuatricromía?",
         "options": [
             "Porque los lectores ópticos e industriales usan láseres rojos que exigen máximo contraste fotométrico y nitidez sin sangrado de registro.",
@@ -1230,36 +1248,180 @@ QUESTIONS_FP = [
         "correct_index": 0,
         "explanation": "El lector láser comercial emite luz roja y detecta la absorción del negro. Si el código está compuesto en 4 tintas, cualquier descalce de registro o ganancia de punto borronea las barras y los huecos (zona muda / quiet zone), provocando fallos de lectura en caja.",
         "iso_ref": "ISO/IEC 15420 / Estándar Internacional GS1"
+    },
+    {
+        "id": "q_rgb_text_overprint",
+        "topic": "color",
+        "topic_label": "Colorimetría y TAC",
+        "question": "Si un documento exportado de Word o Canva contiene texto negro en RGB (0, 0, 0) y se envía sin conversión a un RIP CMYK estándar, ¿qué sucede habitualmente?",
+        "options": [
+            "El texto desaparece automáticamente del PDF al abrirlo en Acrobat.",
+            "El motor de color separa ese RGB (0,0,0) a negro enriquecido de 4 tintas (C+M+Y+K) en lugar de 100% K puro, generando riesgo de halos.",
+            "El texto pasa a imprimirse como tinta plana Pantone metálica.",
+            "Aumenta la resolución de todas las tipografías a 1200 DPI."
+        ],
+        "correct_index": 1,
+        "explanation": "Al convertir RGB (0,0,0) mediante un perfil ICC genérico, se produce una mezcla cuatricromática (~75%C 68%M 67%Y 90%K). En preimpresión hay que mapear el negro/gris neutro RGB a negro puro 100% K con sobreimpresión.",
+        "iso_ref": "Ghent Workgroup / Conversión DeviceRGB a 100% K"
+    },
+    {
+        "id": "q_pdf_boxes",
+        "topic": "geometria",
+        "topic_label": "Geometría y Sangrado",
+        "question": "¿Cuál es la relación correcta entre las cajas geométricas estándar de un PDF listo para imprenta offset?",
+        "options": [
+            "TrimBox debe ser siempre mayor que MediaBox para incluir el corte.",
+            "MediaBox contiene todo el pliego/marcas, BleedBox rodea el formato con +3 mm de sangre y TrimBox define el tamaño neto final.",
+            "BleedBox y TrimBox deben medir exactamente igual aunque haya fondos a sangre.",
+            "CropBox sustituye a TrimBox en todas las normas PDF/X."
+        ],
+        "correct_index": 1,
+        "explanation": "La jerarquía geométrica en preimpresión sitúa dentro a TrimBox (formato acabado), por fuera +3 mm a BleedBox (sangrado exterior) y envolviendo las marcas de corte/control a MediaBox.",
+        "iso_ref": "ISO 15930 (PDF/X) / Cajas de Página PDF"
+    },
+    {
+        "id": "q_white_overprint",
+        "topic": "tipografia",
+        "topic_label": "Tipografía y Sobreimpresión",
+        "question": "¿Qué ocurre en la plancha impresa si un texto o vector blanco (0% K / papel) tiene activado el atributo de sobreimpresión (Overprint = True)?",
+        "options": [
+            "Se imprime con tinta blanca opaca sobre cualquier fotografía.",
+            "No cala el fondo inferior y, al sumar 0% tinta en modo transparente, desaparece por completo de la impresión.",
+            "Aumenta el contraste y el brillo del papel estucado.",
+            "Activa automáticamente la capa de barniz reserva UV."
+        ],
+        "correct_index": 1,
+        "explanation": "Sobreimprimir significa no perforar (no calar) las tintas situadas debajo. Como el color blanco en cuatricromía es ausencia de tinta (0/0/0/0 CMYK), sobreimprimir blanco equivale a no imprimir nada sobre el fondo.",
+        "iso_ref": "Ghent Workgroup Overprint White Check"
+    },
+    {
+        "id": "q_effective_dpi",
+        "topic": "color",
+        "topic_label": "Colorimetría y TAC",
+        "question": "Una fotografía de 1200 x 1200 px (300 ppi nativos en 10,16 x 10,16 cm) se escala al 200 % en maquetación (20,32 x 20,32 cm). ¿Cuál será su resolución efectiva final?",
+        "options": [
+            "600 ppi, porque al agrandar la caja se duplica la densidad.",
+            "300 ppi invariables, independientemente del tamaño colocado.",
+            "150 ppi, insuficiente para una trama offset comercial estándar de 175 lpi.",
+            "72 ppi exactos en pantalla y en prensa."
+        ],
+        "correct_index": 2,
+        "explanation": "La resolución efectiva es inversamente proporcional al factor de escala: al duplicar el tamaño lineal (200 %), los píxeles disponibles se reparten en el doble de longitud y la resolución efectiva cae a la mitad (300 / 2 = 150 ppi).",
+        "iso_ref": "ISO 12647-2 / Criterio PPI efectivo en maquetación"
+    },
+    {
+        "id": "q_safety_margin",
+        "topic": "geometria",
+        "topic_label": "Geometría y Sangrado",
+        "question": "Al preparar un folleto o revista grapada, ¿por qué se exige respetar un margen de seguridad mínimo de 3 mm a 5 mm hacia el interior del TrimBox?",
+        "options": [
+            "Para reducir el consumo de tóner o tinta en los bordes.",
+            "Para evitar que títulos, folios o logotipos queden amputados por tolerancias de guillotina o desplazamiento por grueso de papel (creep).",
+            "Porque los archivos PDF no admiten texto fuera de los 5 mm.",
+            "Para dejar sitio al código de barras de imprenta dentro del diseño."
+        ],
+        "correct_index": 1,
+        "explanation": "En el guillotinado de cuadernillos y revistas (efecto escalonado o creep), las páginas centrales avanzan hacia el corte exterior respecto a las exteriores. Respetar márgenes internos protege la legibilidad y estética.",
+        "iso_ref": "Buenas Prácticas de Imposición y Acabado Gráfico"
+    },
+    {
+        "id": "q_gwg_pdfx",
+        "topic": "normativa",
+        "topic_label": "Normativa y Control",
+        "question": "¿Cuál es la diferencia técnica clave entre entregar un arte final bajo estándar PDF/X-1a frente a PDF/X-4?",
+        "options": [
+            "PDF/X-1a permite imágenes RGB y capas transparentes; PDF/X-4 las prohíbe.",
+            "PDF/X-1a exige todo en CMYK/tintas planas con transparencias acopladas; PDF/X-4 admite transparencias vivas, capas y objetos con perfiles ICC.",
+            "PDF/X-1a es exclusivo para web y PDF/X-4 para serigrafía textil.",
+            "No existe diferencia técnica; solo cambia la versión del visor Acrobat."
+        ],
+        "correct_index": 1,
+        "explanation": "PDF/X-1a:2001 es un flujo ciego seguro basado únicamente en CMYK/directas sin transparencias vivas. PDF/X-4:2008/2010 conserva transparencias, capas y gestión ICC para RIP modernos con APPE.",
+        "iso_ref": "ISO 15930-1 (PDF/X-1a) vs ISO 15930-7 (PDF/X-4)"
+    },
+    {
+        "id": "q_soft_proofing_tvi",
+        "topic": "normativa",
+        "topic_label": "Normativa y Control",
+        "question": "¿Por qué un papel prensa o no estucado (FOGRA52) requiere un límite TAC más bajo (~240 %-260 %) que un estucado brillante (FOGRA39/51)?",
+        "options": [
+            "Porque los soportes porosos y absorbentes sufren mayor ganancia de punto (TVI) y saturación capilar, oscureciendo sombras y empastando tramas.",
+            "Porque las rotativas de prensa no utilizan tinta negra K.",
+            "Porque el papel prensa refleja un 100 % la luz D50.",
+            "Porque los perfiles no estucados multiplican la lineatura a 300 lpi."
+        ],
+        "correct_index": 0,
+        "explanation": "Las fibras abiertas del papel prensa o offset natural absorben rápidamente el vehículo de la tinta expandiendo el punto (TVI elevado). Limitar el TAC a 240 %-260 % evita empastes, roturas de banda y repintado.",
+        "iso_ref": "ISO 12647-2 / ISO 12647-3 (FOGRA52 / Papel Prensa)"
     }
 ]
 
-def evaluate_student_quiz(answers: Dict[str, int]) -> Dict[str, Any]:
+
+def get_quiz_questions(topic: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Retorna preguntas filtradas por competencia/tema o el banco completo."""
+    if not topic or topic == "all":
+        return list(QUESTIONS_FP)
+    return [q for q in QUESTIONS_FP if q.get("topic") == topic]
+
+
+def evaluate_student_quiz(
+    answers: Dict[str, Any],
+    topic: Optional[str] = None,
+    question_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """
     Evalúa las respuestas del alumno, calcula la calificación de 0 a 10,
-    y genera el diagnóstico pedagógico con referencias a normas de Artes Gráficas.
+    y genera el diagnóstico pedagógico por competencias basado en normas ISO.
     """
-    total = len(QUESTIONS_FP)
+    active_questions = get_quiz_questions(topic)
+    if question_ids:
+        id_set = set(question_ids)
+        filtered = [q for q in active_questions if q["id"] in id_set]
+        if filtered:
+            active_questions = filtered
+    if not active_questions:
+        active_questions = list(QUESTIONS_FP)
+
+    total = len(active_questions)
     correct_count = 0
     feedback_items = []
+    comp_stats: Dict[str, Dict[str, Any]] = {}
 
-    for q in QUESTIONS_FP:
+    for q in active_questions:
         qid = q["id"]
+        q_topic = q.get("topic", "general")
+        q_topic_label = q.get("topic_label", q_topic)
+        if q_topic not in comp_stats:
+            comp_stats[q_topic] = {"topic": q_topic, "label": q_topic_label, "correct": 0, "total": 0}
+        comp_stats[q_topic]["total"] += 1
+
         chosen = answers.get(qid, -1)
-        is_ok = (chosen == q["correct_index"])
+        try:
+            chosen_int = int(chosen) if chosen is not None and str(chosen).strip() != "" else -1
+        except (TypeError, ValueError):
+            chosen_int = -1
+        is_ok = (chosen_int == q["correct_index"])
         if is_ok:
             correct_count += 1
+            comp_stats[q_topic]["correct"] += 1
 
         feedback_items.append({
             "question_id": qid,
+            "topic": q_topic,
+            "topic_label": q_topic_label,
             "question": q["question"],
-            "chosen_index": chosen,
+            "chosen_index": chosen_int,
             "correct_index": q["correct_index"],
             "is_correct": is_ok,
             "explanation": q["explanation"],
             "iso_ref": q["iso_ref"]
         })
 
-    score = round((correct_count / total) * 10, 1)
+    for stat in comp_stats.values():
+        t_cnt = stat["total"]
+        stat["pct"] = round((stat["correct"] / t_cnt) * 100.0, 1) if t_cnt > 0 else 0.0
+
+    score = round((correct_count / total) * 10, 1) if total > 0 else 0.0
 
     if score >= 9.0:
         level = "Sobresaliente (Competencia Técnica Avanzada en Preimpresión)"
@@ -1272,10 +1434,13 @@ def evaluate_student_quiz(answers: Dict[str, int]) -> Dict[str, Any]:
 
     return {
         "score": score,
+        "topic": topic or "all",
+        "topic_label": QUIZ_TOPICS.get(topic or "all", "Competencias FP"),
         "total_questions": total,
         "correct_answers": correct_count,
         "level": level,
         "evaluated_at": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        "competency_breakdown": list(comp_stats.values()),
         "feedback": feedback_items
     }
 

@@ -101,6 +101,19 @@ DEFAULT_RUBRICS = [
 # INICIALIZACIÓN DE TABLAS
 # ---------------------------------------------------------------------------
 
+def _ensure_fp_assignment_columns(conn) -> None:
+    """Safely add new pedagogy columns on legacy SQLite/Postgres `fp_assignments` tables."""
+    if getattr(conn, "postgres", False):
+        conn.execute("ALTER TABLE fp_assignments ADD COLUMN IF NOT EXISTS exam_mode INTEGER DEFAULT 0")
+        conn.commit()
+        return
+
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(fp_assignments)").fetchall()}
+    if "exam_mode" not in existing:
+        conn.execute("ALTER TABLE fp_assignments ADD COLUMN exam_mode INTEGER DEFAULT 0")
+        conn.commit()
+
+
 def init_fp_db(db_path: Optional[Path] = None, force: bool = False) -> None:
     """Inicializa tablas del Panel Docente FP e inserta rúbricas por defecto."""
     cache_key = get_db_cache_key(db_path)
@@ -156,6 +169,7 @@ def init_fp_db(db_path: Optional[Path] = None, force: bool = False) -> None:
                 rubric_id INTEGER,
                 due_date TEXT,
                 is_open INTEGER DEFAULT 1,
+                exam_mode INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (group_id) REFERENCES fp_groups (id) ON DELETE CASCADE,
                 FOREIGN KEY (teacher_id) REFERENCES users (id) ON DELETE CASCADE,
@@ -197,6 +211,7 @@ def init_fp_db(db_path: Optional[Path] = None, force: bool = False) -> None:
             )
         """)
         conn.commit()
+        _ensure_fp_assignment_columns(conn)
 
         row = conn.execute("SELECT COUNT(*) AS cnt FROM fp_rubrics").fetchone()
         if (row["cnt"] if row else 0) == 0:
@@ -348,12 +363,14 @@ def _collect_decisions_timeline(job_data: Dict[str, Any]) -> Dict[str, Any]:
         "gwg_status": gwg_verdict,
         "used_production_order": bool(prod_order),
         "used_client_approval": bool(client_approval),
+        "used_batch_fix": bool(batch_steps),
     }
 
 
 def build_submission_comparison(
     job_data: Dict[str, Any],
     rubric_criteria: Optional[List[Dict[str, Any]]] = None,
+    exam_mode: bool = False,
 ) -> Dict[str, Any]:
     """Genera el informe comparativo Inicial -> Decisiones -> Final y propone pre-calificación."""
     orig = job_data.get("original_analysis")
@@ -400,6 +417,11 @@ def build_submission_comparison(
         observations.append(f"Verificó el resultado final con Validación GWG ({decisions['gwg_status']}).")
     if decisions["used_production_order"]:
         observations.append("Completó la Orden de Producción técnica / selección de máquina.")
+    if exam_mode:
+        if decisions.get("used_batch_fix"):
+            observations.append("Aviso Modo Examen: utilizó corrección automática en lote (1 Clic).")
+        elif decisions["fixes_count"] > 0:
+            observations.append("Modo Examen cumplido: aplicó las correcciones paso a paso sin automatismo en 1 Clic.")
 
     # Pre-calificación orientativa por criterio (escala 0..10)
     diag_score = 9.0 if initial_source == "original_analysis" else 7.0
@@ -574,6 +596,7 @@ def create_assignment(
     target_profile: str = "OFFSET_300",
     rubric_id: Optional[int] = None,
     due_date: Optional[str] = None,
+    exam_mode: bool = False,
     db_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     init_fp_db(db_path)
@@ -583,6 +606,7 @@ def create_assignment(
     if assignment_type not in ("reto", "pdf_real", "libre"):
         assignment_type = "pdf_real"
 
+    exam_flag = 1 if exam_mode else 0
     with get_db_connection(db_path) as conn:
         grp = conn.execute("SELECT id FROM fp_groups WHERE id = ?", (group_id,)).fetchone()
         if not grp:
@@ -596,9 +620,9 @@ def create_assignment(
         row = conn.execute("""
             INSERT INTO fp_assignments (
                 group_id, teacher_id, title, description, assignment_type,
-                scenario_id, target_profile, rubric_id, due_date, is_open, created_at
+                scenario_id, target_profile, rubric_id, due_date, is_open, exam_mode, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             RETURNING id
         """, (
             group_id,
@@ -610,6 +634,7 @@ def create_assignment(
             target_profile or "OFFSET_300",
             rubric_id,
             due_date or None,
+            exam_flag,
             now_iso,
         )).fetchone()
         conn.commit()
@@ -623,6 +648,7 @@ def create_assignment(
         "target_profile": target_profile,
         "rubric_id": rubric_id,
         "due_date": due_date,
+        "exam_mode": bool(exam_flag),
         "created_at": now_iso,
     }
 
@@ -642,7 +668,10 @@ def list_assignments(group_id: Optional[int] = None, db_path: Optional[Path] = N
             sql += " WHERE a.group_id = ?"
             params = (group_id,)
         sql += " ORDER BY a.id DESC"
-        return conn.execute(sql, params).fetchall()
+        rows = conn.execute(sql, params).fetchall()
+        for r in rows:
+            r["exam_mode"] = bool(r.get("exam_mode"))
+        return rows
 
 
 def join_group_by_code(student_id: int, join_code: str, db_path: Optional[Path] = None) -> Dict[str, Any]:
@@ -699,7 +728,11 @@ def submit_job_for_assignment(
             if rb:
                 criteria = json.loads(rb["criteria_json"])
 
-        comparison = build_submission_comparison(job_data, rubric_criteria=criteria)
+        comparison = build_submission_comparison(
+            job_data,
+            rubric_criteria=criteria,
+            exam_mode=bool(asg.get("exam_mode")),
+        )
         meta = job_data.get("job_meta", {}) if isinstance(job_data.get("job_meta"), dict) else {}
         filename = meta.get("filename") or f"{job_id}.pdf"
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -743,6 +776,7 @@ def list_submissions(
     with get_db_connection(db_path) as conn:
         sql = """
             SELECT s.*, a.title AS assignment_title, a.group_id, a.rubric_id, a.target_profile,
+                   a.exam_mode AS assignment_exam_mode,
                    g.name AS group_name, u.full_name AS student_name, u.email AS student_email,
                    r.criteria_json
             FROM fp_submissions s
@@ -785,7 +819,7 @@ def get_submission_detail(submission_id: int, db_path: Optional[Path] = None) ->
     with get_db_connection(db_path) as conn:
         row = conn.execute("""
             SELECT s.*, a.title AS assignment_title, a.description AS assignment_description,
-                   a.group_id, a.rubric_id, a.target_profile,
+                   a.group_id, a.rubric_id, a.target_profile, a.exam_mode AS assignment_exam_mode,
                    g.name AS group_name, g.center, g.module_name,
                    u.full_name AS student_name, u.email AS student_email,
                    r.title AS rubric_title, r.criteria_json,
@@ -886,6 +920,75 @@ def record_quiz_attempt(
     }
 
 
+_COMPETENCY_META = (
+    ("color", "Colorimetría, CMYK y TAC", ("cmyk", "tac", "spot", "icc", "rgb")),
+    ("geometria", "Geometría, Cajas y Sangrado", ("bleed", "sangr", "geometr", "cajas", "margin", "trim", "marca")),
+    ("tipografia", "Tipografía, Trazos y Overprint", ("overprint", "sobreimpr", "hairline", "filete", "fuente", "font", "traz", "blanco")),
+    ("normativa", "Normativa PDF/X, GWG y Taller", ("gwg", "orden", "producc", "imposic", "norma", "barcode")),
+)
+
+
+def compute_competency_profile(
+    submissions: List[Dict[str, Any]],
+    quiz_attempts: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Calcula perfil competencial FP (color, geometría, tipografía, normativa) desde entregas y cuestionarios."""
+    buckets: Dict[str, List[float]] = {cid: [] for cid, _lbl, _kw in _COMPETENCY_META}
+
+    for sub in submissions:
+        comp = sub.get("comparison") or {}
+        delta = comp.get("delta") or {}
+        decs = comp.get("decisions") or {}
+        res_pct = delta.get("critical_resolution_pct")
+        step_actions = " ".join(str(st.get("action") or "").lower() for st in (decs.get("steps") or []))
+
+        if decs.get("used_gwg_validation"):
+            buckets["normativa"].append(100.0 if decs.get("gwg_status") == "PASS" else 75.0)
+        if decs.get("used_production_order"):
+            buckets["normativa"].append(95.0)
+        if res_pct is not None:
+            buckets["normativa"].append(float(res_pct))
+
+        for cid, _lbl, keywords in _COMPETENCY_META:
+            if any(kw in step_actions for kw in keywords):
+                score_val = float(res_pct) if res_pct is not None else 80.0
+                buckets[cid].append(max(50.0, score_val))
+
+    for q in quiz_attempts:
+        details_raw = q.get("details_json")
+        details = {}
+        if isinstance(details_raw, str) and details_raw:
+            try:
+                details = json.loads(details_raw)
+            except Exception:
+                details = {}
+        elif isinstance(q.get("details"), dict):
+            details = q["details"]
+
+        breakdown = details.get("competency_breakdown") or []
+        if isinstance(breakdown, list) and breakdown:
+            for item in breakdown:
+                cid = item.get("topic")
+                if cid in buckets and item.get("total", 0) > 0:
+                    buckets[cid].append(float(item.get("pct", 0.0)))
+        else:
+            q_topic = str(q.get("topic") or "").lower()
+            if q_topic in buckets and q.get("score_pct") is not None:
+                buckets[q_topic].append(float(q["score_pct"]))
+
+    profile: List[Dict[str, Any]] = []
+    for cid, label, _kw in _COMPETENCY_META:
+        vals = buckets[cid]
+        pct = round(sum(vals) / len(vals), 1) if vals else None
+        profile.append({
+            "id": cid,
+            "label": label,
+            "score_pct": pct,
+            "evidences": len(vals),
+        })
+    return profile
+
+
 def list_student_dashboard(student_id: int, db_path: Optional[Path] = None) -> Dict[str, Any]:
     init_fp_db(db_path)
     with get_db_connection(db_path) as conn:
@@ -925,12 +1028,16 @@ def list_student_dashboard(student_id: int, db_path: Optional[Path] = None) -> D
         item["level"] = details.get("level") or ""
         enriched_quizzes.append(item)
 
+    for a in assignments:
+        a["exam_mode"] = bool(a.get("exam_mode"))
+
     submissions = list_submissions(student_id=student_id, db_path=db_path)
     return {
         "groups": groups,
         "assignments": assignments,
         "submissions": submissions,
         "quiz_attempts": enriched_quizzes,
+        "competencies": compute_competency_profile(submissions, enriched_quizzes),
     }
 
 
@@ -1019,6 +1126,7 @@ def get_student_evolution(
             "avg_quiz_grade": avg_quiz,
             "avg_error_resolution_pct": avg_resolution,
             "recurring_pitfalls": [{"category": k, "count": v} for k, v in top_pitfalls],
+            "competencies": compute_competency_profile(st_subs, st_quizzes),
             "timeline": timeline,
         })
 
