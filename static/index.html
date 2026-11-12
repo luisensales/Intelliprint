@@ -1474,11 +1474,11 @@
           <div class="flex items-center gap-3">
             <input type="checkbox" id="batchChkIcc" checked class="rounded accent-emerald-600 w-4 h-4">
             <div>
-              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition">8. Incrustar OutputIntent ISO Coated v2 (FOGRA39)</p>
-              <p class="text-[11px] text-slate-500">Declara la condición de impresión estándar para el RIP de la imprenta</p>
+              <p class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition" id="batchLblIccTitle">8. Incrustar OutputIntent ISO Coated v2 (FOGRA39)</p>
+              <p class="text-[11px] text-slate-500" id="batchLblIccDesc">Declara la condición de impresión estándar para el RIP de la imprenta</p>
             </div>
           </div>
-          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded border border-blue-200 shrink-0 ml-2">Recomendado</span>
+          <span class="text-[10px] font-semibold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded border border-blue-200 shrink-0 ml-2" id="batchBadgeIcc">Recomendado</span>
         </label>
 
         <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none group transition">
@@ -6509,6 +6509,34 @@
         const isPrint = profile ? profile.color_family === 'CMYK' : profileId !== 'PANTALLA_RGB';
         document.getElementById('batchChkMirrorBleed').checked = isPrint && (profile?.min_bleed_mm ?? 3) > 0;
         document.getElementById('batchChkMarks').checked = isPrint;
+
+        // Inspección de OutputIntent original: si ya tiene un perfil CMYK válido, respetar por defecto
+        const origIcc = currentReport?.job_meta?.original_icc_info || currentReport?.job_summary?.icc_detected || {};
+        const hasValidCmykIcc = (origIcc.icc_valid || origIcc.has_output_intent) && (origIcc.detected_family === 'CMYK' || (origIcc.identifier && !origIcc.identifier.toLowerCase().includes('rgb')));
+        const iccChk = document.getElementById('batchChkIcc');
+        const iccTitle = document.getElementById('batchLblIccTitle');
+        const iccDesc = document.getElementById('batchLblIccDesc');
+        const iccBadge = document.getElementById('batchBadgeIcc');
+
+        if (hasValidCmykIcc) {
+          const profileName = origIcc.friendly_description || origIcc.identifier || 'Perfil del documento';
+          if (iccChk) iccChk.checked = false;
+          if (iccTitle) iccTitle.textContent = `8. Conservar perfil existente: ${profileName}`;
+          if (iccDesc) iccDesc.textContent = 'El PDF ya incluye una condición de salida CMYK válida. Marcando la casilla se sobrescribiría por ISO Coated v2 (FOGRA39).';
+          if (iccBadge) {
+            iccBadge.textContent = 'Ya Certificado';
+            iccBadge.className = 'text-[10px] font-semibold px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded border border-emerald-200 shrink-0 ml-2';
+          }
+        } else {
+          if (iccChk) iccChk.checked = isPrint;
+          if (iccTitle) iccTitle.textContent = '8. Incrustar OutputIntent ISO Coated v2 (FOGRA39)';
+          if (iccDesc) iccDesc.textContent = 'Declara la condición de impresión estándar para el RIP de la imprenta.';
+          if (iccBadge) {
+            iccBadge.textContent = isPrint ? 'Recomendado' : 'Opcional';
+            iccBadge.className = 'text-[10px] font-semibold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded border border-blue-200 shrink-0 ml-2';
+          }
+        }
+
         modal.dataset.jobId = currentJobId;
       }
       if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
