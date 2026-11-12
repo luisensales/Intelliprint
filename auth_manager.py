@@ -277,20 +277,19 @@ def init_auth_db(db_path: Optional[Path] = None, force: bool = False):
         """)
         conn.commit()
 
-        # Insertar usuarios de demostración de taller y FP si la tabla está vacía
-        cursor = conn.execute("SELECT COUNT(*) AS cnt FROM users")
-        row = cursor.fetchone()
-        count = row["cnt"] if row else 0
-        if count == 0:
-            default_users = [
-                ("admin", "admin123", "Administrador IntelliPrint", "admin", "admin@salesianosurnieta.com"),
-                ("responsable", "taller123", "Mikel Arregi (Jefe de Taller)", "responsable", "taller@salesianosurnieta.com"),
-                ("preimpresion", "preim123", "Amaia Zubeldia (Técnica CTP)", "preimpresion", "ctp@salesianosurnieta.com"),
-                ("docente", "docente123", "Carlos Gómez (Profesor Artes Gráficas)", "docente", "docente@cifpmendizabala.eus"),
-                ("disenador", "diseno123", "Laura Etxeberria (Diseñadora Gráfica)", "diseñador", "diseno@agencia.com"),
-            ]
-            now_iso = datetime.now(timezone.utc).isoformat()
-            for username, pwd, full_name, role, email in default_users:
+        # Insertar usuarios base de demostración de taller y FP si no existen
+        default_users = [
+            ("admin", "admin123", "Administrador IntelliPrint", "admin", "admin@salesianosurnieta.com"),
+            ("responsable", "taller123", "Mikel Arregi (Jefe de Taller)", "responsable", "taller@salesianosurnieta.com"),
+            ("preimpresion", "preim123", "Amaia Zubeldia (Técnica CTP)", "preimpresion", "ctp@salesianosurnieta.com"),
+            ("docente", "docente123", "Carlos Gómez (Profesor Artes Gráficas)", "docente", "docente@cifpmendizabala.eus"),
+            ("disenador", "diseno123", "Laura Etxeberria (Diseñadora Gráfica)", "diseñador", "diseno@agencia.com"),
+            ("alumno", "alumno123", "Iker Agirre (Alumno FP)", "alumno", "alumno@salesianosurnieta.com"),
+        ]
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for username, pwd, full_name, role, email in default_users:
+            exists = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+            if not exists:
                 salt, pwd_hash = hash_password(pwd)
                 conn.execute("""
                     INSERT INTO users (
@@ -299,7 +298,7 @@ def init_auth_db(db_path: Optional[Path] = None, force: bool = False):
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, ?)
                 """, (username, pwd_hash, salt, full_name, role, email, role, now_iso))
-            conn.commit()
+        conn.commit()
 
     final_key = get_db_cache_key(db_path)
     if final_key:
