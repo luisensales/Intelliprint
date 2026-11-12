@@ -383,7 +383,12 @@ def serve_index():
     if not index_file.exists():
         return HTMLResponse("<h1>IntelliPrint Web en preparación...</h1>")
     with open(index_file, "r", encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+        content = f.read()
+    return HTMLResponse(content, headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    })
 
 
 @app.get("/favicon.ico", include_in_schema=False)
