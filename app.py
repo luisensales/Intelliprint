@@ -1712,6 +1712,13 @@ def client_approval_view_endpoint(token: str):
         </div>
         """
 
+    version_badge_html = (
+        '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">✓ Versión Corregida para Imprenta</span>'
+        if has_fixes else
+        '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300">Archivo Original Recibido</span>'
+    )
+    sha_badge_html = f'· Hash SHA-256: <span class="font-mono text-[10px]">{current_sha[:16]}...</span>' if current_sha else ''
+
     page_html = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1742,10 +1749,10 @@ def client_approval_view_endpoint(token: str):
       <div>
         <div class="flex items-center gap-2 mb-1">
           <span class="text-[10px] font-extrabold text-sky-600 uppercase tracking-wider block">Revisión de Producción · Control de Calidad</span>
-          {f'<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">✓ Versión Corregida para Imprenta</span>' if has_fixes else '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300">Archivo Original Recibido</span>'}
+          {version_badge_html}
         </div>
         <h2 class="text-lg font-black text-slate-900">{filename}</h2>
-        <p class="text-xs text-slate-500 mt-0.5">Documento preparado para imprenta · <strong>{pages}</strong> página(s) {f'· Hash SHA-256: <span class=\"font-mono text-[10px]\">{current_sha[:16]}...</span>' if current_sha else ''}</p>
+        <p class="text-xs text-slate-500 mt-0.5">Documento preparado para imprenta · <strong>{pages}</strong> página(s) {sha_badge_html}</p>
         {applied_badges_html}
       </div>
       <div class="flex items-center gap-3">
