@@ -8889,12 +8889,12 @@
       const btn = document.getElementById('themeToggleBtn');
       if (!btn) return;
       if (isDark) {
-        btn.className = 'inline-flex items-center gap-1.5 px-3 py-1 bg-amber-400 text-slate-950 text-xs font-bold rounded-lg shadow-sm transition ml-2 cursor-pointer';
+        btn.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-400 text-slate-950 text-xs font-bold rounded-lg shadow-sm transition cursor-pointer whitespace-nowrap';
         btn.innerHTML = '<i class="fa-solid fa-sun text-slate-950"></i> <span>Modo Oficina</span>';
         btn.title = 'Cambiar a Modo Oficina (Fondo claro)';
       } else {
-        btn.className = 'inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-xs transition ml-2 cursor-pointer';
-        btn.innerHTML = '<i class="fa-solid fa-moon text-amber-300"></i> <span>Cabina D50</span>';
+        btn.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap';
+        btn.innerHTML = '<i class="fa-solid fa-moon text-amber-300"></i> <span id="themeToggleLabel">Cabina D50</span>';
         btn.title = 'Conmutar Modo Cabina de Máquina D50 (Fondo oscuro antirreflejo para pupitres de prensa ISO 3664)';
       }
     }

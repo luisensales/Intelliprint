@@ -650,3 +650,21 @@ test('Separations preview advances pages, preserves current page on same-job re-
   await new Promise(r => setImmediate(r));
   assert.equal(document.getElementById('sepPageInput').value, 3);
 });
+
+test('updateKioskThemeButton maintains compact padding and removes intrusive ml-2', () => {
+  const document = fakeDocument();
+  const btn = { id: 'themeToggleBtn', className: '', innerHTML: '', title: '' };
+  document.getElementById = (id) => (id === 'themeToggleBtn' ? btn : null);
+  const context = { document };
+  loadFunctions(context, ['updateKioskThemeButton']);
+
+  context.updateKioskThemeButton(true);
+  assert.ok(!btn.className.includes('ml-2'), 'Dark theme button should not have ml-2');
+  assert.ok(btn.className.includes('whitespace-nowrap'));
+  assert.ok(btn.innerHTML.includes('Modo Oficina'));
+
+  context.updateKioskThemeButton(false);
+  assert.ok(!btn.className.includes('ml-2'), 'Light theme button should not have ml-2');
+  assert.ok(btn.className.includes('whitespace-nowrap'));
+  assert.ok(btn.innerHTML.includes('Cabina D50'));
+});
