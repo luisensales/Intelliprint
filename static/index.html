@@ -3652,6 +3652,11 @@
     let selectedFile = null;
     let currentJobId = null;
     let currentReport = null;
+    let sepInitialProfileName = 'Perfil del documento';
+    let sepCurrentPage = 1;
+    let sepTotalPageCount = 1;
+    let currentSpotColors = [];
+    let disabledSpotColors = new Set();
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -5872,11 +5877,6 @@
     // -----------------------------------------------------------------------
     // Previsualizador de Separaciones de Color (Acrobat Output Preview)
     // -----------------------------------------------------------------------
-    let sepInitialProfileName = 'Perfil del documento';
-    let sepCurrentPage = 1;
-    let sepTotalPageCount = 1;
-    let currentSpotColors = [];
-    let disabledSpotColors = new Set();
 
     function renderSpotPlates(spots) {
       currentSpotColors = spots || [];
