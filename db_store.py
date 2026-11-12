@@ -26,6 +26,30 @@ except ImportError:  # pragma: no cover
 DATA_DIR = Path(__file__).resolve().parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_DB_PATH = DATA_DIR / "auth.db"
+_PROJECT_ROOT = Path(__file__).resolve().parent
+
+
+def _load_local_env() -> None:
+    """Load variables from .env.local / .env when not already set in environment."""
+    for fname in (".env.local", ".env"):
+        env_path = _PROJECT_ROOT / fname
+        if not env_path.is_file():
+            continue
+        try:
+            for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if key:
+                    os.environ.setdefault(key, val)
+        except OSError:
+            pass
+
+
+_load_local_env()
 
 
 class DuplicateEntryError(Exception):
