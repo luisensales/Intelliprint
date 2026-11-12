@@ -161,10 +161,10 @@
                 <span class="text-blue-400 text-xs font-normal border border-blue-500/30 px-2 py-0.5 rounded-full">v1.2.1-sepfix</span>
                 <span class="inline-flex items-center gap-1.5 text-xs text-emerald-400 bg-slate-800/80 border border-slate-700/60 px-2 py-0.5 rounded-full">
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  Motor Activo
+                  <span data-i18n="header.engine_active">Motor Activo</span>
                 </span>
               </div>
-              <p class="text-[11px] text-slate-400">Sistema Avanzado de Preflight mediante Redes Neuronales & Análisis PDF</p>
+              <p class="text-[11px] text-slate-400" data-i18n="header.subtitle">Sistema Avanzado de Preflight mediante Redes Neuronales & Análisis PDF</p>
             </div>
           </a>
         </div>
@@ -186,10 +186,17 @@
             </a>
           </div>
 
+          <!-- Selector de Idioma ES / EU / EN -->
+          <div id="langSwitcherPill" class="inline-flex items-center bg-slate-800/90 border border-slate-700 rounded-xl p-0.5 text-[11px] font-bold shrink-0" role="group" aria-label="Idioma / Hizkuntza / Language">
+            <button type="button" data-lang-btn="es" onclick="setAppLanguage('es')" class="px-2 py-1 rounded-lg bg-cyan-600 text-white transition cursor-pointer" title="Castellano">ES</button>
+            <button type="button" data-lang-btn="eu" onclick="setAppLanguage('eu')" class="px-2 py-1 rounded-lg text-slate-300 hover:text-white transition cursor-pointer" title="Euskara">EU</button>
+            <button type="button" data-lang-btn="en" onclick="setAppLanguage('en')" class="px-2 py-1 rounded-lg text-slate-300 hover:text-white transition cursor-pointer" title="English">EN</button>
+          </div>
+
           <!-- Sección de Usuario / Sesión RBAC -->
           <div id="authUserBadge" class="shrink-0 flex items-center">
             <button onclick="openAuthModal()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-xs border border-blue-500/30 transition cursor-pointer" title="Iniciar sesión con tu cuenta de taller (Diseñador, CTP, Responsable o Docente)">
-              <i class="fa-solid fa-user-lock text-blue-200"></i> <span>Acceso Taller</span>
+              <i class="fa-solid fa-user-lock text-blue-200"></i> <span data-i18n="header.workshop_login">Acceso Taller</span>
             </button>
           </div>
         </div>
@@ -201,38 +208,38 @@
 
           <!-- Bloque 1: Flujo & Archivos -->
           <div class="inline-flex items-center gap-1 bg-slate-950/70 border border-slate-800 rounded-xl px-1.5 py-1 shrink-0">
-            <span class="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 px-1 select-none hidden lg:inline">Flujo</span>
+            <span class="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 px-1 select-none hidden lg:inline" data-i18n="nav.group_flow">Flujo</span>
             <button id="headerNewPdfBtn" onclick="resetToNewAnalysis()" class="hidden sm:inline-flex items-center gap-1.5 px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap" title="Comenzar desde el principio con otro PDF">
-              <i class="fa-solid fa-plus-circle"></i> <span>Nuevo PDF</span>
+              <i class="fa-solid fa-plus-circle"></i> <span data-i18n="nav.new_pdf">Nuevo PDF</span>
             </button>
             <button onclick="openJobsManagementModal()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-200 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Gestión de Trabajos (Búsqueda, Filtros, Caducidad 24h y Paquetes de Producción)">
-              <i class="fa-solid fa-folder-open text-cyan-400"></i> <span>Trabajos</span>
+              <i class="fa-solid fa-folder-open text-cyan-400"></i> <span data-i18n="nav.jobs">Trabajos</span>
               <span id="jobsCountBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">0</span>
             </button>
             <button onclick="openProfileManagerModal()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-200 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Editor de Perfiles de Preflight Personalizados (Crear, Editar, Exportar JSON)">
-              <i class="fa-solid fa-sliders text-indigo-400"></i> <span>Perfiles</span>
+              <i class="fa-solid fa-sliders text-indigo-400"></i> <span data-i18n="nav.profiles">Perfiles</span>
             </button>
           </div>
 
           <!-- Bloque 2: Producción & Calidad -->
           <div class="inline-flex items-center gap-1 bg-slate-950/70 border border-slate-800 rounded-xl px-1.5 py-1 shrink-0">
-            <span class="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 px-1 select-none hidden lg:inline">Taller</span>
+            <span class="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 px-1 select-none hidden lg:inline" data-i18n="nav.group_shop">Taller</span>
             <button onclick="openProductionOrderModal()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-200 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Orden de Producción: Conectar producto, máquina, papel y acabados con preflight e imposición">
-              <i class="fa-solid fa-clipboard-list text-amber-400"></i> <span>Orden Producción</span>
+              <i class="fa-solid fa-clipboard-list text-amber-400"></i> <span data-i18n="nav.production_order">Orden Producción</span>
             </button>
             <button onclick="openGwgValidationModal()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-200 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Certificación GWG / PDF/X: Validación pericial con evidencia técnica e impacto en taller">
-              <i class="fa-solid fa-certificate text-emerald-400"></i> <span>Validación GWG</span>
+              <i class="fa-solid fa-certificate text-emerald-400"></i> <span data-i18n="nav.gwg">Validación GWG</span>
             </button>
           </div>
 
           <!-- Bloque 3: Aula & Formación FP -->
           <div class="inline-flex items-center gap-1 bg-slate-950/70 border border-slate-800 rounded-xl px-1.5 py-1 shrink-0">
-            <span class="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 px-1 select-none hidden lg:inline">Aula FP</span>
+            <span class="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 px-1 select-none hidden lg:inline" data-i18n="nav.group_fp">Aula FP</span>
             <button onclick="openDidacticModal()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-200 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Modo Didáctico y Simulador de Taller para Alumnos FP">
-              <i class="fa-solid fa-graduation-cap text-amber-300"></i> <span>Simulador FP</span>
+              <i class="fa-solid fa-graduation-cap text-amber-300"></i> <span data-i18n="nav.simulator">Simulador FP</span>
             </button>
             <button onclick="openFpClassroomModal()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-200 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Panel Docente FP (Grupos, Entregas, Rúbricas y Evolución) y Tareas del Alumnado">
-              <i class="fa-solid fa-chalkboard-user text-violet-400"></i> <span>Panel Docente</span>
+              <i class="fa-solid fa-chalkboard-user text-violet-400"></i> <span data-i18n="nav.teacher_panel">Panel Docente</span>
             </button>
           </div>
 
@@ -241,7 +248,7 @@
         <!-- Bloque 4: Entorno, Cabina & Ayuda (Siempre anclado a la derecha sin saltar de línea) -->
         <div class="inline-flex items-center gap-1 bg-slate-950/70 border border-slate-800 rounded-xl px-1.5 py-1 shrink-0 ml-auto">
           <button onclick="openManualModal()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Manual Oficial de Usuario y Guía de Operación (PDF)">
-            <i class="fa-solid fa-file-pdf text-red-400"></i> <span>Manual (PDF)</span>
+            <i class="fa-solid fa-file-pdf text-red-400"></i> <span data-i18n="nav.manual">Manual (PDF)</span>
           </button>
           <div class="h-3.5 w-px bg-slate-800"></div>
           <button id="themeToggleBtn" onclick="toggleKioskTheme()" class="inline-flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap" title="Conmutar Modo Cabina de Máquina D50 (Fondo oscuro antirreflejo para pupitres de prensa ISO 3664 · Alt+K)">
@@ -266,22 +273,22 @@
     <section id="setupSection" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
       <div class="border-b border-slate-100 pb-3 flex justify-between items-center">
         <div>
-          <h2 class="text-lg font-bold text-slate-900">Configuración del Preflight</h2>
-          <p class="text-sm text-slate-500">Selecciona el PDF, el perfil de producción y la política de gestión de color.</p>
+          <h2 class="text-lg font-bold text-slate-900" data-i18n="setup.title">Configuración del Preflight</h2>
+          <p class="text-sm text-slate-500" data-i18n="setup.subtitle">Selecciona el PDF, el perfil de producción y la política de gestión de color.</p>
         </div>
-        <span class="text-xs font-semibold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md">Paso 1 de 2</span>
+        <span class="text-xs font-semibold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md" data-i18n="setup.step_1">Paso 1 de 2</span>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
         <!-- 1. Drag & Drop File Upload -->
         <div class="space-y-2">
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">1. Archivo PDF a verificar</label>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600" data-i18n="setup.step1_label">1. Archivo PDF a verificar</label>
           <div id="dropZone" class="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center cursor-pointer hover:border-blue-500 transition-all bg-slate-50 flex flex-col items-center justify-center min-h-[170px]">
             <input type="file" id="pdfFileInput" accept=".pdf" class="hidden">
             <i class="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2"></i>
-            <p id="filePrompt" class="text-xs text-slate-600 font-medium">Arrastra tu PDF aquí o <span class="text-blue-600 underline">examina</span></p>
-            <p class="text-[11px] text-slate-400 mt-1">Soporta PDF 1.3 hasta 2.0</p>
+            <p id="filePrompt" class="text-xs text-slate-600 font-medium" data-i18n="setup.drop_prompt">Arrastra tu PDF aquí o examina</p>
+            <p class="text-[11px] text-slate-400 mt-1" data-i18n="setup.drop_support">Soporta PDF 1.3 hasta 2.0</p>
             
             <div id="fileInfo" class="hidden mt-3 p-3 bg-blue-50/70 border border-blue-200 text-blue-900 rounded-xl text-xs w-full text-left space-y-2">
               <div class="flex items-center justify-between">
@@ -302,11 +309,11 @@
         <!-- 2. Target Profile -->
         <div class="space-y-2">
           <div class="flex items-center justify-between gap-2">
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600" data-i18n="setup.step2_label">
               2. Perfil de Destino (IntelliPrint)
             </label>
             <button type="button" onclick="openProfileManagerModal()" class="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-slate-200 rounded-md text-[11px] font-semibold transition cursor-pointer whitespace-nowrap shrink-0" title="Crear y editar perfiles de preflight personalizados">
-              <i class="fa-solid fa-sliders text-indigo-600"></i> <span>Editar Perfiles</span>
+              <i class="fa-solid fa-sliders text-indigo-600"></i> <span data-i18n="setup.edit_profiles">Editar Perfiles</span>
             </button>
           </div>
           <div id="targetProfilesContainer" class="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
@@ -358,31 +365,31 @@
           </div>
           <!-- Botón de acceso directo para crear perfil a medida -->
           <button type="button" onclick="openProfileManagerModal(); initNewProfileForm();" class="w-full py-2 px-3 border border-dashed border-indigo-300 hover:border-indigo-500 hover:bg-indigo-50/60 text-indigo-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer">
-            <i class="fa-solid fa-plus-circle text-indigo-600"></i> <span>+ Crear Perfil Personalizado (FP / Taller)</span>
+            <i class="fa-solid fa-plus-circle text-indigo-600"></i> <span data-i18n="setup.create_profile">+ Crear Perfil Personalizado (FP / Taller)</span>
           </button>
         </div>
 
         <!-- 3. ICC Color Policy -->
         <div class="space-y-2">
           <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">
-            3. Perfil de Color (ICC)
-            <span class="text-[10px] text-slate-400 font-normal lowercase block sm:inline sm:ml-2">· Declaración física de salida (OutputIntent)</span>
+            <span data-i18n="setup.step3_label">3. Perfil de Color (ICC)</span>
+            <span class="text-[10px] text-slate-400 font-normal lowercase block sm:inline sm:ml-2" data-i18n="setup.step3_hint">· Declaración física de salida (OutputIntent)</span>
           </label>
           <div class="space-y-2.5">
             <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
               <input type="radio" name="icc_option" value="preserve" checked class="mt-1 text-blue-600 focus:ring-blue-500">
               <div class="text-xs">
-                <span class="font-bold text-slate-800">Conservar perfil del documento</span>
-                <span id="preserveIccHint" class="block text-[11px] text-emerald-600 font-medium mt-0.5"><i class="fa-solid fa-shield-check mr-1"></i>Recomendado: mantiene el OutputIntent incrustado</span>
+                <span class="font-bold text-slate-800" data-i18n="setup.icc_preserve">Conservar perfil del documento</span>
+                <span id="preserveIccHint" class="block text-[11px] text-emerald-600 font-medium mt-0.5"><i class="fa-solid fa-shield-check mr-1"></i><span data-i18n="setup.icc_preserve_hint">Recomendado: mantiene el OutputIntent incrustado</span></span>
               </div>
             </label>
 
             <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 cursor-pointer bg-white transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/40">
               <input type="radio" name="icc_option" value="custom_selection" class="mt-1 text-blue-600 focus:ring-blue-500">
               <div class="text-xs w-full">
-                <span class="font-bold text-slate-800">Elegir de icc_profiles/</span>
+                <span class="font-bold text-slate-800" data-i18n="setup.icc_custom">Elegir de icc_profiles/</span>
                 <select id="iccCatalogSelect" disabled class="mt-1.5 w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 disabled:opacity-50">
-                  <option value="">Seleccionar perfil ICC...</option>
+                  <option value="" data-i18n="setup.icc_select_placeholder">Seleccionar perfil ICC...</option>
                 </select>
               </div>
             </label>
@@ -395,15 +402,15 @@
       <div class="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div class="flex flex-wrap items-center gap-2 text-xs">
           <button type="button" onclick="launchQuickDemoScenario(this)" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 font-semibold transition cursor-pointer" title="Carga un PDF didáctico de muestra con errores reales de taller en 1 clic">
-            <i class="fa-solid fa-flask text-amber-600"></i> <span>Probar con Reto de Muestra</span>
+            <i class="fa-solid fa-flask text-amber-600"></i> <span data-i18n="setup.try_demo">Probar con Reto de Muestra</span>
           </button>
           <button type="button" onclick="openFpClassroomModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-900 font-semibold transition cursor-pointer" title="Entrar al Aula Virtual FP o Panel Docente">
-            <i class="fa-solid fa-chalkboard-user text-violet-600"></i> <span>Aula / Prácticas FP</span>
+            <i class="fa-solid fa-chalkboard-user text-violet-600"></i> <span data-i18n="setup.fp_classroom">Aula / Prácticas FP</span>
           </button>
         </div>
         <button id="startCheckBtn" disabled class="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow disabled:opacity-50 disabled:cursor-not-allowed transition-all">
           <i class="fa-solid fa-play"></i>
-          <span>Analizar PDF con IntelliPrint</span>
+          <span data-i18n="setup.analyze_btn">Analizar PDF con IntelliPrint</span>
         </button>
       </div>
     </section>
@@ -414,8 +421,8 @@
         <i class="fa-solid fa-circle-notch"></i>
       </div>
       <div>
-        <h3 class="text-base font-bold text-slate-900">Analizando documento PDF...</h3>
-        <p class="text-xs text-slate-500 mt-1">Comprobando cajas, resolución efectiva, sobreimpresión de texto en negro puro (100% K), barnices y ortografía.</p>
+        <h3 class="text-base font-bold text-slate-900" data-i18n="loading.title">Analizando documento PDF...</h3>
+        <p class="text-xs text-slate-500 mt-1" data-i18n="loading.subtitle">Comprobando cajas, resolución efectiva, sobreimpresión de texto en negro puro (100% K), barnices y ortografía.</p>
       </div>
     </div>
 
@@ -447,10 +454,10 @@
           <!-- Acciones Primarias de Salida (Solo CTAs Principales) -->
           <div class="flex flex-wrap items-center gap-2">
             <a id="downloadPdfBtn" href="#" download class="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition">
-              <i class="fa-solid fa-file-pdf"></i> <span id="downloadPdfBtnLabel">Descargar PDF</span>
+              <i class="fa-solid fa-file-pdf"></i> <span id="downloadPdfBtnLabel" data-i18n="results.download_pdf">Descargar PDF</span>
             </a>
             <button onclick="resetToNewAnalysis()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition cursor-pointer" title="Cerrar este reporte y analizar otro PDF desde el principio">
-              <i class="fa-solid fa-arrow-left"></i> <span>Nuevo PDF</span>
+              <i class="fa-solid fa-arrow-left"></i> <span data-i18n="nav.new_pdf">Nuevo PDF</span>
             </button>
           </div>
         </div>
@@ -462,15 +469,15 @@
           <div class="p-3 bg-gradient-to-br from-emerald-50/70 via-slate-50 to-slate-50 rounded-xl border border-emerald-200/80 shadow-2xs space-y-2">
             <div class="flex items-center justify-between border-b border-emerald-200/60 pb-1.5">
               <span class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-                <i class="fa-solid fa-wand-magic-sparkles text-emerald-600"></i> 1. Corrección de Taller
+                <i class="fa-solid fa-wand-magic-sparkles text-emerald-600"></i> <span data-i18n="block1.title">1. Corrección de Taller</span>
               </span>
-              <span class="text-[9px] font-bold px-1.5 py-0.2 bg-emerald-100 text-emerald-700 rounded border border-emerald-200">Auto</span>
+              <span class="text-[9px] font-bold px-1.5 py-0.2 bg-emerald-100 text-emerald-700 rounded border border-emerald-200" data-i18n="block1.tag">Auto</span>
             </div>
             <div class="space-y-1.5">
               <button onclick="openBatchFixModal()" id="btnBatchFix" class="w-full flex items-center justify-center gap-2 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all cursor-pointer hover:shadow-sm" title="Aplica en lote las correcciones estándar recomendadas para imprenta (Trapping, Sangrado, TAC, Curvas, CMYK e ICC)">
-                <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> <span>Taller en 1 Clic</span>
+                <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> <span data-i18n="block1.cta">Taller en 1 Clic</span>
               </button>
-              <p class="text-[10px] text-slate-500 leading-tight text-center">
+              <p class="text-[10px] text-slate-500 leading-tight text-center" data-i18n="block1.desc">
                 Corrige en lote sangrado, TAC, filetes, tipografías, color CMYK e inyecta marcas.
               </p>
             </div>
@@ -480,16 +487,16 @@
           <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
             <div class="flex items-center justify-between border-b border-slate-200/80 pb-1.5">
               <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                <i class="fa-solid fa-ruler-combined text-amber-600"></i> 2. Geometría & Códigos
+                <i class="fa-solid fa-ruler-combined text-amber-600"></i> <span data-i18n="block2.title">2. Geometría & Códigos</span>
               </span>
-              <span class="text-[10px] text-slate-400">Inspección</span>
+              <span class="text-[10px] text-slate-400" data-i18n="block2.tag">Inspección</span>
             </div>
             <div class="grid grid-cols-1 gap-1.5">
               <button onclick="openBarcodeModal()" id="btnOpenBarcodes" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer truncate" title="Inspector y Corrector de Códigos de Barras y Códigos QR">
-                <i class="fa-solid fa-barcode text-emerald-600 shrink-0"></i> <span class="truncate">Códigos & QR</span>
+                <i class="fa-solid fa-barcode text-emerald-600 shrink-0"></i> <span class="truncate" data-i18n="block2.barcodes">Códigos & QR</span>
               </button>
               <button onclick="openSafetyMarginModal()" id="btnOpenSafetyMargin" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer truncate" title="Inspector de Margen de Seguridad y Lomo / Medianil">
-                <i class="fa-solid fa-ruler-combined text-amber-600 shrink-0"></i> <span class="truncate">Margen & Lomo</span>
+                <i class="fa-solid fa-ruler-combined text-amber-600 shrink-0"></i> <span class="truncate" data-i18n="block2.safety">Margen & Lomo</span>
               </button>
             </div>
           </div>
@@ -498,22 +505,22 @@
           <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
             <div class="flex items-center justify-between border-b border-slate-200/80 pb-1.5">
               <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                <i class="fa-solid fa-certificate text-emerald-600"></i> 3. Validación y Entrega
+                <i class="fa-solid fa-certificate text-emerald-600"></i> <span data-i18n="block3.title">3. Validación y Entrega</span>
               </span>
-              <span class="text-[10px] text-slate-400">Control / FP</span>
+              <span class="text-[10px] text-slate-400" data-i18n="block3.tag">Control / FP</span>
             </div>
             <div class="grid grid-cols-2 gap-1.5">
               <button onclick="openGwgValidationModal()" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer truncate" title="Auditar contra estándar GWG 2015 / ISO PDF/X y descargar certificado oficial de conformidad">
-                <i class="fa-solid fa-certificate text-emerald-600 shrink-0"></i> <span class="truncate">Validar GWG</span>
+                <i class="fa-solid fa-certificate text-emerald-600 shrink-0"></i> <span class="truncate" data-i18n="block3.gwg">Validar GWG</span>
               </button>
               <button onclick="openClientApprovalModal()" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer truncate" title="Generar enlace seguro para que el cliente revise y dé su visto bueno (OK para plancha)">
-                <i class="fa-solid fa-paper-plane text-sky-600 shrink-0"></i> <span class="truncate">VºBº Cliente</span>
+                <i class="fa-solid fa-paper-plane text-sky-600 shrink-0"></i> <span class="truncate" data-i18n="block3.approval">VºBº Cliente</span>
               </button>
               <button onclick="openFpClassroomModal('student')" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer truncate" title="Enviar este trabajo PDF (con su historial inicial y correcciones) a una práctica FP">
-                <i class="fa-solid fa-chalkboard-user text-violet-600 shrink-0"></i> <span class="truncate">Entregar a FP</span>
+                <i class="fa-solid fa-chalkboard-user text-violet-600 shrink-0"></i> <span class="truncate" data-i18n="block3.deliver_fp">Entregar a FP</span>
               </button>
               <button onclick="openBatchHotfolderModal()" id="btnOpenBatch" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer truncate" title="Procesamiento por Lote y Carpeta Caliente">
-                <i class="fa-solid fa-layer-group text-sky-600 shrink-0"></i> <span class="truncate">Hot-Folder</span>
+                <i class="fa-solid fa-layer-group text-sky-600 shrink-0"></i> <span class="truncate" data-i18n="block3.hotfolder">Hot-Folder</span>
               </button>
             </div>
           </div>
@@ -522,31 +529,31 @@
           <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
             <div class="flex items-center justify-between border-b border-slate-200/80 pb-1.5">
               <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                <i class="fa-solid fa-print text-purple-600"></i> 4. Pliego & Salida
+                <i class="fa-solid fa-print text-purple-600"></i> <span data-i18n="block4.title">4. Pliego & Salida</span>
               </span>
-              <span class="text-[10px] text-slate-400">Prensa / Descargas</span>
+              <span class="text-[10px] text-slate-400" data-i18n="block4.tag">Prensa / Descargas</span>
             </div>
             <div class="grid grid-cols-2 gap-1.5">
               <button onclick="openImpositionModal()" id="btnOpenImposition" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer truncate" title="Montaje e imposición de pliegos de máquina (Paso y repetición N-Up / Cuadernillo grapado)">
-                <i class="fa-solid fa-table-cells text-purple-600 shrink-0"></i> <span class="truncate">Imposición</span>
+                <i class="fa-solid fa-table-cells text-purple-600 shrink-0"></i> <span class="truncate" data-i18n="block4.imposition">Imposición</span>
               </button>
               <button onclick="openCip3Modal()" id="btnOpenCip3" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer truncate" title="Cálculo de Consumo de Tinta y Ajuste de Tinteros CIP3 / PPF por Zonas">
-                <i class="fa-solid fa-faucet-drip text-cyan-600 shrink-0"></i> <span class="truncate">Tinteros CIP3</span>
+                <i class="fa-solid fa-faucet-drip text-cyan-600 shrink-0"></i> <span class="truncate" data-i18n="block4.cip3">Tinteros CIP3</span>
               </button>
               <button onclick="openPressOperatorSheet()" id="btnOpenPressSheet" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition cursor-pointer truncate" title="Ficha Técnica de Producción y Trazabilidad para el Maquinista (QR en Pliego)">
-                <i class="fa-solid fa-qrcode text-slate-700 shrink-0"></i> <span class="truncate">Hoja Máquina</span>
+                <i class="fa-solid fa-qrcode text-slate-700 shrink-0"></i> <span class="truncate" data-i18n="block4.press_sheet">Hoja Máquina</span>
               </button>
               <a id="btnProductionPackage" href="#" target="_blank" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition cursor-pointer truncate" title="Descargar paquete ZIP completo: PDF final, ficha técnica, informes, imposición, CIP3 y manifiesto">
-                <i class="fa-solid fa-box-archive text-amber-500 shrink-0"></i> <span class="truncate">Paquete ZIP</span>
+                <i class="fa-solid fa-box-archive text-amber-500 shrink-0"></i> <span class="truncate" data-i18n="block4.zip">Paquete ZIP</span>
               </a>
             </div>
             <div class="flex items-center justify-between gap-1 pt-1 border-t border-slate-200/70 text-[10px]">
               <a id="downloadCertBtn" href="#" target="_blank" class="inline-flex items-center gap-1 text-slate-600 hover:text-blue-700 font-medium transition truncate" title="Descargar Ficha Técnica PDF certificada">
-                <i class="fa-solid fa-file-shield text-blue-600"></i> <span>Ficha</span>
+                <i class="fa-solid fa-file-shield text-blue-600"></i> <span data-i18n="block4.cert">Ficha</span>
               </a>
               <span class="text-slate-300">·</span>
               <a id="downloadClientReportBtn" href="#" target="_blank" class="inline-flex items-center gap-1 text-slate-600 hover:text-indigo-700 font-medium transition truncate" title="Exportar informe pedagógico de 1 página para cliente">
-                <i class="fa-solid fa-file-lines text-indigo-600"></i> <span>Inf. Cliente</span>
+                <i class="fa-solid fa-file-lines text-indigo-600"></i> <span data-i18n="block4.client_report">Inf. Cliente</span>
               </a>
               <span class="text-slate-300">·</span>
               <button id="downloadJsonBtn" class="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 font-medium transition cursor-pointer truncate" title="Descargar auditoría completa en JSON">
@@ -566,29 +573,29 @@
               </span>
               <div>
                 <div class="flex items-center gap-2 flex-wrap">
-                  <span class="text-xs font-bold uppercase tracking-wider text-indigo-200">Línea Temporal de Versiones</span>
+                  <span class="text-xs font-bold uppercase tracking-wider text-indigo-200" data-i18n="timeline.title">Línea Temporal de Versiones</span>
                   <span id="timelineActiveBadge" class="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-indigo-600 text-white shadow-xs">v0001</span>
                   <span id="timelineApprovedBadge" class="hidden text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-500 text-white flex items-center gap-1 shadow-xs">
-                    <i class="fa-solid fa-shield-halved"></i> Entrega Aprobada
+                    <i class="fa-solid fa-shield-halved"></i> <span data-i18n="timeline.approved">Entrega Aprobada</span>
                   </span>
                 </div>
-                <p id="timelineActiveLabel" class="text-[11px] text-slate-300">PDF original recibido</p>
+                <p id="timelineActiveLabel" class="text-[11px] text-slate-300" data-i18n="timeline.initial">PDF original recibido</p>
               </div>
             </div>
 
             <!-- Botones Deshacer, Rehacer, Comparar -->
             <div class="flex items-center gap-1.5 flex-wrap">
               <button onclick="undoVersion()" id="btnUndoVersion" disabled class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed text-white border border-white/10 transition cursor-pointer" title="Deshacer última corrección (Ctrl+Z)">
-                <i class="fa-solid fa-rotate-left text-indigo-300"></i> <span>Deshacer</span>
+                <i class="fa-solid fa-rotate-left text-indigo-300"></i> <span data-i18n="timeline.undo">Deshacer</span>
               </button>
               <button onclick="redoVersion()" id="btnRedoVersion" disabled class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed text-white border border-white/10 transition cursor-pointer" title="Rehacer corrección deshecha (Ctrl+Y)">
-                <i class="fa-solid fa-rotate-right text-indigo-300"></i> <span>Rehacer</span>
+                <i class="fa-solid fa-rotate-right text-indigo-300"></i> <span data-i18n="timeline.redo">Rehacer</span>
               </button>
               <button onclick="openVersionComparisonModal()" id="btnOpenCompareModal" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition cursor-pointer" title="Comparar cualquier par de versiones (lado a lado o mapa de diferencias)">
-                <i class="fa-solid fa-code-compare"></i> <span>Comparar Versiones</span>
+                <i class="fa-solid fa-code-compare"></i> <span data-i18n="timeline.compare">Comparar Versiones</span>
               </button>
               <a id="btnDownloadApprovedPdf" href="#" target="_blank" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition" title="Descargar la entrega oficial aprobada">
-                <i class="fa-solid fa-download"></i> <span>PDF Aprobado</span>
+                <i class="fa-solid fa-download"></i> <span data-i18n="timeline.approved_pdf">PDF Aprobado</span>
               </a>
               <button onclick="toggleTimelineNodes()" id="btnToggleTimeline" class="p-1.5 rounded-lg text-xs bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition cursor-pointer" title="Expandir/Plegar árbol cronológico de versiones">
                 <i class="fa-solid fa-chevron-down transition-transform" id="timelineChevron"></i>
@@ -607,7 +614,7 @@
           
           <!-- 1. Technical Result -->
           <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
-            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">1. Resultado Técnico</span>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400" data-i18n="card.technical">1. Resultado Técnico</span>
             <div class="my-2">
               <span id="badgeTechnical" class="text-sm font-bold px-3 py-1 rounded-full inline-block"></span>
             </div>
@@ -616,7 +623,7 @@
 
           <!-- 2. Content / Proofreading Result -->
           <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
-            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">2. Resultado de Contenido</span>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400" data-i18n="card.content">2. Resultado de Contenido</span>
             <div class="my-2">
               <span id="badgeContent" class="text-sm font-bold px-3 py-1 rounded-full inline-block bg-amber-100 text-amber-800 border border-amber-200"></span>
             </div>
@@ -625,7 +632,7 @@
 
           <!-- 3. Output / Release Result -->
           <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
-            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">3. Resultado de Salida</span>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400" data-i18n="card.release">3. Resultado de Salida</span>
             <div class="my-2">
               <span id="badgeRelease" class="text-sm font-bold px-3 py-1 rounded-full inline-block bg-slate-200 text-slate-700">PENDIENTE</span>
             </div>
@@ -639,22 +646,22 @@
       <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div class="flex border-b border-slate-200 px-4 pt-1 bg-slate-50/60 overflow-x-auto gap-1 text-xs font-medium">
           <button class="py-2.5 px-3.5 tab-btn tab-active whitespace-nowrap rounded-t-lg transition cursor-pointer" data-tab="tab-findings">
-            <i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Incidencias Técnicas (<span id="findingsCount">0</span>)
+            <i class="fa-solid fa-triangle-exclamation mr-1.5"></i> <span data-i18n="tabs.findings">Incidencias Técnicas</span> (<span id="findingsCount">0</span>)
           </button>
           <button class="py-2.5 px-3.5 tab-btn text-slate-500 hover:text-slate-800 whitespace-nowrap rounded-t-lg transition cursor-pointer" data-tab="tab-spellcheck">
-            <i class="fa-solid fa-spell-check mr-1.5"></i> Revisión Ortográfica (<span id="spellCount">0</span>)
+            <i class="fa-solid fa-spell-check mr-1.5"></i> <span data-i18n="tabs.spellcheck">Revisión Ortográfica</span> (<span id="spellCount">0</span>)
           </button>
           <button class="py-2.5 px-3.5 tab-btn text-slate-500 hover:text-slate-800 whitespace-nowrap rounded-t-lg transition cursor-pointer" data-tab="tab-metrics">
-            <i class="fa-solid fa-chart-simple mr-1.5"></i> Métricas & Sobreimpresión
+            <i class="fa-solid fa-chart-simple mr-1.5"></i> <span data-i18n="tabs.metrics">Métricas & Sobreimpresión</span>
           </button>
           <button class="py-2.5 px-3.5 tab-btn text-slate-500 hover:text-slate-800 whitespace-nowrap rounded-t-lg transition cursor-pointer" data-tab="tab-separations">
-            <i class="fa-solid fa-layer-group mr-1.5"></i> Previsualización de Separaciones
+            <i class="fa-solid fa-layer-group mr-1.5"></i> <span data-i18n="tabs.separations">Previsualización de Separaciones</span>
           </button>
           <button class="py-2.5 px-3.5 tab-btn text-slate-500 hover:text-slate-800 whitespace-nowrap rounded-t-lg transition cursor-pointer" data-tab="tab-comparison" id="tabComparisonBtn">
-            <i class="fa-solid fa-code-compare mr-1.5"></i> Comparador Antes / Después
+            <i class="fa-solid fa-code-compare mr-1.5"></i> <span data-i18n="tabs.comparison">Comparador Antes / Después</span>
           </button>
           <button class="py-2.5 px-3.5 tab-btn text-slate-500 hover:text-slate-800 whitespace-nowrap rounded-t-lg transition cursor-pointer" data-tab="tab-release">
-            <i class="fa-solid fa-stamp mr-1.5"></i> Autorización de Salida
+            <i class="fa-solid fa-stamp mr-1.5"></i> <span data-i18n="tabs.release">Autorización de Salida</span>
           </button>
         </div>
 
@@ -3825,8 +3832,8 @@
         <div class="flex items-center gap-3">
           <img src="/asset/Logo-intelliprint-imago.svg" alt="IntelliPrint" class="h-8 w-auto rounded-md">
           <div>
-            <h3 class="text-base font-extrabold tracking-tight">IntelliPrint · Sello Institucional y Atajos</h3>
-            <p class="text-[11px] text-slate-300">Proyecto de Innovación Aplicada en Artes Gráficas · v1.2.1-sepfix</p>
+            <h3 class="text-base font-extrabold tracking-tight" data-i18n="shortcuts.title">IntelliPrint · Sello Institucional y Atajos</h3>
+            <p class="text-[11px] text-slate-300" data-i18n="shortcuts.subtitle">Proyecto de Innovación Aplicada en Artes Gráficas · v1.2.1-sepfix</p>
           </div>
         </div>
         <button onclick="closeShortcutsModal()" class="w-8 h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 flex items-center justify-center cursor-pointer" title="Cerrar (Esc)">
@@ -3836,43 +3843,43 @@
 
       <div class="p-6 space-y-5 text-xs text-slate-700 max-h-[80vh] overflow-y-auto">
         <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-          <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">Consorcio Educativo y Soporte Institucional</div>
+          <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-500" data-i18n="shortcuts.consortium">Consorcio Educativo y Soporte Institucional</div>
           <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 institutional-logos-pill">
             <img src="/asset/logo-salesianos.svg" alt="CPIFP Salesianos Urnieta LHIPI" class="h-7 w-auto object-contain">
             <img src="/asset/logo-mendizabala.png" alt="CIFP Mendizabala LHII" class="h-7 w-auto object-contain">
             <img src="/asset/logo-dept-educacion-1.svg" alt="Departamento de Educación · Gobierno Vasco" class="h-8 w-auto object-contain">
           </div>
-          <p class="text-[11px] text-slate-600 leading-relaxed">
-            Desarrollado para formación técnica y transferencia al sector gráfico por <strong>CPIFP Salesianos Urnieta LHIPI</strong> y <strong>CIFP Mendizabala LHII</strong> con el impulso de <strong>Hezkuntza Saila · Departamento de Educación (Gobierno Vasco)</strong>.
+          <p class="text-[11px] text-slate-600 leading-relaxed" data-i18n="shortcuts.desc">
+            Desarrollado para formación técnica y transferencia al sector gráfico por CPIFP Salesianos Urnieta LHIPI y CIFP Mendizabala LHII con el impulso de Hezkuntza Saila · Departamento de Educación (Gobierno Vasco).
           </p>
           <div id="shortcutsSystemStatus" class="flex flex-wrap items-center gap-2 text-[11px] pt-1"></div>
         </div>
 
         <div class="space-y-2">
-          <h4 class="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">Atajos de Teclado de Cabina y Taller</h4>
+          <h4 class="text-[11px] font-extrabold uppercase tracking-wider text-slate-500" data-i18n="shortcuts.keys_heading">Atajos de Teclado de Cabina y Taller</h4>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
-              <span>Cerrar modal o visor activo</span>
+              <span data-i18n="shortcuts.k_esc">Cerrar modal o visor activo</span>
               <kbd class="px-2 py-0.5 rounded bg-white border border-slate-300 font-mono text-[11px] font-bold text-slate-800">Esc</kbd>
             </div>
             <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
-              <span>Conmutar Cabina D50 (ISO 3664)</span>
+              <span data-i18n="shortcuts.k_d50">Conmutar Cabina D50 (ISO 3664)</span>
               <kbd class="px-2 py-0.5 rounded bg-white border border-slate-300 font-mono text-[11px] font-bold text-slate-800">Alt + K</kbd>
             </div>
             <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
-              <span>Nuevo análisis PDF</span>
+              <span data-i18n="shortcuts.k_new">Nuevo análisis PDF</span>
               <kbd class="px-2 py-0.5 rounded bg-white border border-slate-300 font-mono text-[11px] font-bold text-slate-800">Alt + N</kbd>
             </div>
             <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
-              <span>Abrir Manual Oficial (PDF)</span>
+              <span data-i18n="shortcuts.k_manual">Abrir Manual Oficial (PDF)</span>
               <kbd class="px-2 py-0.5 rounded bg-white border border-slate-300 font-mono text-[11px] font-bold text-slate-800">Alt + M</kbd>
             </div>
             <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
-              <span>Abrir Panel Docente / Aula FP</span>
+              <span data-i18n="shortcuts.k_fp">Abrir Panel Docente / Aula FP</span>
               <kbd class="px-2 py-0.5 rounded bg-white border border-slate-300 font-mono text-[11px] font-bold text-slate-800">Alt + F</kbd>
             </div>
             <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
-              <span>Mostrar / ocultar esta ayuda</span>
+              <span data-i18n="shortcuts.k_help">Mostrar / ocultar esta ayuda</span>
               <kbd class="px-2 py-0.5 rounded bg-white border border-slate-300 font-mono text-[11px] font-bold text-slate-800">?</kbd>
             </div>
           </div>
@@ -3941,6 +3948,341 @@
       return String(value ?? '').replace(/[&<>"']/g, char => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       }[char]));
+    }
+
+    const I18N_UI = {
+      es: {
+        'header.engine_active': 'Motor Activo',
+        'header.subtitle': 'Sistema Avanzado de Preflight mediante Redes Neuronales & Análisis PDF',
+        'header.workshop_login': 'Acceso Taller',
+        'nav.group_flow': 'Flujo',
+        'nav.group_shop': 'Taller',
+        'nav.group_fp': 'Aula FP',
+        'nav.new_pdf': 'Nuevo PDF',
+        'nav.jobs': 'Trabajos',
+        'nav.profiles': 'Perfiles',
+        'nav.production_order': 'Orden Producción',
+        'nav.gwg': 'Validación GWG',
+        'nav.simulator': 'Simulador FP',
+        'nav.teacher_panel': 'Panel Docente',
+        'nav.manual': 'Manual (PDF)',
+        'kiosk.office': 'Modo Oficina',
+        'kiosk.cabin': 'Cabina D50',
+        'setup.title': 'Configuración del Preflight',
+        'setup.subtitle': 'Selecciona el PDF, el perfil de producción y la política de gestión de color.',
+        'setup.step_1': 'Paso 1 de 2',
+        'setup.step1_label': '1. Archivo PDF a verificar',
+        'setup.drop_prompt': 'Arrastra tu PDF aquí o examina',
+        'setup.drop_support': 'Soporta PDF 1.3 hasta 2.0',
+        'setup.step2_label': '2. Perfil de Destino (IntelliPrint)',
+        'setup.edit_profiles': 'Editar Perfiles',
+        'setup.create_profile': '+ Crear Perfil Personalizado (FP / Taller)',
+        'setup.step3_label': '3. Perfil de Color (ICC)',
+        'setup.step3_hint': '· Declaración física de salida (OutputIntent)',
+        'setup.icc_preserve': 'Conservar perfil del documento',
+        'setup.icc_preserve_hint': 'Recomendado: mantiene el OutputIntent incrustado',
+        'setup.icc_custom': 'Elegir de icc_profiles/',
+        'setup.icc_select_placeholder': 'Seleccionar perfil ICC...',
+        'setup.try_demo': 'Probar con Reto de Muestra',
+        'setup.fp_classroom': 'Aula / Prácticas FP',
+        'setup.analyze_btn': 'Analizar PDF con IntelliPrint',
+        'loading.title': 'Analizando documento PDF...',
+        'loading.subtitle': 'Comprobando cajas, resolución efectiva, sobreimpresión de texto en negro puro (100% K), barnices y ortografía.',
+        'results.download_pdf': 'Descargar PDF',
+        'block1.title': '1. Corrección de Taller',
+        'block1.tag': 'Auto',
+        'block1.cta': 'Taller en 1 Clic',
+        'block1.desc': 'Corrige en lote sangrado, TAC, filetes, tipografías, color CMYK e inyecta marcas.',
+        'block2.title': '2. Geometría & Códigos',
+        'block2.tag': 'Inspección',
+        'block2.barcodes': 'Códigos & QR',
+        'block2.safety': 'Margen & Lomo',
+        'block3.title': '3. Validación y Entrega',
+        'block3.tag': 'Control / FP',
+        'block3.gwg': 'Validar GWG',
+        'block3.approval': 'VºBº Cliente',
+        'block3.deliver_fp': 'Entregar a FP',
+        'block3.hotfolder': 'Hot-Folder',
+        'block4.title': '4. Pliego & Salida',
+        'block4.tag': 'Prensa / Descargas',
+        'block4.imposition': 'Imposición',
+        'block4.cip3': 'Tinteros CIP3',
+        'block4.press_sheet': 'Hoja Máquina',
+        'block4.zip': 'Paquete ZIP',
+        'block4.cert': 'Ficha',
+        'block4.client_report': 'Inf. Cliente',
+        'timeline.title': 'Línea Temporal de Versiones',
+        'timeline.approved': 'Entrega Aprobada',
+        'timeline.initial': 'PDF original recibido',
+        'timeline.undo': 'Deshacer',
+        'timeline.redo': 'Rehacer',
+        'timeline.compare': 'Comparar Versiones',
+        'timeline.approved_pdf': 'PDF Aprobado',
+        'card.technical': '1. Resultado Técnico',
+        'card.content': '2. Resultado de Contenido',
+        'card.release': '3. Resultado de Salida',
+        'tabs.findings': 'Incidencias Técnicas',
+        'tabs.spellcheck': 'Revisión Ortográfica',
+        'tabs.metrics': 'Métricas & Sobreimpresión',
+        'tabs.separations': 'Previsualización de Separaciones',
+        'tabs.comparison': 'Comparador Antes / Después',
+        'tabs.release': 'Autorización de Salida',
+        'shortcuts.title': 'IntelliPrint · Sello Institucional y Atajos',
+        'shortcuts.subtitle': 'Proyecto de Innovación Aplicada en Artes Gráficas · v1.2.1-sepfix',
+        'shortcuts.consortium': 'Consorcio Educativo y Soporte Institucional',
+        'shortcuts.desc': 'Desarrollado para formación técnica y transferencia al sector gráfico por CPIFP Salesianos Urnieta LHIPI y CIFP Mendizabala LHII con el impulso de Hezkuntza Saila · Departamento de Educación (Gobierno Vasco).',
+        'shortcuts.keys_heading': 'Atajos de Teclado de Cabina y Taller',
+        'shortcuts.k_esc': 'Cerrar modal o visor activo',
+        'shortcuts.k_d50': 'Conmutar Cabina D50 (ISO 3664)',
+        'shortcuts.k_new': 'Nuevo análisis PDF',
+        'shortcuts.k_manual': 'Abrir Manual Oficial (PDF)',
+        'shortcuts.k_fp': 'Abrir Panel Docente / Aula FP',
+        'shortcuts.k_help': 'Mostrar / ocultar esta ayuda'
+      },
+      eu: {
+        'header.engine_active': 'Motorra Aktibo',
+        'header.subtitle': 'Sare Neuronalen eta PDF Analisiaren Bidezko Preflight Sistema Aurreratua',
+        'header.workshop_login': 'Tailerreko Sarbidea',
+        'nav.group_flow': 'Fluxua',
+        'nav.group_shop': 'Tailerra',
+        'nav.group_fp': 'LH Ikasgela',
+        'nav.new_pdf': 'PDF Berria',
+        'nav.jobs': 'Lanak',
+        'nav.profiles': 'Profilak',
+        'nav.production_order': 'Produkzio Agindua',
+        'nav.gwg': 'GWG Balioztatzea',
+        'nav.simulator': 'LH Simulagailua',
+        'nav.teacher_panel': 'Irakasle Panela',
+        'nav.manual': 'Eskuliburua (PDF)',
+        'kiosk.office': 'Bulego Modua',
+        'kiosk.cabin': 'D50 Kabina',
+        'setup.title': 'Preflight Konfigurazioa',
+        'setup.subtitle': 'Aukeratu PDF fitxategia, produkzio-profila eta kolore-kudeaketako politika.',
+        'setup.step_1': '1. urratsa / 2',
+        'setup.step1_label': '1. Egiaztatzeko PDF fitxategia',
+        'setup.drop_prompt': 'Arrastatu PDFa hona edo arakatu',
+        'setup.drop_support': 'PDF 1.3tik 2.0ra bateragarria',
+        'setup.step2_label': '2. Helmuga Profila (IntelliPrint)',
+        'setup.edit_profiles': 'Editatu Profilak',
+        'setup.create_profile': '+ Sortu Profil Pertsonalizatua (LH / Tailerra)',
+        'setup.step3_label': '3. Kolore Profila (ICC)',
+        'setup.step3_hint': '· Irteerako adierazpen fisikoa (OutputIntent)',
+        'setup.icc_preserve': 'Mantendu dokumentuaren profila',
+        'setup.icc_preserve_hint': 'Gomendatua: kapsulatutako OutputIntent mantentzen du',
+        'setup.icc_custom': 'Aukeratu icc_profiles/ karpetatik',
+        'setup.icc_select_placeholder': 'Hautatu ICC profila...',
+        'setup.try_demo': 'Probatu Lagin Erronkarekin',
+        'setup.fp_classroom': 'LH Ikasgela / Praktikak',
+        'setup.analyze_btn': 'Aztertu PDFa IntelliPrint-ekin',
+        'loading.title': 'PDF dokumentua aztertzen...',
+        'loading.subtitle': 'Kaxak, bereizmen efektiboa, beltz puruaren (%100 K) gaininprimaketa, bernizak eta ortografia egiaztatzen.',
+        'results.download_pdf': 'Deskargatu PDFa',
+        'block1.title': '1. Tailerreko Zuzenketa',
+        'block1.tag': 'Auto',
+        'block1.cta': 'Tailerra Klik 1ean',
+        'block1.desc': 'Odoldura, TAC, hariak, tipografiak, CMYK kolorea eta markak automatikoki zuzentzen ditu.',
+        'block2.title': '2. Geometria eta Kodeak',
+        'block2.tag': 'Ikuskapena',
+        'block2.barcodes': 'Kodeak & QR',
+        'block2.safety': 'Marjina & Bizkarra',
+        'block3.title': '3. Balioztatzea eta Entrega',
+        'block3.tag': 'Kontrola / LH',
+        'block3.gwg': 'Balioztatu GWG',
+        'block3.approval': 'Bezeroaren Oniritzia',
+        'block3.deliver_fp': 'Bidali LHra',
+        'block3.hotfolder': 'Hot-Folder',
+        'block4.title': '4. Plegua eta Irteera',
+        'block4.tag': 'Makina / Deskargak',
+        'block4.imposition': 'Inposizioa',
+        'block4.cip3': 'CIP3 Tinteroak',
+        'block4.press_sheet': 'Makina Orria',
+        'block4.zip': 'ZIP Paketea',
+        'block4.cert': 'Fitxa',
+        'block4.client_report': 'Bezero Txost.',
+        'timeline.title': 'Bertsioen Denbora-lerroa',
+        'timeline.approved': 'Entrega Onartua',
+        'timeline.initial': 'Jatorrizko PDFa jasoa',
+        'timeline.undo': 'Desegin',
+        'timeline.redo': 'Berregin',
+        'timeline.compare': 'Konparatu Bertsioak',
+        'timeline.approved_pdf': 'Onartutako PDFa',
+        'card.technical': '1. Emaitza Teknikoa',
+        'card.content': '2. Edukiaren Emaitza',
+        'card.release': '3. Irteerako Emaitza',
+        'tabs.findings': 'Gertakari Teknikoak',
+        'tabs.spellcheck': 'Ortografia Berrikuspena',
+        'tabs.metrics': 'Metrikak & Gaininprimaketa',
+        'tabs.separations': 'Bereizketen Aurrebista',
+        'tabs.comparison': 'Aurretik / Ondoren Konparatzailea',
+        'tabs.release': 'Irteera Baimena',
+        'shortcuts.title': 'IntelliPrint · Zigilu Instituzionala eta Lasterbideak',
+        'shortcuts.subtitle': 'Arte Grafikoetako Berrikuntza Aplikatuko Proiektua · v1.2.1-sepfix',
+        'shortcuts.consortium': 'Hezkuntza Partzuergoa eta Babes Instituzionala',
+        'shortcuts.desc': 'Prestakuntza teknikorako eta sektore grafikora transferitzeko garatua CPIFP Salesianos Urnieta LHIPI eta CIFP Mendizabala LHII ikastetxeek, Eusko Jaurlaritzako Hezkuntza Sailaren babesarekin.',
+        'shortcuts.keys_heading': 'Kabina eta Tailerreko Teklatu Lasterbideak',
+        'shortcuts.k_esc': 'Itxi leiho edo bisore aktiboa',
+        'shortcuts.k_d50': 'Txandakatu D50 Kabina (ISO 3664)',
+        'shortcuts.k_new': 'PDF analisi berria',
+        'shortcuts.k_manual': 'Ireki Eskuliburu Ofiziala (PDF)',
+        'shortcuts.k_fp': 'Ireki Irakasle Panela / LH Ikasgela',
+        'shortcuts.k_help': 'Erakutsi / ezkutatu laguntza hau'
+      },
+      en: {
+        'header.engine_active': 'Engine Active',
+        'header.subtitle': 'Advanced PDF Preflight & Neural Prepress Inspection System',
+        'header.workshop_login': 'Workshop Sign-In',
+        'nav.group_flow': 'Flow',
+        'nav.group_shop': 'Pressroom',
+        'nav.group_fp': 'VET Lab',
+        'nav.new_pdf': 'New PDF',
+        'nav.jobs': 'Jobs',
+        'nav.profiles': 'Profiles',
+        'nav.production_order': 'Production Order',
+        'nav.gwg': 'GWG Check',
+        'nav.simulator': 'VET Simulator',
+        'nav.teacher_panel': 'Teacher Panel',
+        'nav.manual': 'Manual (PDF)',
+        'kiosk.office': 'Office Mode',
+        'kiosk.cabin': 'D50 Booth',
+        'setup.title': 'Preflight Configuration',
+        'setup.subtitle': 'Select the PDF file, target production profile, and ICC color policy.',
+        'setup.step_1': 'Step 1 of 2',
+        'setup.step1_label': '1. PDF File to Verify',
+        'setup.drop_prompt': 'Drag your PDF here or browse',
+        'setup.drop_support': 'Supports PDF 1.3 through 2.0',
+        'setup.step2_label': '2. Target Profile (IntelliPrint)',
+        'setup.edit_profiles': 'Edit Profiles',
+        'setup.create_profile': '+ Create Custom Profile (VET / Workshop)',
+        'setup.step3_label': '3. Color Profile (ICC)',
+        'setup.step3_hint': '· Physical output intent declaration',
+        'setup.icc_preserve': 'Preserve document profile',
+        'setup.icc_preserve_hint': 'Recommended: keeps embedded OutputIntent intact',
+        'setup.icc_custom': 'Select from icc_profiles/',
+        'setup.icc_select_placeholder': 'Choose ICC profile...',
+        'setup.try_demo': 'Try Sample Challenge',
+        'setup.fp_classroom': 'VET Classroom / Assignments',
+        'setup.analyze_btn': 'Analyze PDF with IntelliPrint',
+        'loading.title': 'Analyzing PDF document...',
+        'loading.subtitle': 'Inspecting page boxes, effective resolution, 100% K black overprint, spot varnishes, and spelling.',
+        'results.download_pdf': 'Download PDF',
+        'block1.title': '1. Workshop Auto-Fix',
+        'block1.tag': 'Auto',
+        'block1.cta': '1-Click Workshop Fix',
+        'block1.desc': 'Batch-fixes bleed, TAC, hairlines, font outlines, CMYK color, and printer marks.',
+        'block2.title': '2. Geometry & Barcodes',
+        'block2.tag': 'Inspect',
+        'block2.barcodes': 'Barcodes & QR',
+        'block2.safety': 'Margin & Spine',
+        'block3.title': '3. Certification & Delivery',
+        'block3.tag': 'QC / VET',
+        'block3.gwg': 'GWG Audit',
+        'block3.approval': 'Client Proof',
+        'block3.deliver_fp': 'Submit to VET',
+        'block3.hotfolder': 'Hot-Folder',
+        'block4.title': '4. Sheet & Output',
+        'block4.tag': 'Press / Export',
+        'block4.imposition': 'Imposition',
+        'block4.cip3': 'CIP3 Ink Zones',
+        'block4.press_sheet': 'Press Sheet',
+        'block4.zip': 'ZIP Package',
+        'block4.cert': 'Tech Sheet',
+        'block4.client_report': 'Client Guide',
+        'timeline.title': 'Version Timeline',
+        'timeline.approved': 'Approved Delivery',
+        'timeline.initial': 'Original PDF received',
+        'timeline.undo': 'Undo',
+        'timeline.redo': 'Redo',
+        'timeline.compare': 'Compare Versions',
+        'timeline.approved_pdf': 'Approved PDF',
+        'card.technical': '1. Technical Status',
+        'card.content': '2. Content / Proofreading',
+        'card.release': '3. Output Release',
+        'tabs.findings': 'Technical Findings',
+        'tabs.spellcheck': 'Spellcheck',
+        'tabs.metrics': 'Metrics & Overprint',
+        'tabs.separations': 'Separations Preview',
+        'tabs.comparison': 'Before / After Diff',
+        'tabs.release': 'Release Sign-Off',
+        'shortcuts.title': 'IntelliPrint · Institutional Seal & Shortcuts',
+        'shortcuts.subtitle': 'Applied VET Innovation Project in Graphic Arts · v1.2.1-sepfix',
+        'shortcuts.consortium': 'Educational Consortium & Institutional Support',
+        'shortcuts.desc': 'Developed for technical education and graphic-arts industry transfer by CPIFP Salesianos Urnieta LHIPI and CIFP Mendizabala LHII with the support of Hezkuntza Saila · Basque Government Department of Education.',
+        'shortcuts.keys_heading': 'Pressroom & Booth Keyboard Shortcuts',
+        'shortcuts.k_esc': 'Close active modal or viewer',
+        'shortcuts.k_d50': 'Toggle D50 Booth Mode (ISO 3664)',
+        'shortcuts.k_new': 'New PDF analysis',
+        'shortcuts.k_manual': 'Open Official Manual (PDF)',
+        'shortcuts.k_fp': 'Open Teacher Panel / VET Classroom',
+        'shortcuts.k_help': 'Show / hide this reference'
+      }
+    };
+
+    let currentAppLang = (() => {
+      try {
+        const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('intelliprint_lang') : null;
+        return (stored && I18N_UI[stored]) ? stored : 'es';
+      } catch (_) {
+        return 'es';
+      }
+    })();
+
+    function t(key, fallback = '') {
+      const pack = I18N_UI[currentAppLang] || I18N_UI.es;
+      if (Object.prototype.hasOwnProperty.call(pack, key)) return pack[key];
+      if (Object.prototype.hasOwnProperty.call(I18N_UI.es, key)) return I18N_UI.es[key];
+      return fallback;
+    }
+
+    function getClientReportUrl(jobId) {
+      if (!jobId) return '#';
+      return currentAppLang && currentAppLang !== 'es'
+        ? `/api/download-client-report/${jobId}?lang=${encodeURIComponent(currentAppLang)}`
+        : `/api/download-client-report/${jobId}`;
+    }
+
+    function applyAppLanguage() {
+      if (typeof document === 'undefined') return;
+      if (document.documentElement) document.documentElement.lang = currentAppLang;
+      if (typeof document.querySelectorAll === 'function') {
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+          const key = el.getAttribute('data-i18n');
+          const txt = t(key);
+          if (txt) el.textContent = txt;
+        });
+        document.querySelectorAll('[data-lang-btn]').forEach(btn => {
+          const active = btn.getAttribute('data-lang-btn') === currentAppLang;
+          btn.classList.toggle('bg-cyan-600', active);
+          btn.classList.toggle('text-white', active);
+          btn.classList.toggle('text-slate-300', !active);
+          if (btn.setAttribute) btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+      }
+      const isDark = Boolean(document.body && document.body.classList && document.body.classList.contains('theme-kiosk-d50'));
+      if (typeof updateKioskThemeButton === 'function') updateKioskThemeButton(isDark);
+      if (typeof currentJobId !== 'undefined' && currentJobId) {
+        const downloadClientBtn = document.getElementById('downloadClientReportBtn');
+        if (downloadClientBtn) downloadClientBtn.href = getClientReportUrl(currentJobId);
+        const signedClientBtn = document.getElementById('signedDownloadClientReportBtn');
+        if (signedClientBtn) signedClientBtn.href = getClientReportUrl(currentJobId);
+      }
+      const reader = document.getElementById('manualReader');
+      if (reader && reader.getAttribute && reader.getAttribute('src')) {
+        reader.src = currentAppLang !== 'es' ? `/manual?embed=1&lang=${currentAppLang}` : (reader.dataset?.src || '/manual?embed=1');
+      }
+    }
+
+    function setAppLanguage(lang, opts = {}) {
+      currentAppLang = I18N_UI[lang] ? lang : 'es';
+      try {
+        if (typeof localStorage !== 'undefined' && localStorage.setItem) {
+          localStorage.setItem('intelliprint_lang', currentAppLang);
+        }
+      } catch (_) {}
+      applyAppLanguage();
+      if (!opts.silent && typeof notifyUser === 'function') {
+        const labels = { es: 'Idioma cambiado a Castellano.', eu: 'Hizkuntza Euskarara aldatu da.', en: 'Language switched to English.' };
+        notifyUser(labels[currentAppLang] || labels.es, 'info', 2500);
+      }
     }
 
     function showToast(message, type = 'info', durationMs = 4500) {
@@ -4476,7 +4818,7 @@
 
       const downloadClientBtn = document.getElementById('downloadClientReportBtn');
       if (downloadClientBtn && currentJobId) {
-        downloadClientBtn.href = `/api/download-client-report/${currentJobId}`;
+        downloadClientBtn.href = typeof getClientReportUrl === 'function' ? getClientReportUrl(currentJobId) : `/api/download-client-report/${currentJobId}`;
       }
 
       // Aviso de caducidad 24 horas y almacenamiento persistente
@@ -5134,7 +5476,9 @@
           document.getElementById('signedDownloadCertBtn').href = data.certificate_url || `/api/download-certificate/${currentJobId}`;
           const signedClientBtn = document.getElementById('signedDownloadClientReportBtn');
           if (signedClientBtn) {
-            signedClientBtn.href = data.client_report_url || `/api/download-client-report/${currentJobId}`;
+            signedClientBtn.href = typeof getClientReportUrl === 'function'
+              ? getClientReportUrl(currentJobId)
+              : (data.client_report_url || `/api/download-client-report/${currentJobId}`);
           }
           panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
@@ -7919,7 +8263,7 @@
                 <button onclick="loadBatchJobIntoInspector('${item.job_id}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold transition cursor-pointer" title="Abrir en pantalla principal">
                   Abrir
                 </button>
-                <a href="/api/download-client-report/${item.job_id}" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[11px] font-semibold transition" title="Informe Cliente A4">
+                <a href="${typeof getClientReportUrl === 'function' ? getClientReportUrl(item.job_id) : `/api/download-client-report/${item.job_id}`}" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[11px] font-semibold transition" title="Informe Cliente A4">
                   Informe
                 </a>
               </div>
@@ -8963,7 +9307,11 @@
     function openManualModal() {
       const modal = document.getElementById('manualModal');
       const reader = document.getElementById('manualReader');
-      if (reader && !reader.getAttribute('src')) reader.src = reader.dataset.src;
+      if (reader && !reader.getAttribute('src')) {
+        const baseSrc = reader.dataset.src || '/manual?embed=1';
+        const lang = (typeof currentAppLang !== 'undefined' && currentAppLang && currentAppLang !== 'es') ? currentAppLang : '';
+        reader.src = lang ? `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}lang=${encodeURIComponent(lang)}` : baseSrc;
+      }
       if (modal) modal.classList.remove('hidden');
     }
 
@@ -9474,13 +9822,16 @@
     function updateKioskThemeButton(isDark) {
       const btn = document.getElementById('themeToggleBtn');
       if (!btn) return;
+      const safe = (v) => (typeof escapeHtml === 'function' ? escapeHtml(v) : String(v ?? ''));
+      const officeLbl = typeof t === 'function' ? t('kiosk.office', 'Modo Oficina') : 'Modo Oficina';
+      const cabinLbl = typeof t === 'function' ? t('kiosk.cabin', 'Cabina D50') : 'Cabina D50';
       if (isDark) {
         btn.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-400 text-slate-950 text-xs font-bold rounded-lg shadow-sm transition cursor-pointer whitespace-nowrap';
-        btn.innerHTML = '<i class="fa-solid fa-sun text-slate-950"></i> <span>Modo Oficina</span>';
+        btn.innerHTML = `<i class="fa-solid fa-sun text-slate-950"></i> <span>${safe(officeLbl)}</span>`;
         btn.title = 'Cambiar a Modo Oficina (Fondo claro)';
       } else {
         btn.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer whitespace-nowrap';
-        btn.innerHTML = '<i class="fa-solid fa-moon text-amber-300"></i> <span id="themeToggleLabel">Cabina D50</span>';
+        btn.innerHTML = `<i class="fa-solid fa-moon text-amber-300"></i> <span id="themeToggleLabel">${safe(cabinLbl)}</span>`;
         btn.title = 'Conmutar Modo Cabina de Máquina D50 (Fondo oscuro antirreflejo para pupitres de prensa ISO 3664)';
       }
     }
@@ -11709,9 +12060,10 @@
       }
     }
 
-    // Inicializar tema y atajos al cargar DOM
+    // Inicializar tema, idioma y atajos al cargar DOM
     document.addEventListener('DOMContentLoaded', () => {
       initKioskTheme();
+      if (typeof applyAppLanguage === 'function') applyAppLanguage();
       checkCurrentUserSession();
       document.addEventListener('keydown', handleGlobalKeydown);
     });

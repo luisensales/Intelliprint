@@ -120,6 +120,7 @@ La barra superior de IntelliPrint agrupa las herramientas por bloques de trabajo
 
 | Opción | Uso y efecto |
 | --- | --- |
+| Selector de Idioma (`ES` · `EU` · `EN`) | Cambia al instante el idioma de la interfaz principal, el lector `/manual` y la **Guía de Arte Final (Informe Cliente PDF)** entre **Castellano (`es`)**, **Euskara (`eu`)** e **Inglés (`en`)**, conservando la preferencia en el navegador. |
 | Acceso Taller | Abre el panel de autenticación de usuarios y roles (RBAC), las cuentas demo de taller y el registro individual con código de grupo FP. |
 | Nuevo PDF | Limpia la selección y el informe mostrado para comenzar otro trabajo (`Alt + N`). Descarga antes los resultados que quieras conservar. No equivale a borrar los archivos del servidor. |
 | Trabajos | Abre el gestor de trabajos activos con filtros de búsqueda, estado de caducidad (24 h), recarga rápida de sesiones y descarga de Paquetes de Producción ZIP. |
@@ -801,7 +802,7 @@ Desde el botón **Trabajos** de la cabecera se accede al listado de documentos p
 
 ### Las cuatro versiones del manual
 
-**Manual web** permite leer y navegar por capítulos dentro de la aplicación o en su página propia, incorporando un filtro interactivo para resaltar los capítulos recomendados según tu perfil (*Diseñador*, *Taller*, *Docente* o *Alumno*). **Markdown** es la fuente de texto canónica consultable y editable. **Word DOCX** es la edición ofimática. **PDF** es la edición de lectura e impresión. Todas comparten el contenido de esta edición y se mantienen sincronizadas.
+**Manual web** permite leer y navegar por capítulos dentro de la aplicación o en su página propia (`/manual`), incorporando un **buscador instantáneo** en el índice lateral (sin distinción de tildes, resaltando resultados en el texto y limpiable con `Esc`), selector de idioma (`ES | EU | EN`) y un filtro interactivo para resaltar los capítulos recomendados según tu perfil (*Diseñador*, *Taller*, *Docente* o *Alumno*). **Markdown** es la fuente de texto canónica consultable y editable. **Word DOCX** es la edición ofimática. **PDF** es la edición de lectura e impresión. Todas comparten el contenido de esta edición y se mantienen sincronizadas.
 
 En la aplicación web actual (botón **Manual (PDF)** y página web `/manual`), se ofrece exclusivamente la lectura interactiva y el enlace **Descargar PDF** (junto al botón **Imprimir**). Las versiones fuente en Markdown y Word DOCX se mantienen en el repositorio técnico del proyecto. La lámina FOGRA tiene su propio enlace y no es una versión de este manual.
 

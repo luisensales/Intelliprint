@@ -738,12 +738,13 @@ def download_certificate_pdf(job_id: str):
 
 
 @app.get("/api/download-client-report/{job_id}")
-def download_client_report_pdf(job_id: str):
+def download_client_report_pdf(job_id: str, lang: str = "es"):
     """
     Descarga la guía A4 completa para cliente y diseñador, con estado e historial.
     Explica en lenguaje constructivo y claro qué incidencias existen y cómo resolverlas en InDesign / Illustrator.
     """
     safe_id = safe_job_id(job_id)
+    report_lang = lang if lang in ("es", "eu", "en") else "es"
     job_json_path = get_job_json_path(safe_id)
     if not job_json_path.exists():
         raise HTTPException(status_code=404, detail="Trabajo no encontrado.")
@@ -756,10 +757,15 @@ def download_client_report_pdf(job_id: str):
             json.dump(job_data, f, ensure_ascii=False, indent=2)
 
 
-    report_path = JOBS_DIR / f"{safe_id}_guia_cliente.pdf"
+    report_suffix = "" if report_lang == "es" else f"_{report_lang}"
+    report_path = JOBS_DIR / f"{safe_id}_guia_cliente{report_suffix}.pdf"
     try:
         generate_client_educational_report_pdf(
-            job_data, report_path, pdf_path=get_latest_cumulative_pdf(job_data.get("job_meta", {})))
+            job_data,
+            report_path,
+            pdf_path=get_latest_cumulative_pdf(job_data.get("job_meta", {})),
+            lang=report_lang,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generando informe pedagógico para el cliente: {e}")
 
@@ -5395,8 +5401,8 @@ def download_manual_docx_endpoint():
 
 
 @app.get("/manual", response_class=HTMLResponse)
-def read_manual_endpoint(embed: bool = False):
-    return HTMLResponse(render_manual_page(embedded=embed))
+def read_manual_endpoint(embed: bool = False, lang: str = "es"):
+    return HTMLResponse(render_manual_page(embedded=embed, lang=lang))
 
 
 @app.get("/api/manual/download/md")

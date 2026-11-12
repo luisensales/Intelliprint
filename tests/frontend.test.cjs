@@ -905,3 +905,62 @@ test('showToast escapes untrusted text and handleGlobalKeydown closes open modal
   context.handleGlobalKeydown({ key: 'Escape', target: { tagName: 'BODY' } });
   assert.equal(shortcutsModal.classList.contains('hidden'), true);
 });
+
+test('trilingual switcher updates I18N strings, persistence, and client report / manual URLs', () => {
+  const i18nStart = html.indexOf('    const I18N_UI = {');
+  const i18nEnd = html.indexOf('\n    let currentAppLang =', i18nStart);
+  assert.notEqual(i18nStart, -1);
+  assert.notEqual(i18nEnd, -1);
+
+  const i18nNodes = [
+    { getAttribute: (k) => (k === 'data-i18n' ? 'setup.analyze_btn' : null), textContent: '' },
+    { getAttribute: (k) => (k === 'data-i18n' ? 'block4.client_report' : null), textContent: '' },
+  ];
+  const langBtns = ['es', 'eu', 'en'].map(code => {
+    const classes = new Set();
+    return {
+      code,
+      attrs: {},
+      getAttribute: (k) => (k === 'data-lang-btn' ? code : null),
+      setAttribute(k, v) { this.attrs[k] = v; },
+      classList: {
+        toggle: (cls, active) => (active ? classes.add(cls) : classes.delete(cls)),
+        has: (cls) => classes.has(cls),
+      },
+    };
+  });
+  const document = fakeDocument();
+  document.documentElement = { lang: 'es' };
+  document.body = { classList: { contains: () => false } };
+  document.querySelectorAll = (sel) => (sel === '[data-i18n]' ? i18nNodes : sel === '[data-lang-btn]' ? langBtns : []);
+  const reader = document.getElementById('manualReader');
+  reader.dataset = { src: '/manual?embed=1' };
+  reader.getAttribute = (k) => (k === 'src' ? (reader.src || null) : null);
+
+  const stored = new Map();
+  const toasts = [];
+  const context = {
+    document,
+    currentAppLang: 'es',
+    currentJobId: 'job-trilingual-1',
+    localStorage: { setItem: (k, v) => stored.set(k, v), getItem: (k) => stored.get(k) || null },
+    notifyUser: (msg) => toasts.push(msg),
+    updateKioskThemeButton: () => {},
+  };
+  vm.createContext(context);
+  vm.runInContext(html.slice(i18nStart, i18nEnd), context);
+  loadFunctions(context, ['t', 'getClientReportUrl', 'applyAppLanguage', 'setAppLanguage']);
+
+  context.setAppLanguage('eu');
+  assert.equal(document.documentElement.lang, 'eu');
+  assert.equal(stored.get('intelliprint_lang'), 'eu');
+  assert.equal(i18nNodes[0].textContent, 'Aztertu PDFa IntelliPrint-ekin');
+  assert.equal(document.getElementById('downloadClientReportBtn').href, '/api/download-client-report/job-trilingual-1?lang=eu');
+  assert.ok(langBtns[1].classList.has('bg-cyan-600'));
+  assert.ok(toasts[0].includes('Euskarara'));
+
+  context.setAppLanguage('en');
+  assert.equal(document.documentElement.lang, 'en');
+  assert.equal(i18nNodes[0].textContent, 'Analyze PDF with IntelliPrint');
+  assert.equal(document.getElementById('downloadClientReportBtn').href, '/api/download-client-report/job-trilingual-1?lang=en');
+});
