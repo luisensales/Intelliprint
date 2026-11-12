@@ -152,6 +152,11 @@ class AuthManagerTests(unittest.TestCase):
             self.assertEqual(resp_info.status_code, 200)
             self.assertEqual(resp_info.json()["filename"], "Revista_Final.pdf")
 
+            # 6b. Abrir vista web pública de aprobación de cliente
+            resp_view = client.get(f"/api/client-approval/view/{token}")
+            self.assertEqual(resp_view.status_code, 200)
+            self.assertIn("Revista_Final.pdf", resp_view.text)
+
             # 7. Cliente envía su visto bueno
             resp_decide = client.post(
                 f"/api/client-approval/submit/{token}",
