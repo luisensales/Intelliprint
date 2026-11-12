@@ -587,6 +587,15 @@ La ficha necesita que el trabajo siga existiendo en el servidor. Para un archivo
 
 *Perfiles recomendados: Docente de FP, Alumno de FP.*
 
+### Aula virtual de FP: grupos, códigos de clase y rúbricas
+
+El módulo docente de IntelliPrint permite gestionar el flujo completo de enseñanza y aprendizaje en el taller de Artes Gráficas:
+
+1. **Creación de grupos y códigos de matrícula:** Desde la pestaña de gestión docente, el profesor define sus módulos y grupos (por ejemplo, *2º GS Preimpresión Digital*). El sistema genera de forma automática un código de matrícula único con el formato `FP-XXXX` (letras y dígitos aleatorios).
+2. **Matriculación ágil del alumnado:** El profesor comunica el código al grupo. Durante el registro individual en la aplicación o desde el panel de estudiante, el alumno introduce dicho código en la casilla correspondiente, quedando matriculado al instante en el grupo de su profesor.
+3. **Publicación de prácticas y retos:** El docente puede asignar ejercicios vinculados a cualquiera de los 20 retos formativos del catálogo o proponer prácticas libres sobre PDFs reales de imprenta, definiendo el perfil técnico objetivo (Offset, Digital, Prensa, Packaging).
+4. **Evaluación mediante rúbricas ponderadas:** Cada práctica incorpora una rúbrica de evaluación técnica con criterios ponderados sobre 10 puntos (diagnóstico inicial 20 %, criterio en correcciones 30 %, calidad técnica final 30 % y preparación para taller 20 %). Al recibir la entrega del alumno, el motor compara el PDF inicial con el corregido y propone una nota automática justificada. El docente revisa la propuesta, ajusta la puntuación y aporta observaciones pedagógicas de mejora.
+
 ### Las cuatro pestañas de Alumnos FP
 
 **Retos Prácticos FP** abre casos preparados. **Simulador Físico de Taller** permite variar modelos visuales. **Autoevaluación FP** presenta preguntas con corrección comentada. **Ficha Alumno PDF** genera una hoja de práctica con los datos introducidos y el resultado de cuestionario disponible.
