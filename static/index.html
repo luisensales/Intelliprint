@@ -346,12 +346,7 @@
               <div class="text-xs w-full">
                 <span class="font-bold text-slate-800">Elegir de icc_profiles/</span>
                 <select id="iccCatalogSelect" disabled class="mt-1.5 w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 disabled:opacity-50">
-                  <option value="ISOcoated_v2_300_bas.icc" selected>ISO Coated v2 300% (FOGRA39 - Estucado) (CMYK)</option>
-                  <option value="PSOcoated_v3.icc">PSO Coated v3 (FOGRA51 - Estucado) (CMYK)</option>
-                  <option value="PSOuncoated_v3_FOGRA52.icc">PSO Uncoated v3 (FOGRA52 - No estucado) (CMYK)</option>
-                  <option value="ISOcoated_v2_eci.icc">ISO Coated v2 ECI (FOGRA39) (CMYK)</option>
-                  <option value="AdobeRGB1998.icc">Adobe RGB 1998 (Fotografía/RGB amplio) (RGB)</option>
-                  <option value="sRGB2014.icc">sRGB IEC61966-2.1 (RGB)</option>
+                  <option value="">Seleccionar perfil ICC...</option>
                 </select>
               </div>
             </label>
@@ -3704,27 +3699,42 @@
     const resultsSection = document.getElementById('resultsSection');
 
     // Load ICC Catalog on start
+    function populateIccSelect(profiles) {
+      if (!iccCatalogSelect || !Array.isArray(profiles) || profiles.length === 0) return;
+      const currentVal = iccCatalogSelect.value;
+      iccCatalogSelect.innerHTML = '';
+      profiles.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${p.name} (${p.family})`;
+        if (p.id === currentVal || (!currentVal && p.id === 'ISOcoated_v2_300_bas.icc')) {
+          opt.selected = true;
+        }
+        iccCatalogSelect.appendChild(opt);
+      });
+    }
+
     async function loadIccCatalog() {
       try {
         const res = await fetch('/api/icc-catalog');
-        if (res && res.ok === false) return;
-        const data = await res.json();
-        if (data && Array.isArray(data.profiles) && data.profiles.length > 0) {
-          const currentVal = iccCatalogSelect.value;
-          iccCatalogSelect.innerHTML = '';
-          data.profiles.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p.id;
-            opt.textContent = `${p.name} (${p.family})`;
-            if (p.id === currentVal || (!currentVal && p.id === 'ISOcoated_v2_300_bas.icc')) {
-              opt.selected = true;
-            }
-            iccCatalogSelect.appendChild(opt);
-          });
+        if (res && res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.profiles) && data.profiles.length > 0) {
+            populateIccSelect(data.profiles);
+            return;
+          }
         }
       } catch (err) {
-        console.error('Error cargando ICCs:', err);
+        console.warn('Error cargando ICCs desde backend, recurriendo a perfiles estándar:', err);
       }
+      populateIccSelect([
+        { id: 'ISOcoated_v2_300_bas.icc', name: 'ISO Coated v2 300% (FOGRA39 - Estucado)', family: 'CMYK' },
+        { id: 'PSOcoated_v3.icc', name: 'PSO Coated v3 (FOGRA51 - Estucado)', family: 'CMYK' },
+        { id: 'PSOuncoated_v3_FOGRA52.icc', name: 'PSO Uncoated v3 (FOGRA52 - No estucado)', family: 'CMYK' },
+        { id: 'ISOcoated_v2_eci.icc', name: 'ISO Coated v2 ECI (FOGRA39)', family: 'CMYK' },
+        { id: 'AdobeRGB1998.icc', name: 'Adobe RGB 1998 (Fotografía/RGB amplio)', family: 'RGB' },
+        { id: 'sRGB2014.icc', name: 'sRGB IEC61966-2.1', family: 'RGB' }
+      ]);
     }
     loadIccCatalog();
 

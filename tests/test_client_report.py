@@ -289,6 +289,57 @@ class ClientReportResolutionTests(unittest.TestCase):
         for message in messages:
             self.assertIn(message, text)
 
+    def test_screen_rgb_profile_adapts_header_badge_standard_and_compliance_boxes(self):
+        report = {
+            "job_meta": {"job_id": "screen-rgb-test", "filename": "presentacion_web.pdf", "profile_id": "PANTALLA_RGB"},
+            "job_summary": {
+                "pages": 2,
+                "profile_id": "PANTALLA_RGB",
+                "required_color_family": "RGB",
+                "target_dpi": 96,
+                "min_bleed_req_mm": 0.0,
+                "bleed_status": "NOT_REQUIRED",
+                "low_res_images": 0,
+                "non_cmyk_images": 0,
+            },
+            "findings": [],
+        }
+        text = self.render_text(report)
+        self.assertIn("LISTO PARA PANTALLA", text)
+        self.assertNotIn("LISTO PARA IMPRESIÓN", text)
+        self.assertIn("Pantalla / Documento Digital (sRGB)", text)
+        self.assertNotIn("Imprenta Offset / Digital (ISO 12647-2)", text)
+        self.assertIn("Espacio de Color RGB", text)
+        self.assertNotIn("Espacio de Color CMYK", text)
+        self.assertIn("Geometría y Visualización Digital", text)
+        self.assertNotIn("corte limpio en guillotina", text)
+        self.assertIn("Renderizado y Luminancia", text)
+        self.assertNotIn("sobreimprimen al 100% K", text)
+        self.assertIn("Control de calidad y preflight para pantallas y medios digitales", text)
+
+    def test_print_profile_preserves_offset_standard_and_cmyk_boxes(self):
+        report = {
+            "job_meta": {"job_id": "print-offset-test", "filename": "folleto.pdf", "profile_id": "OFFSET_300"},
+            "job_summary": {
+                "pages": 2,
+                "profile_id": "OFFSET_300",
+                "required_color_family": "CMYK",
+                "target_dpi": 300,
+                "min_bleed_req_mm": 3.0,
+                "bleed_status": "PASS",
+                "low_res_images": 0,
+                "non_cmyk_images": 0,
+            },
+            "findings": [],
+        }
+        text = self.render_text(report)
+        self.assertIn("LISTO PARA IMPRESIÓN", text)
+        self.assertNotIn("LISTO PARA PANTALLA", text)
+        self.assertIn("Imprenta Offset / Digital (ISO 12647-2)", text)
+        self.assertIn("Espacio de Color CMYK", text)
+        self.assertIn("Sangrado y Geometría ISO", text)
+        self.assertIn("Sobreimpresión y Cobertura", text)
+
 
 class ClientReportEndpointTests(unittest.TestCase):
     setUp = base.RegressionTests.setUp

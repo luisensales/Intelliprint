@@ -48,7 +48,7 @@ def _palette():
     }
 
 
-def _draw_header(page: pymupdf.Page, assets_dir: Path, p: dict):
+def _draw_header(page: pymupdf.Page, assets_dir: Path, p: dict, is_screen: bool = False):
     """Dibuja la cabecera corporativa con logos institucionales."""
     page.draw_rect(pymupdf.Rect(0, 0, PAGE_W, HEADER_H), fill=p["navy"])
 
@@ -80,9 +80,10 @@ def _draw_header(page: pymupdf.Page, assets_dir: Path, p: dict):
         color=(0.78, 0.85, 0.92),
         fontname="helv",
     )
+    subtitle = "Control de calidad y preflight para pantallas y medios digitales" if is_screen else "Control de calidad y preflight de arte final para imprenta"
     page.insert_text(
         pymupdf.Point(text_x, 52),
-        "Control de calidad y preflight de arte final para imprenta",
+        subtitle,
         fontsize=7.2,
         color=(0.65, 0.74, 0.84),
         fontname="helv",
@@ -118,7 +119,7 @@ def _draw_header(page: pymupdf.Page, assets_dir: Path, p: dict):
         page.insert_link({"kind": pymupdf.LINK_URI, "from": r_edu, "uri": "https://www.euskadi.eus/gobierno-vasco/departamento-educacion/"})
 
 
-def _draw_footer(page: pymupdf.Page, p: dict, job_id: str):
+def _draw_footer(page: pymupdf.Page, p: dict, job_id: str, is_screen: bool = False):
     """Dibuja el pie de página institucional del informe."""
     page.draw_line(
         pymupdf.Point(MARGIN_X, FOOTER_Y),
@@ -140,9 +141,14 @@ def _draw_footer(page: pymupdf.Page, p: dict, job_id: str):
         fontname="helv",
         color=p["slate"],
     )
+    footer_note = (
+        "Este informe ha sido generado para facilitar una comunicación clara y constructiva entre el diseñador, el cliente y el equipo técnico."
+        if is_screen else
+        "Este informe ha sido generado para facilitar una comunicación clara y constructiva entre el diseñador y la imprenta."
+    )
     page.insert_text(
         pymupdf.Point(MARGIN_X, FOOTER_Y + 22),
-        "Este informe ha sido generado para facilitar una comunicación clara y constructiva entre el diseñador y la imprenta.",
+        footer_note,
         fontsize=6.8,
         fontname="helv",
         color=(0.55, 0.60, 0.68),
@@ -156,6 +162,12 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
     """
     findings = job_data.get("findings", [])
     summary = job_data.get("job_summary", {})
+    meta = job_data.get("job_meta", {})
+    profile_id = meta.get("profile_id") or summary.get("profile_id") or "OFFSET_300"
+    is_screen = (
+        summary.get("required_color_family") == "RGB"
+        or profile_id in ("PANTALLA_RGB", "SCREEN_RGB")
+    )
     items = []
 
     # Resolución: conservar la gravedad del preflight, también si no fue medible.
@@ -191,9 +203,9 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
             ]
         })
 
-    # 1. Sangrado (Bleed)
+    # 1. Sangrado (Bleed) - Solo exigible en impresión física
     has_bleed_err = any(f.get("rule_id") == "BLEED_GEOMETRY_3MM" for f in findings)
-    if has_bleed_err or summary.get("bleed_status") == "FAIL":
+    if not is_screen and (has_bleed_err or summary.get("bleed_status") == "FAIL"):
         items.append({
             "category": "bleed",
             "icon": "SANGRADO",
@@ -207,10 +219,10 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
             ]
         })
 
-    # 2. Modo de color RGB
+    # 2. Modo de color RGB / CMYK
     has_rgb_err = any(f.get("rule_id") == "SOURCE_COLOR_DIAGNOSTIC" for f in findings)
     non_cmyk_imgs = summary.get("non_cmyk_images", 0)
-    if has_rgb_err or (non_cmyk_imgs > 0 and summary.get("required_color_family", "CMYK") == "CMYK"):
+    if has_rgb_err or (non_cmyk_imgs > 0 and not is_screen):
         items.append({
             "category": "rgb",
             "icon": "COLOR",
@@ -316,7 +328,7 @@ def _extract_pedagogical_items(job_data: Dict[str, Any]) -> List[Dict[str, Any]]
             ]
         })
 
-    if summary.get("required_color_family") == "RGB":
+    if is_screen:
         for item in items:
             if item["category"] == "rgb":
                 item["title"] = "Imágenes CMYK en un documento para pantalla (RGB)"
@@ -385,11 +397,15 @@ def _resolved_pedagogical_items(job_data):
             remaining[key] -= 1
         else:
             no_longer_found.append(finding)
-    history = {"findings": no_longer_found, "job_summary": {
-        "target_dpi": original.get("job_summary", {}).get("target_dpi", 300),
-        "required_color_family": original.get("job_summary", {}).get("required_color_family", "CMYK"),
-        "non_cmyk_images": sum(f.get("rule_id") == "SOURCE_COLOR_DIAGNOSTIC" for f in no_longer_found),
-    }}
+    history = {
+        "findings": no_longer_found,
+        "job_summary": {
+            "target_dpi": original.get("job_summary", {}).get("target_dpi", 300),
+            "required_color_family": original.get("job_summary", {}).get("required_color_family", "CMYK"),
+            "non_cmyk_images": sum(f.get("rule_id") == "SOURCE_COLOR_DIAGNOSTIC" for f in no_longer_found),
+        },
+        "job_meta": original.get("job_meta", job_data.get("job_meta", {})),
+    }
     items = _extract_pedagogical_items(history)
     for item in items:
         item["status"] = "resolved"
@@ -567,8 +583,40 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
     job_id = meta.get("job_id", "N/A")
     filename = meta.get("filename", "documento.pdf")
 
+    profile_id = meta.get("profile_id") or summary.get("profile_id") or "OFFSET_300"
+    prof = {}
+    try:
+        from profile_manager import get_profile_by_id
+        prof = get_profile_by_id(profile_id)
+    except Exception:
+        pass
+
+    color_family = summary.get("required_color_family") or prof.get("color_family", "CMYK")
+    is_screen = (
+        color_family == "RGB"
+        or profile_id in ("PANTALLA_RGB", "CUSTOM_RGB", "SCREEN_RGB")
+        or (prof.get("min_bleed_mm", 3.0) == 0.0 and color_family == "RGB")
+    )
+
+    if is_screen:
+        standard_label = "Pantalla / Documento Digital (sRGB)"
+    elif profile_id == "OFFSET_300":
+        standard_label = "Imprenta Offset / Digital (ISO 12647-2)"
+    elif profile_id == "DIGITAL_200":
+        standard_label = "Impresión Digital Estándar (Tóner / Inkjet)"
+    elif profile_id == "PERIODICO_TAC240":
+        standard_label = "Prensa y Papel Periódico (TAC 240%)"
+    elif profile_id == "PACKAGING_CARTONCILLO":
+        standard_label = "Packaging y Cartoncillo (Troquel)"
+    elif profile_id == "GRAN_FORMATO":
+        standard_label = "Gran Formato y Cartelería"
+    elif prof.get("name"):
+        standard_label = prof["name"]
+    else:
+        standard_label = "Imprenta Offset / Digital (ISO 12647-2)"
+
     # 1. Cabecera corporativa
-    _draw_header(page, assets_dir, p)
+    _draw_header(page, assets_dir, p, is_screen=is_screen)
 
     # 2. Tarjeta resumen del archivo y estado general
     y_card = HEADER_H + 12.0
@@ -592,7 +640,7 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
     now_str = datetime.now().strftime("%d/%m/%Y · %H:%M")
     page.insert_text(
         pymupdf.Point(MARGIN_X + 12, y_card + 34),
-        f"Fecha: {now_str}   |   Páginas: {summary.get('pages', 1)}   |   Estándar: Imprenta Offset / Digital (ISO 12647-2)",
+        f"Fecha: {now_str}   |   Páginas: {summary.get('pages', 1)}   |   Estándar: {standard_label}",
         fontsize=7.5,
         fontname="helv",
         color=p["slate"],
@@ -613,20 +661,24 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
         badge_bg = p["green_bg"]
         badge_border = p["green_border"]
         badge_text_col = p["green"]
-        badge_title = "LISTO PARA IMPRESIÓN"
-        badge_sub = "Sin incidencias pendientes en la verificación"
+        if is_screen:
+            badge_title = "LISTO PARA PANTALLA"
+            badge_sub = "Optimizado para visualización digital"
+        else:
+            badge_title = "LISTO PARA IMPRESIÓN"
+            badge_sub = "Sin incidencias pendientes en la verificación"
     elif has_critical:
         badge_bg = p["red_bg"]
         badge_border = p["red_border"]
         badge_text_col = p["red"]
         badge_title = "REQUIERE AJUSTES PREVIOS"
-        badge_sub = "Puntos críticos antes de máquina"
+        badge_sub = "Puntos críticos para pantalla" if is_screen else "Puntos críticos antes de máquina"
     else:
         badge_bg = p["amber_bg"]
         badge_border = p["amber_border"]
         badge_text_col = p["amber"]
         badge_title = "RECOMENDACIONES DE MEJORA"
-        badge_sub = "Avisos para optimizar la tirada"
+        badge_sub = "Avisos para optimizar la visualización" if is_screen else "Avisos para optimizar la tirada"
 
     page.draw_rect(
         pymupdf.Rect(badge_x, badge_y, badge_x + badge_w, badge_y + badge_h),
@@ -679,12 +731,20 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
 
     if not has_issues and not resolved_items:
         # Estado perfecto: mostrar 4 tarjetas verdes de conformidad
-        checks = [
-            ("Sangrado y Geometría ISO", "El documento dispone de cajas de página y sangrado correcto (+3 mm) para un corte limpio en guillotina."),
-            ("Espacio de Color CMYK", "Imágenes y gráficos vectoriales preparados para 4 tintas sin dependencias de color RGB."),
-            ("Tipografías y Textos", "Todas las fuentes están debidamente incrustadas o trazadas; no habrá sustitución de tipos."),
-            ("Sobreimpresión y Cobertura", "Los textos negros sobreimprimen al 100% K y la cobertura total de tinta respeta el límite de 300%.")
-        ]
+        if is_screen:
+            checks = [
+                ("Geometría y Visualización Digital", "Dimensiones de página adaptadas para visualización en pantalla y dispositivos digitales; no requiere sangrado de corte."),
+                ("Espacio de Color RGB", "Imágenes y gráficos en espacio RGB / sRGB, optimizados para una reproducción cromática viva y fiel en monitores y navegadores."),
+                ("Tipografías y Textos", "Todas las fuentes están debidamente incrustadas o trazadas; lectura nítida garantizada sin sustitución tipográfica."),
+                ("Renderizado y Luminancia", "Documento optimizado para visualización fluida en visores PDF y web, sin dependencias de tintas físicas ni sobreimpresión."),
+            ]
+        else:
+            checks = [
+                ("Sangrado y Geometría ISO", "El documento dispone de cajas de página y sangrado correcto (+3 mm) para un corte limpio en guillotina."),
+                ("Espacio de Color CMYK", "Imágenes y gráficos vectoriales preparados para 4 tintas sin dependencias de color RGB."),
+                ("Tipografías y Textos", "Todas las fuentes están debidamente incrustadas o trazadas; no habrá sustitución de tipos."),
+                ("Sobreimpresión y Cobertura", "Los textos negros sobreimprimen al 100% K y la cobertura total de tinta respeta el límite de 300%.")
+            ]
         box_h = 42.0
         gap = 8.0
         cur_y = y_content + 5.0
@@ -722,17 +782,17 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
         for section_index, (heading, section_items) in enumerate(sections):
             cards_on_page = 0
             if section_index:
-                _draw_footer(page, p, job_id)
+                _draw_footer(page, p, job_id, is_screen=is_screen)
                 page = doc.new_page(width=PAGE_W, height=PAGE_H)
-                _draw_header(page, assets_dir, p)
+                _draw_header(page, assets_dir, p, is_screen=is_screen)
                 _draw_section_heading(page, heading, HEADER_H + 12, p)
                 cur_y = HEADER_H + 34
             for item in section_items:
                 for part, height, lines in _item_parts(item, max_issues_y - y_content):
                     if cards_on_page >= 4 or cur_y + height > max_issues_y:
-                        _draw_footer(page, p, job_id)
+                        _draw_footer(page, p, job_id, is_screen=is_screen)
                         page = doc.new_page(width=PAGE_W, height=PAGE_H)
-                        _draw_header(page, assets_dir, p)
+                        _draw_header(page, assets_dir, p, is_screen=is_screen)
                         _draw_section_heading(page, heading + " (continuación)", HEADER_H + 12, p)
                         cur_y = HEADER_H + 34
                         cards_on_page = 0
@@ -750,18 +810,18 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
             except (OSError, ValueError, RuntimeError):
                 pass
         try:
-            _draw_footer(page, p, job_id)
+            _draw_footer(page, p, job_id, is_screen=is_screen)
             page = doc.new_page(width=PAGE_W, height=PAGE_H)
-            _draw_header(page, assets_dir, p)
+            _draw_header(page, assets_dir, p, is_screen=is_screen)
             _draw_section_heading(page, "IMÁGENES QUE REQUIEREN AJUSTES", HEADER_H + 12, p)
             image_y = HEADER_H + 34
             for entry in image_issues:
                 line_count = len(_wrap_lines(" · ".join(entry.get("issues", [])), CONTENT_W - 124, 7.2))
                 height = max(78, 58 + line_count * 9.5 + 8)
                 if image_y + height > max_issues_y:
-                    _draw_footer(page, p, job_id)
+                    _draw_footer(page, p, job_id, is_screen=is_screen)
                     page = doc.new_page(width=PAGE_W, height=PAGE_H)
-                    _draw_header(page, assets_dir, p)
+                    _draw_header(page, assets_dir, p, is_screen=is_screen)
                     _draw_section_heading(page, "IMÁGENES QUE REQUIEREN AJUSTES (continuación)", HEADER_H + 12, p)
                     image_y = HEADER_H + 34
                 _draw_image_issue(page, entry, image_y, p, source)
@@ -816,11 +876,18 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
         fontname="helv",
         color=p["navy"],
     )
-    optA_text = (
-        "Si prefieres mantener el control absoluto de tu archivo original, abre tu documento en InDesign o Illustrator, "
-        "aplica los ajustes recomendados arriba y vuelve a exportar un nuevo PDF (recomendado: estándar PDF/X-4 con sangrado).\n\n"
-        "Envíanos el nuevo archivo y lo verificaremos de inmediato sin coste adicional."
-    )
+    if is_screen:
+        optA_text = (
+            "Si prefieres mantener el control absoluto de tu archivo original, abre tu documento en InDesign, Illustrator o Canva, "
+            "aplica los ajustes recomendados arriba y vuelve a exportar un nuevo PDF interactivo o digital en espacio sRGB.\n\n"
+            "Envíanos el nuevo archivo y lo verificaremos de inmediato sin coste adicional."
+        )
+    else:
+        optA_text = (
+            "Si prefieres mantener el control absoluto de tu archivo original, abre tu documento en InDesign o Illustrator, "
+            "aplica los ajustes recomendados arriba y vuelve a exportar un nuevo PDF (recomendado: estándar PDF/X-4 con sangrado).\n\n"
+            "Envíanos el nuevo archivo y lo verificaremos de inmediato sin coste adicional."
+        )
     page.insert_textbox(
         pymupdf.Rect(col1_x + 10, inner_y + 24, col1_x + col_w - 10, inner_y + inner_h - 6),
         optA_text,
@@ -844,11 +911,18 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
         fontname="helv",
         color=p["green"],
     )
-    optB_text = (
-        "¿Tienes urgencia o no dispones del archivo editable? Nuestro taller cuenta con el sistema profesional IntelliPrint, "
-        "capaz de corregir en 1 clic: sangrado sintético por reflejo, conversión a CMYK, trazado de fuentes y sobreimpresión de negro.\n\n"
-        "Indícanoslo por email o teléfono y prepararemos el documento listo para máquina."
-    )
+    if is_screen:
+        optB_text = (
+            "¿Tienes urgencia o no dispones del archivo editable? Nuestro taller cuenta con el sistema profesional IntelliPrint, "
+            "capaz de optimizar fuentes, normalizar imágenes a sRGB y ajustar el peso del PDF para visualización ágil.\n\n"
+            "Indícanoslo por email o formulario y prepararemos el documento listo para pantalla y web."
+        )
+    else:
+        optB_text = (
+            "¿Tienes urgencia o no dispones del archivo editable? Nuestro taller cuenta con el sistema profesional IntelliPrint, "
+            "capaz de corregir en 1 clic: sangrado sintético por reflejo, conversión a CMYK, trazado de fuentes y sobreimpresión de negro.\n\n"
+            "Indícanoslo por email o teléfono y prepararemos el documento listo para máquina."
+        )
     page.insert_textbox(
         pymupdf.Rect(col2_x + 10, inner_y + 24, col2_x + col_w - 10, inner_y + inner_h - 6),
         optB_text,
@@ -858,7 +932,7 @@ def generate_client_educational_report_pdf(job_data: Dict[str, Any], output_path
     )
 
     # 5. Pie de página
-    _draw_footer(page, p, job_id)
+    _draw_footer(page, p, job_id, is_screen=is_screen)
     for number, report_page in enumerate(doc, 1):
         report_page.insert_text(pymupdf.Point(PAGE_W - MARGIN_X - 54, HEADER_H - 4),
                                 f"Guía {number} / {len(doc)}", fontsize=6.5, fontname="helv",

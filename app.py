@@ -1616,6 +1616,10 @@ def client_approval_view_endpoint(token: str):
     stem = Path(orig_filename).stem
     download_filename = f"{stem}_produccion_corregido.pdf" if has_fixes else f"IntelliPrint_{orig_filename}"
 
+    profile_id = meta.get("profile_id") or job_data.get("job_summary", {}).get("profile_id", "OFFSET_300")
+    color_family = job_data.get("job_summary", {}).get("required_color_family")
+    is_screen = (color_family == "RGB" or profile_id in ("PANTALLA_RGB", "SCREEN_RGB"))
+
     FIX_LABELS = {
         "cmyk_converted": "Conversión CMYK",
         "spot_converted": "Tintas Planas a CMYK",
@@ -1637,26 +1641,29 @@ def client_approval_view_endpoint(token: str):
             f'<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">✓ {html.escape(FIX_LABELS.get(h.get("fix"), h.get("fix", "")))}</span>'
             for h in fixes_history
         ]
+        fixes_heading = "Correcciones técnicas aplicadas:" if is_screen else "Correcciones técnicas aplicadas para máquina:"
         applied_badges_html = f"""
         <div class="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
-          <span class="text-xs font-bold text-slate-700">Correcciones técnicas aplicadas para máquina:</span>
+          <span class="text-xs font-bold text-slate-700">{fixes_heading}</span>
           {' '.join(badges)}
         </div>
         """
 
     status_banner = ""
     if status == "APPROVED":
+        approved_title = "Visto Bueno Aprobado para Publicación Digital" if is_screen else "Visto Bueno Aprobado para Tirada (OK Plancha)"
+        approved_sub = "El taller ha recibido la conformidad y el documento está listo para su distribución o descarga." if is_screen else "El taller de preimpresión ha recibido la conformidad y procederá a la filmación de planchas y tiro en máquina."
         status_banner = f"""
         <div class="p-6 bg-emerald-50 border-2 border-emerald-500 rounded-2xl text-emerald-900 space-y-2 mb-6 shadow-sm">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-lg">✓</div>
             <div>
-              <h2 class="text-base font-extrabold text-emerald-950 uppercase tracking-wide">Visto Bueno Aprobado para Tirada (OK Plancha)</h2>
+              <h2 class="text-base font-extrabold text-emerald-950 uppercase tracking-wide">{approved_title}</h2>
               <p class="text-xs text-emerald-800">Aprobado formalmente por: <strong>{client_name}</strong> el {decided_at[:19].replace('T', ' ')} UTC.</p>
             </div>
           </div>
           {f'<p class="text-xs text-emerald-900 bg-white/60 p-2.5 rounded-lg border border-emerald-200 mt-2 font-medium">Observaciones: {notes}</p>' if notes else ''}
-          <p class="text-xs font-semibold text-emerald-800 pt-1">El taller de preimpresión ha recibido la conformidad y procederá a la filmación de planchas y tiro en máquina.</p>
+          <p class="text-xs font-semibold text-emerald-800 pt-1">{approved_sub}</p>
         </div>
         """
     elif status == "REJECTED":
@@ -1676,12 +1683,14 @@ def client_approval_view_endpoint(token: str):
 
     form_section = ""
     if status == "PENDING":
+        form_desc = "Por favor, revisa el PDF final en el visor inferior. Si estás de acuerdo con los textos, colores y maquetación, confirma tu Visto Bueno para publicación digital." if is_screen else "Por favor, revisa el PDF final en el visor inferior. Si estás de acuerdo con los textos, colores y maquetación, confirma tu Visto Bueno para entrar a máquina."
+        form_btn = "✓ Dar Visto Bueno (Aprobado)" if is_screen else "✓ Dar Visto Bueno (OK para Imprimir)"
         form_section = f"""
         <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
           <h3 class="text-sm font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-sky-500"></span> Formulario de Visto Bueno del Cliente
           </h3>
-          <p class="text-xs text-slate-500">Por favor, revisa el PDF final en el visor inferior. Si estás de acuerdo con los textos, colores y maquetación, confirma tu Visto Bueno para entrar a máquina.</p>
+          <p class="text-xs text-slate-500">{form_desc}</p>
 
           <form id="approvalForm" onsubmit="submitApproval(event)" class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1697,12 +1706,12 @@ def client_approval_view_endpoint(token: str):
 
             <div>
               <label class="block text-xs font-bold text-slate-700 mb-1">Observaciones o Instrucciones Especiales:</label>
-              <textarea id="clientNotesInput" rows="2" placeholder="Ej. Revisado texto legal y precios. Aprobado para tirada de 1.000 ejemplares." class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none"></textarea>
+              <textarea id="clientNotesInput" rows="2" placeholder="Ej. Revisado texto legal y diseño. Aprobado para publicación digital." class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none"></textarea>
             </div>
 
             <div class="flex flex-col sm:flex-row items-center gap-3 pt-2">
               <button type="button" onclick="sendDecision('approved')" class="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center justify-center gap-2 cursor-pointer">
-                ✓ Dar Visto Bueno (OK para Imprimir)
+                {form_btn}
               </button>
               <button type="button" onclick="sendDecision('rejected')" class="w-full sm:w-auto px-5 py-3 bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer">
                 ✕ Solicitar Cambios / Rechazar
@@ -1712,12 +1721,21 @@ def client_approval_view_endpoint(token: str):
         </div>
         """
 
-    version_badge_html = (
-        '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">✓ Versión Corregida para Imprenta</span>'
-        if has_fixes else
-        '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300">Archivo Original Recibido</span>'
-    )
+    if is_screen:
+        version_badge_html = (
+            '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">✓ Versión Optimizada para Pantalla</span>'
+            if has_fixes else
+            '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300">Archivo Original Recibido</span>'
+        )
+    else:
+        version_badge_html = (
+            '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">✓ Versión Corregida para Imprenta</span>'
+            if has_fixes else
+            '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300">Archivo Original Recibido</span>'
+        )
     sha_badge_html = f'· Hash SHA-256: <span class="font-mono text-[10px]">{current_sha[:16]}...</span>' if current_sha else ''
+    doc_desc = "Documento optimizado para pantalla" if is_screen else "Documento preparado para imprenta"
+    action_confirm_approved = "dar tu Visto Bueno para publicación" if is_screen else "dar tu Visto Bueno para imprimir"
 
     page_html = f"""<!DOCTYPE html>
 <html lang="es">
@@ -1752,7 +1770,7 @@ def client_approval_view_endpoint(token: str):
           {version_badge_html}
         </div>
         <h2 class="text-lg font-black text-slate-900">{filename}</h2>
-        <p class="text-xs text-slate-500 mt-0.5">Documento preparado para imprenta · <strong>{pages}</strong> página(s) {sha_badge_html}</p>
+        <p class="text-xs text-slate-500 mt-0.5">{doc_desc} · <strong>{pages}</strong> página(s) {sha_badge_html}</p>
         {applied_badges_html}
       </div>
       <div class="flex items-center gap-3">
@@ -1794,7 +1812,7 @@ def client_approval_view_endpoint(token: str):
         return;
       }}
 
-      const actionText = decision === 'approved' ? 'dar tu Visto Bueno para imprimir' : 'solicitar cambios';
+      const actionText = decision === 'approved' ? '{action_confirm_approved}' : 'solicitar cambios';
       if (!confirm(`¿Confirmas que deseas ${{actionText}}?`)) return;
 
       try {{
